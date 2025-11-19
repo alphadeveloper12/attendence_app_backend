@@ -22,6 +22,9 @@ from rest_framework import status
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth.models import User
 from rest_framework.permissions import IsAdminUser
+import gc
+from tensorflow.keras import backend as K
+
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -39,6 +42,8 @@ class RegisterUserView(APIView):
             logger.info(f"BASE64_RECEIVED => {face_image[:60]}...")
 
             if not face_image or not user_data:
+                gc.collect()
+                K.clear_session()
                 return Response(
                     {"error": "Missing face image or user data"},
                     status=status.HTTP_400_BAD_REQUEST
@@ -53,6 +58,8 @@ class RegisterUserView(APIView):
 
             # If the base64 string is still empty, return error
             if not face_image_data:
+                gc.collect()
+                K.clear_session()
                 return Response({"error": "Invalid base64 image format"}, status=status.HTTP_400_BAD_REQUEST)
 
             # Decode base64 image
@@ -95,6 +102,8 @@ class RegisterUserView(APIView):
                 # Remove the temp file & user if no face is detected
                 new_user.delete()
                 logger.error("No face detected in the image.")
+                gc.collect()
+                K.clear_session()
                 return Response({"error": "No face detected in image"}, status=400)
 
             # Check if the embedding is valid
@@ -103,6 +112,8 @@ class RegisterUserView(APIView):
                 # Remove the temp file & user if face embedding is empty
                 new_user.delete()
                 logger.error("Face embedding is empty.")
+                gc.collect()
+                K.clear_session()
                 return Response({"error": "Face embedding could not be generated."}, status=400)
 
             # -------------------------------
@@ -119,11 +130,14 @@ class RegisterUserView(APIView):
                 "user": UserSerializer(new_user).data,
                 "image_url": request.build_absolute_uri(new_user.profile_picture.url)
             }
-
+            gc.collect()
+            K.clear_session()
             return Response(response_data, status=status.HTTP_201_CREATED)
 
         except Exception as e:
             logger.error(f"ERROR => {str(e)}")
+            gc.collect()
+            K.clear_session()
             # Return generic error message on failure
             return Response({"error": "An unexpected error occurred."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
@@ -140,6 +154,9 @@ class MarkAttendanceView(APIView):
             slot = request.data.get('slot')  # Slot user selects (e.g., office in, break, break out, office out)
 
             if not face_image or not slot:
+                gc.collect()
+                K.clear_session()
+
                 return Response({"error": "Missing face image or slot selection"}, status=status.HTTP_400_BAD_REQUEST)
 
             # Clean base64 string (remove unnecessary prefix if any)
@@ -147,6 +164,8 @@ class MarkAttendanceView(APIView):
             face_image_data = re.sub(base64_pattern, "", face_image)
 
             if not face_image_data:
+                gc.collect()
+                K.clear_session()
                 return Response({"error": "Invalid base64 image format"}, status=status.HTTP_400_BAD_REQUEST)
 
             # Decode the image
@@ -165,6 +184,8 @@ class MarkAttendanceView(APIView):
             if not embeddings or len(embeddings) == 0:
                 # Clean up the temporary image after failure
                 temp_user.profile_picture.delete()
+                gc.collect()
+                K.clear_session()
                 return Response({"error": "No face detected in image"}, status=400)
 
             face_embedding = embeddings[0].get("embedding")
@@ -179,6 +200,8 @@ class MarkAttendanceView(APIView):
             if not matched_user:
                 # Clean up the temporary image after failure
                 temp_user.profile_picture.delete()
+                gc.collect()
+                K.clear_session()
                 return Response({"error": "User not found or face not recognized"}, status=400)
 
             # Mark attendance for the selected slot
@@ -233,7 +256,8 @@ class MarkAttendanceView(APIView):
                 response_time = attendance.break_out_time.strftime('%I:%M %p')
             elif slot == 'office_out' and attendance.check_out_time:
                 response_time = attendance.check_out_time.strftime('%I:%M %p')
-
+            gc.collect()
+            K.clear_session()
             return Response({
                 "message": f"Attendance marked successfully for {slot}.",
                 "user": matched_user.name,
@@ -245,6 +269,9 @@ class MarkAttendanceView(APIView):
 
         except Exception as e:
             logger.error(f"ERROR => {str(e)}")
+
+            gc.collect()
+            K.clear_session()
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def compare_embeddings(self, stored_embedding, new_embedding, threshold=0.5):
