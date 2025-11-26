@@ -32,6 +32,7 @@ logger = logging.getLogger(__name__)
 @permission_classes([IsAdminUser])  # Only admin can access this view
 class RegisterUserView(APIView):
     def post(self, request):
+        print(request.data)
         try:
             # Retrieve incoming data
             data = request.data
@@ -42,8 +43,6 @@ class RegisterUserView(APIView):
             logger.info(f"BASE64_RECEIVED => {face_image[:60]}...")
 
             if not face_image or not user_data:
-                gc.collect()
-                K.clear_session()
                 return Response(
                     {"error": "Missing face image or user data"},
                     status=status.HTTP_400_BAD_REQUEST
@@ -58,8 +57,6 @@ class RegisterUserView(APIView):
 
             # If the base64 string is still empty, return error
             if not face_image_data:
-                gc.collect()
-                K.clear_session()
                 return Response({"error": "Invalid base64 image format"}, status=status.HTTP_400_BAD_REQUEST)
 
             # Decode base64 image
@@ -83,6 +80,13 @@ class RegisterUserView(APIView):
                 phone=user_data['phone'],
                 department=user_data['department'],
                 position=user_data['position'],
+                job_description=user_data['job_description'],  # Add job description
+                salary_grade=user_data['salary_grade'],  # Add salary grade
+                badge_number=user_data['badge_number'],  # Add badge number
+                mol_id=user_data['mol_id'],  # Add MOL ID
+                labor_card_number=user_data['labor_card_number'],  # Add labor card number
+                site=user_data['site'],  # Add site
+                employer=user_data['employer'],  # Add employer
             )
 
             # Temporarily save the image to get a file path for DeepFace
@@ -102,8 +106,6 @@ class RegisterUserView(APIView):
                 # Remove the temp file & user if no face is detected
                 new_user.delete()
                 logger.error("No face detected in the image.")
-                gc.collect()
-                K.clear_session()
                 return Response({"error": "No face detected in image"}, status=400)
 
             # Check if the embedding is valid
@@ -112,8 +114,6 @@ class RegisterUserView(APIView):
                 # Remove the temp file & user if face embedding is empty
                 new_user.delete()
                 logger.error("Face embedding is empty.")
-                gc.collect()
-                K.clear_session()
                 return Response({"error": "Face embedding could not be generated."}, status=400)
 
             # -------------------------------
@@ -130,42 +130,36 @@ class RegisterUserView(APIView):
                 "user": UserSerializer(new_user).data,
                 "image_url": request.build_absolute_uri(new_user.profile_picture.url)
             }
-            gc.collect()
-            K.clear_session()
+
             return Response(response_data, status=status.HTTP_201_CREATED)
 
         except Exception as e:
             logger.error(f"ERROR => {str(e)}")
-            gc.collect()
-            K.clear_session()
             # Return generic error message on failure
             return Response({"error": "An unexpected error occurred."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
         
-        
-# View to mark attendance for users based on face recognition and selected slot
 class MarkAttendanceView(APIView):
     authentication_classes = []  # No authentication needed for this view
     permission_classes = [AllowAny]  # Public access
 
     def post(self, request):
+        print(request.data)
         try:
             # Retrieve incoming data
             face_image = request.data.get('face_image')  # Base64 encoded image
             slot = request.data.get('slot')  # Slot user selects (e.g., office in, break, break out, office out)
+            latitude = request.data.get('latitude')  # Latitude value
+            longitude = request.data.get('longitude')  # Longitude value
 
-            if not face_image or not slot:
-                gc.collect()
-                K.clear_session()
-
-                return Response({"error": "Missing face image or slot selection"}, status=status.HTTP_400_BAD_REQUEST)
+            if not face_image or not slot or latitude is None or longitude is None:
+                return Response({"error": "Missing face image, slot selection, latitude or longitude"}, status=status.HTTP_400_BAD_REQUEST)
 
             # Clean base64 string (remove unnecessary prefix if any)
             base64_pattern = r"^data:image\/(jpeg|png);base64,"
             face_image_data = re.sub(base64_pattern, "", face_image)
 
             if not face_image_data:
-                gc.collect()
-                K.clear_session()
                 return Response({"error": "Invalid base64 image format"}, status=status.HTTP_400_BAD_REQUEST)
 
             # Decode the image
@@ -184,8 +178,6 @@ class MarkAttendanceView(APIView):
             if not embeddings or len(embeddings) == 0:
                 # Clean up the temporary image after failure
                 temp_user.profile_picture.delete()
-                gc.collect()
-                K.clear_session()
                 return Response({"error": "No face detected in image"}, status=400)
 
             face_embedding = embeddings[0].get("embedding")
@@ -200,8 +192,6 @@ class MarkAttendanceView(APIView):
             if not matched_user:
                 # Clean up the temporary image after failure
                 temp_user.profile_picture.delete()
-                gc.collect()
-                K.clear_session()
                 return Response({"error": "User not found or face not recognized"}, status=400)
 
             # Mark attendance for the selected slot
@@ -224,11 +214,15 @@ class MarkAttendanceView(APIView):
                 attendance = Attendance.objects.create(
                     user=matched_user,
                     date=today,
-                    status='present'
+                    status='present',
+                    latitude=latitude,  # Save latitude
+                    longitude=longitude  # Save longitude
                 )
             else:
                 # Update existing record
                 attendance.status = 'present'
+                attendance.latitude = latitude  # Save latitude
+                attendance.longitude = longitude  # Save longitude
 
             # Handle the different slot types - use actual current time
             if slot == 'office_in':
@@ -256,22 +250,20 @@ class MarkAttendanceView(APIView):
                 response_time = attendance.break_out_time.strftime('%I:%M %p')
             elif slot == 'office_out' and attendance.check_out_time:
                 response_time = attendance.check_out_time.strftime('%I:%M %p')
-            gc.collect()
-            K.clear_session()
+
             return Response({
                 "message": f"Attendance marked successfully for {slot}.",
                 "user": matched_user.name,
                 "slot": slot,
                 "time": response_time,
                 "late_minutes": attendance.late_minutes,
-                "early_minutes": attendance.early_minutes
+                "early_minutes": attendance.early_minutes,
+                "latitude": attendance.latitude,  # Include latitude in response
+                "longitude": attendance.longitude  # Include longitude in response
             }, status=status.HTTP_200_OK)
 
         except Exception as e:
             logger.error(f"ERROR => {str(e)}")
-
-            gc.collect()
-            K.clear_session()
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def compare_embeddings(self, stored_embedding, new_embedding, threshold=0.5):
@@ -282,8 +274,6 @@ class MarkAttendanceView(APIView):
         # Compute cosine distance between two embeddings, lower values mean closer embeddings
         distance = cosine(stored_embedding, new_embedding)
         return distance < threshold  # You can adjust the threshold as needed
-    
-
 
 class AdminLoginView(APIView):
     """

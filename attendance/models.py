@@ -11,6 +11,15 @@ class Employee(models.Model):
     face_embedding = models.JSONField(null=True)  # Store face embeddings
     profile_picture = models.ImageField(upload_to='profiles/')
     
+    # New fields added
+    job_description = models.TextField(null=True, blank=True)  # Job Description
+    salary_grade = models.CharField(max_length=50, null=True, blank=True)  # Salary Grade/Category
+    badge_number = models.CharField(max_length=20, null=True, blank=True)  # Badge Number
+    mol_id = models.CharField(max_length=50, null=True, blank=True)  # MOL ID
+    labor_card_number = models.CharField(max_length=50, null=True, blank=True)  # Labor Card/ Work Permit Numbers
+    site = models.CharField(max_length=100, null=True, blank=True)  # Site
+    employer = models.CharField(max_length=100, null=True, blank=True)  # Employer (PIC or Sub contract)
+    
     def __str__(self):
         return self.name
     
@@ -24,6 +33,8 @@ class Attendance(models.Model):
     early_minutes = models.IntegerField(default=0)  # Store early going minutes
     status = models.CharField(max_length=10, choices=[('present', 'Present'), ('absent', 'Absent')])
     date = models.DateField(auto_now_add=True)  # Track date for attendance
+    latitude = models.FloatField(null=True, blank=True)  # Store latitude
+    longitude = models.FloatField(null=True, blank=True)  # Store longitude
     
     class Meta:
         unique_together = ['user', 'date']  # Prevent duplicate records

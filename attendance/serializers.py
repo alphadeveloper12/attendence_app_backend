@@ -4,7 +4,10 @@ from .models import Employee, Attendance
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = Employee
-        fields = ['id', 'name', 'email', 'phone', 'department', 'position', 'face_embedding', 'profile_picture']
+        fields = [
+            'id', 'name', 'email', 'phone', 'department', 'position', 'face_embedding', 'profile_picture',
+            'job_description', 'salary_grade', 'badge_number', 'mol_id', 'labor_card_number', 'site', 'employer'
+        ]
 
 class AttendanceSerializer(serializers.ModelSerializer):
     class Meta:
