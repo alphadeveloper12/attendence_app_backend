@@ -1,7 +1,9 @@
 from django.contrib import admin
 from .models import Employee, Attendance
+from django.db.models import Sum  # <-- Add this import
 from django.utils import timezone
 from datetime import timedelta
+
 
 
 # Attendance Admin
