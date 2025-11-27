@@ -96,7 +96,11 @@ class RegisterUserView(APIView):
             img_path = new_user.profile_picture.path
 
             # Generate face embeddings using DeepFace
-            embeddings = DeepFace.represent(img_path, model_name="VGG-Face")
+            embeddings = DeepFace.represent(
+                img_path, 
+                model_name="VGG-Face",
+                enforce_detection=False # <-- Set this parameter to bypass strict face detection
+            )
 
             # Log the embeddings
             logger.info(f"Face embeddings generated: {embeddings}")
@@ -144,7 +148,8 @@ class MarkAttendanceView(APIView):
     permission_classes = [AllowAny]  # Public access
 
     def post(self, request):
-        print(request.data)
+        latitude = request.data.get('latitude')
+        print (latitude)
         try:
             # Retrieve incoming data
             face_image = request.data.get('face_image')  # Base64 encoded image
@@ -172,7 +177,11 @@ class MarkAttendanceView(APIView):
             img_path = temp_user.profile_picture.path
 
             # Generate face embeddings using DeepFace
-            embeddings = DeepFace.represent(img_path, model_name="VGG-Face")
+            embeddings = DeepFace.represent(
+                img_path, 
+                model_name="VGG-Face",
+                enforce_detection=False # <-- Set this parameter to bypass strict face detection
+            )
 
             # Check if face embeddings are successfully generated
             if not embeddings or len(embeddings) == 0:
