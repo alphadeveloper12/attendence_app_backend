@@ -1,0 +1,66 @@
+{% extends 'base.html' %}
+
+{% block title %}Dashboard - Admin{% endblock %}
+
+{% block content %}
+<div class="navbar">
+    <h1>📊 Attendance Dashboard</h1>
+    <div class="user-info">
+        <span>Welcome, {{ user.username }}</span>
+        <a href="{% url 'admin-logout' %}" class="btn btn-danger">Logout</a>
+    </div>
+</div>
+
+<div class="container">
+    <div class="card">
+        <h2>Overview</h2>
+        <div class="stats-grid">
+            <div class="stat-card">
+                <h3>Total Employees</h3>
+                <div class="stat-value">{{ total_employees }}</div>
+            </div>
+            <div class="stat-card">
+                <h3>Total Sites</h3>
+                <div class="stat-value">{{ total_sites }}</div>
+            </div>
+            <div class="stat-card">
+                <h3>Total Departments</h3>
+                <div class="stat-value">{{ total_departments }}</div>
+            </div>
+            <div class="stat-card">
+                <h3>Today's Attendance</h3>
+                <div class="stat-value">{{ today_attendance }}</div>
+            </div>
+        </div>
+    </div>
+
+    {% for site, employees in employees_by_site.items %}
+    <div class="site-section">
+        <div class="site-header">
+            <h3>{{ site|default:"No Site Assigned" }}</h3>
+            <span class="badge badge-info">{{ employees|length }} Employee{{ employees|length|pluralize }}</span>
+        </div>
+
+        <div class="user-grid">
+            {% for employee in employees %}
+            <a href="{% url 'admin-user-detail' employee.id %}" style="text-decoration: none; color: inherit;">
+                <div class="user-card">
+                    <h4>{{ employee.name }}</h4>
+                    <p><strong>Email:</strong> {{ employee.email }}</p>
+                    <p><strong>Phone:</strong> {{ employee.phone }}</p>
+                    <p><strong>Department:</strong> {{ employee.department|default:"N/A" }}</p>
+                    <p><strong>Position:</strong> {{ employee.position }}</p>
+                </div>
+            </a>
+            {% empty %}
+            <p style="color: #666;">No employees in this site.</p>
+            {% endfor %}
+        </div>
+    </div>
+    {% empty %}
+    <div class="card">
+        <p style="text-align: center; color: #666; padding: 2rem;">No employees found in the system.</p>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}

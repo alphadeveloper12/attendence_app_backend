@@ -1,0 +1,368 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ employee.name }} - Attendance Details{% endblock %}
+
+{% block content %}
+<style>
+    .slot-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 1rem;
+        margin-top: 1.5rem;
+    }
+
+    .slot-card {
+        background: white;
+        border: 2px solid #e0e0e0;
+        border-radius: 12px;
+        padding: 1.5rem;
+        text-align: center;
+        transition: all 0.3s ease;
+    }
+
+    .slot-card.present {
+        border-color: #10b981;
+        background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+    }
+
+    .slot-card.late {
+        border-color: #f59e0b;
+        background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+    }
+
+    .slot-card.absent {
+        border-color: #ef4444;
+        background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+    }
+
+    .slot-card h4 {
+        color: #333;
+        margin-bottom: 0.5rem;
+        font-size: 1.1rem;
+    }
+
+    .slot-time {
+        color: #666;
+        font-size: 0.9rem;
+        margin-bottom: 0.8rem;
+    }
+
+    .slot-status {
+        font-weight: 600;
+        font-size: 1rem;
+    }
+
+    .calendar-grid {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 0.5rem;
+        margin-top: 1.5rem;
+    }
+
+    .calendar-header {
+        background: #667eea;
+        color: white;
+        padding: 0.8rem;
+        text-align: center;
+        font-weight: 600;
+        border-radius: 8px;
+        font-size: 0.9rem;
+    }
+
+    .calendar-day {
+        background: white;
+        border: 2px solid #e0e0e0;
+        border-radius: 8px;
+        padding: 1rem;
+        min-height: 100px;
+        transition: all 0.3s ease;
+        cursor: pointer;
+    }
+
+    .calendar-day:hover {
+        border-color: #667eea;
+        transform: translateY(-2px);
+        box-shadow: 0 5px 15px rgba(102, 126, 234, 0.2);
+    }
+
+    .calendar-day.empty {
+        background: #f8f9fa;
+        cursor: default;
+    }
+
+    .calendar-day.empty:hover {
+        transform: none;
+        box-shadow: none;
+        border-color: #e0e0e0;
+    }
+
+    .day-number {
+        font-weight: 600;
+        color: #333;
+        margin-bottom: 0.5rem;
+        font-size: 1.1rem;
+    }
+
+    .day-slots {
+        display: flex;
+        flex-direction: column;
+        gap: 0.3rem;
+    }
+
+    .mini-slot {
+        padding: 0.3rem;
+        border-radius: 4px;
+        font-size: 0.75rem;
+        text-align: center;
+        font-weight: 600;
+    }
+
+    .mini-slot.present {
+        background: #10b981;
+        color: white;
+    }
+
+    .mini-slot.late {
+        background: #f59e0b;
+        color: white;
+    }
+
+    .mini-slot.absent {
+        background: #ef4444;
+        color: white;
+    }
+
+    .mini-slot.empty {
+        background: #e5e7eb;
+        color: #9ca3af;
+    }
+
+    @media (max-width: 768px) {
+        .slot-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+
+        .calendar-grid {
+            grid-template-columns: repeat(7, 1fr);
+            gap: 0.3rem;
+        }
+
+        .calendar-day {
+            padding: 0.5rem;
+            min-height: 80px;
+        }
+
+        .day-number {
+            font-size: 0.9rem;
+        }
+
+        .mini-slot {
+            font-size: 0.65rem;
+            padding: 0.2rem;
+        }
+    }
+</style>
+
+<div class="navbar">
+    <h1>📊 Attendance Dashboard</h1>
+    <div class="user-info">
+        <span>Welcome, {{ user.username }}</span>
+        <a href="{% url 'admin-logout' %}" class="btn btn-danger">Logout</a>
+    </div>
+</div>
+
+<div class="container">
+    <div class="card">
+        <a href="{% url 'admin-dashboard' %}" class="btn btn-secondary" style="margin-bottom: 1rem;">← Back to
+            Dashboard</a>
+
+        <h2>{{ employee.name }}</h2>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <h3>Email</h3>
+                <div style="font-size: 1.2rem; margin-top: 0.5rem;">{{ employee.email }}</div>
+            </div>
+            <div class="stat-card">
+                <h3>Phone</h3>
+                <div style="font-size: 1.2rem; margin-top: 0.5rem;">{{ employee.phone }}</div>
+            </div>
+            <div class="stat-card">
+                <h3>Department</h3>
+                <div style="font-size: 1.2rem; margin-top: 0.5rem;">{{ employee.department|default:"N/A" }}</div>
+            </div>
+            <div class="stat-card">
+                <h3>Site</h3>
+                <div style="font-size: 1.2rem; margin-top: 0.5rem;">{{ employee.site|default:"N/A" }}</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Attendance Records</h2>
+
+        <div class="filter-tabs">
+            <button class="filter-tab {% if filter == 'daily' %}active{% endif %}"
+                onclick="window.location.href='?filter=daily'">
+                Daily
+            </button>
+            <button class="filter-tab {% if filter == 'weekly' %}active{% endif %}"
+                onclick="window.location.href='?filter=weekly'">
+                Weekly
+            </button>
+            <button class="filter-tab {% if filter == 'monthly' %}active{% endif %}"
+                onclick="window.location.href='?filter=monthly'">
+                Monthly
+            </button>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <h3>Total Records</h3>
+                <div class="stat-value">{{ total_records }}</div>
+            </div>
+            <div class="stat-card">
+                <h3>Present Slots</h3>
+                <div class="stat-value">{{ present_count }}</div>
+            </div>
+            <div class="stat-card">
+                <h3>Late Slots</h3>
+                <div class="stat-value">{{ late_count }}</div>
+            </div>
+            <div class="stat-card">
+                <h3>Absent Slots</h3>
+                <div class="stat-value">{{ absent_count }}</div>
+            </div>
+        </div>
+
+        {% if filter == 'daily' %}
+        <!-- Daily View: Show 4 Slots -->
+        <h3 style="margin-top: 2rem; color: #333;">Today's Slots - {{ today|date:"M d, Y" }}</h3>
+        <div class="slot-grid">
+            {% for slot_name, slot_data in slots.items %}
+            <div class="slot-card {% if slot_data.status %}{{ slot_data.status }}{% endif %}">
+                <h4>{{ slot_name }}</h4>
+                <div class="slot-time">{{ slot_data.time_range }}</div>
+                {% if slot_data.status %}
+                <div class="slot-status">
+                    {% if slot_data.status == 'present' %}
+                    ✓ Present
+                    {% elif slot_data.status == 'late' %}
+                    ⏰ Late ({{ slot_data.late_minutes }} min)
+                    {% elif slot_data.status == 'absent' %}
+                    ✗ Absent
+                    {% endif %}
+                </div>
+                {% if slot_data.check_in %}
+                <div style="margin-top: 0.5rem; font-size: 0.85rem; color: #666;">
+                    In: {{ slot_data.check_in|time:"h:i A" }}
+                </div>
+                {% endif %}
+                {% if slot_data.latitude and slot_data.longitude %}
+                <div style="margin-top: 0.8rem;">
+                    <div style="font-size: 0.75rem; color: #666; margin-bottom: 0.3rem;">
+                        📍 Location
+                    </div>
+                    <div
+                        style="width: 100%; height: 150px; border-radius: 8px; overflow: hidden; border: 2px solid #e0e0e0;">
+                        <iframe width="100%" height="150" frameborder="0" scrolling="no" marginheight="0"
+                            marginwidth="0"
+                            src="https://www.openstreetmap.org/export/embed.html?bbox={{ slot_data.longitude|floatformat:6 }}%2C{{ slot_data.latitude|floatformat:6 }}%2C{{ slot_data.longitude|floatformat:6 }}%2C{{ slot_data.latitude|floatformat:6 }}&layer=mapnik&marker={{ slot_data.latitude|floatformat:6 }}%2C{{ slot_data.longitude|floatformat:6 }}"
+                            style="border: none;">
+                        </iframe>
+                    </div>
+                    <div style="font-size: 0.7rem; color: #999; margin-top: 0.3rem; text-align: center;">
+                        {{ slot_data.latitude|floatformat:4 }}, {{ slot_data.longitude|floatformat:4 }}
+                    </div>
+                </div>
+                {% endif %}
+                {% else %}
+                <div class="slot-status" style="color: #999;">No Record</div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+
+        {% elif filter == 'weekly' %}
+        <!-- Weekly View: Calendar Grid -->
+        <h3 style="margin-top: 2rem; color: #333;">Week of {{ week_start|date:"M d" }} - {{ week_end|date:"M d, Y" }}
+        </h3>
+        <div class="calendar-grid">
+            <!-- Headers -->
+            <div class="calendar-header">Mon</div>
+            <div class="calendar-header">Tue</div>
+            <div class="calendar-header">Wed</div>
+            <div class="calendar-header">Thu</div>
+            <div class="calendar-header">Fri</div>
+            <div class="calendar-header">Sat</div>
+            <div class="calendar-header">Sun</div>
+
+            <!-- Days -->
+            {% for day in calendar_days %}
+            <div class="calendar-day {% if not day.date %}empty{% endif %}">
+                {% if day.date %}
+                <div class="day-number">{{ day.date|date:"d" }}</div>
+                <div class="day-slots">
+                    {% for slot in day.slots %}
+                    <div class="mini-slot {{ slot.status }}">
+                        {{ slot.name }}
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+
+        {% else %}
+        <!-- Monthly View: Table -->
+        {% if attendance_records %}
+        <table style="margin-top: 1.5rem;">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Slot</th>
+                    <th>Status</th>
+                    <th>Check In</th>
+                    <th>Check Out</th>
+                    <th>Late Minutes</th>
+                    <th>Location</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for record in attendance_records %}
+                <tr>
+                    <td>{{ record.date|date:"M d, Y" }}</td>
+                    <td><strong>{{ record.slot|default:"N/A" }}</strong></td>
+                    <td>
+                        {% if record.status == 'present' %}
+                        <span class="badge badge-success">Present</span>
+                        {% elif record.status == 'late' %}
+                        <span class="badge badge-warning">Late</span>
+                        {% elif record.status == 'absent' %}
+                        <span class="badge badge-danger">Absent</span>
+                        {% else %}
+                        <span class="badge badge-info">{{ record.status|title }}</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ record.check_in_time|time:"h:i A"|default:"—" }}</td>
+                    <td>{{ record.check_out_time|time:"h:i A"|default:"—" }}</td>
+                    <td>{{ record.late_minutes|default:"0" }} min</td>
+                    <td>
+                        {% if record.latitude and record.longitude %}
+                        {{ record.latitude|floatformat:4 }}, {{ record.longitude|floatformat:4 }}
+                        {% else %}
+                        —
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p style="text-align: center; color: #666; padding: 2rem;">No attendance records found for this period.</p>
+        {% endif %}
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

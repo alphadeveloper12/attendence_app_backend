@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Employee, Attendance
+from .models import Employee, Attendance, Department, Site
 from django.db.models import Sum  # <-- Add this import
 from django.utils import timezone
 from datetime import timedelta
@@ -56,7 +56,16 @@ class EmployeeAdmin(admin.ModelAdmin):
     get_late_minutes.admin_order_field = 'late_minutes'
     get_late_minutes.short_description = 'Total Late Minutes'
 
+class DepartmentAdmin(admin.ModelAdmin):
+    list_display = ('id', 'name')
+    search_fields = ['name']
+
+class SiteAdmin(admin.ModelAdmin):
+    list_display = ('id', 'name')
+    search_fields = ['name']
 
 # Register models in admin
 admin.site.register(Employee, EmployeeAdmin)
 admin.site.register(Attendance, AttendanceAdmin)
+admin.site.register(Department, DepartmentAdmin)
+admin.site.register(Site, SiteAdmin)

@@ -2,11 +2,23 @@ from django.db import models
 from datetime import datetime, time
 from django.utils import timezone
 
+class Department(models.Model):
+    name = models.CharField(max_length=100, unique=True)
+
+    def __str__(self):
+        return self.name
+
+class Site(models.Model):
+    name = models.CharField(max_length=100, unique=True)
+
+    def __str__(self):
+        return self.name
+
 class Employee(models.Model):
     name = models.CharField(max_length=100)
     email = models.EmailField(unique=True)
     phone = models.CharField(max_length=15)
-    department = models.CharField(max_length=50)
+    department = models.ForeignKey(Department, on_delete=models.SET_NULL, null=True, blank=True)
     position = models.CharField(max_length=50)
     face_embedding = models.JSONField(null=True)  # Store face embeddings
     profile_picture = models.ImageField(upload_to='profiles/')
@@ -17,7 +29,7 @@ class Employee(models.Model):
     badge_number = models.CharField(max_length=20, null=True, blank=True)  # Badge Number
     mol_id = models.CharField(max_length=50, null=True, blank=True)  # MOL ID
     labor_card_number = models.CharField(max_length=50, null=True, blank=True)  # Labor Card/ Work Permit Numbers
-    site = models.CharField(max_length=100, null=True, blank=True)  # Site
+    site = models.ForeignKey(Site, on_delete=models.SET_NULL, null=True, blank=True)  # Site
     employer = models.CharField(max_length=100, null=True, blank=True)  # Employer (PIC or Sub contract)
     
     def __str__(self):
@@ -31,13 +43,20 @@ class Attendance(models.Model):
     check_out_time = models.DateTimeField(null=True, blank=True)
     late_minutes = models.IntegerField(default=0)  # Store late minutes
     early_minutes = models.IntegerField(default=0)  # Store early going minutes
-    status = models.CharField(max_length=10, choices=[('present', 'Present'), ('absent', 'Absent')])
+    status = models.CharField(max_length=10, choices=[('present', 'Present'), ('absent', 'Absent'), ('late', 'Late')])
     date = models.DateField(auto_now_add=True)  # Track date for attendance
     latitude = models.FloatField(null=True, blank=True)  # Store latitude
     longitude = models.FloatField(null=True, blank=True)  # Store longitude
+    slot = models.CharField(max_length=10, null=True, blank=True, choices=[
+        ('slot1', 'Slot 1 (9-11 AM)'),
+        ('slot2', 'Slot 2 (11-1 PM)'),
+        ('slot3', 'Slot 3 (2-4 PM)'),
+        ('slot4', 'Slot 4 (4-6 PM)'),
+    ])
     
     class Meta:
-        unique_together = ['user', 'date']  # Prevent duplicate records
+        unique_together = ['user', 'date', 'slot']  # Prevent duplicate records for same user, date, and slot
+
     
     def __str__(self):
         return f"{self.user.name} - {self.status} ({self.date})"
