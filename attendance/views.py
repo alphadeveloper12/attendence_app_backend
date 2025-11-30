@@ -186,19 +186,19 @@ class MarkAttendanceView(APIView):
 
         v, q, meta = ENGINE.embed_best_face(bgr)
         if v is None:
-            return Response({"error": "No face detected in image.", "meta": meta}, status=400)
+            return Response({"error": "No face detected in image."}, status=400)
 
         # Quality gates (soft blur passes; others return actionable messages)
         if not meta.get("ok", False) and not str(meta.get("reason", "")).startswith("soft_blurry"):
             reason = str(meta.get("reason", ""))
             if "too_dark" in reason:
-                return Response({"error": "Lighting too dim. Please brighten the environment.", "meta": meta}, status=422)
+                return Response({"error": "Lighting too dim. Please brighten the environment."}, status=422)
             if "too_bright" in reason:
-                return Response({"error": "Image too bright. Avoid direct glare.", "meta": meta}, status=422)
+                return Response({"error": "Image too bright. Avoid direct glare."}, status=422)
             if "face_too_small" in reason:
-                return Response({"error": "Move closer to the camera.", "meta": meta}, status=422)
+                return Response({"error": "Move closer to the camera."}, status=422)
             if "det_score" in reason or "blurry" in reason:
-                return Response({"error": "Face not clear. Hold still and retry.", "meta": meta}, status=422)
+                return Response({"error": "Face not clear. Hold still and retry."}, status=422)
 
         # Gallery must exist
         if ENGINE.index is None or len(ENGINE.ids) == 0:
@@ -236,7 +236,7 @@ class MarkAttendanceView(APIView):
                 "error": "Face not recognized. Try again or re-enroll with more images.",
                 "best_sim": best_sim,
                 "second_sim": second_sim,
-                "meta": meta
+                # "meta": meta
             }, status=400)
 
         # Winner found → mark attendance (keep your original slot logic)
@@ -270,7 +270,7 @@ class MarkAttendanceView(APIView):
             "employee": {"id": emp.id, "name": emp.name, "email": emp.email},
             "time": now.strftime("%I:%M %p"),
             "confidence": best_sim,
-            "meta": meta  # includes detector score, blur, brightness, attempt etc.
+            # "meta": meta  # includes detector score, blur, brightness, attempt etc.
         }, status=200)
 
 # ------------------ Admin Login / Stats / Lists / Templates (unchanged) ------------------
