@@ -83,3 +83,13 @@ class Attendance(models.Model):
             self.early_minutes = max(0, int(diff))
 
         self.save()
+
+class FaceTemplate(models.Model):
+    """Stores multiple embeddings for one employee."""
+    employee = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name='templates')
+    embedding = models.JSONField()
+    quality = models.FloatField(default=0.0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Template of {self.employee.name} (q={self.quality:.2f})"

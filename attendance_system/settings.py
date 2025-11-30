@@ -44,6 +44,12 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt.token_blacklist',
 ]
 REST_FRAMEWORK = {
+    "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
+    "DEFAULT_PARSER_CLASSES": [
+        "rest_framework.parsers.JSONParser",
+        "rest_framework.parsers.FormParser",
+        "rest_framework.parsers.MultiPartParser",
+    ],
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ],
@@ -93,13 +99,22 @@ WSGI_APPLICATION = 'attendance_system.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.sqlite3',
+#         'NAME': BASE_DIR / 'db.sqlite3',
+#     }
+# }
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'db_attendance2',
+        'USER': 'dev_attendance',
+        'PASSWORD': 'attenDance@12',
+        'HOST': "127.0.0.1",
+        'PORT': '5432',
     }
 }
-
 
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
@@ -146,3 +161,7 @@ import os
 # Media files (uploaded by users)
 MEDIA_URL = '/media/'  # This is the URL that will be used to access the media files
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')  # This is the directory where media files will be saved
+STATIC_ROOT = os.path.join(BASE_DIR, 'static')  # This is the directory where media files will be saved
+os.environ.setdefault("OMP_NUM_THREADS", "4")
+os.environ.setdefault("MKL_NUM_THREADS", "4")
+os.environ.setdefault("OMP_WAIT_POLICY", "ACTIVE")

@@ -69,6 +69,6 @@ logs/
 Thumbs.db
 .DS_Store
 attendance/__pycache__/views.cpython-312.pyc
-attendance/migrations/0002_department_site_attendance_latitude_and_more.py
+attendance/migrations/00*.py
 .gitignore
 attendance_system/__pycache__/urls.cpython-312.pyc

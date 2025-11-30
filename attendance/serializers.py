@@ -42,3 +42,27 @@ class EmployeeSerializer(serializers.ModelSerializer):
         if obj.profile_picture:
             return request.build_absolute_uri(obj.profile_picture.url)
         return None
+
+class EnrollSerializer(serializers.Serializer):
+    name = serializers.CharField(max_length=100)
+    email = serializers.EmailField()
+    phone = serializers.CharField(max_length=20)
+    department = serializers.IntegerField(required=False)
+    position = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    job_description = serializers.CharField(required=False, allow_blank=True)
+    salary_grade = serializers.CharField(required=False, allow_blank=True)
+    badge_number = serializers.CharField(required=False, allow_blank=True)
+    mol_id = serializers.CharField(required=False, allow_blank=True)
+    labor_card_number = serializers.CharField(required=False, allow_blank=True)
+    site = serializers.IntegerField(required=False)
+    employer = serializers.CharField(required=False, allow_blank=True)
+    # images = serializers.ListField(
+    #     child=serializers.FileField(), allow_empty=False, write_only=True
+    # )
+
+
+class VerifySerializer(serializers.Serializer):
+    slot = serializers.CharField()
+    latitude = serializers.FloatField()
+    longitude = serializers.FloatField()
+    image = serializers.ImageField()
