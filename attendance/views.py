@@ -54,7 +54,7 @@ class SiteListView(APIView):
 # ------------------ Register User (DeepFace -> InsightFace) ------------------
 
 class RegisterUserView(APIView):
-    permission_classes = [AllowAny]
+    permission_classes = [IsAdminUser]
 
     @transaction.atomic
     def post(self, request):
@@ -225,6 +225,7 @@ class MarkAttendanceView(APIView):
         # Decide winner with threshold + margin
         ranked = sorted(per_emp.items(), key=lambda kv: kv[1], reverse=True)
         best_eid, best_sim = ranked[0]
+        print(f"Best employee ID: {best_eid}")
         second_sim = ranked[1][1] if len(ranked) > 1 else -1.0
 
         solo = (second_sim < 0)
