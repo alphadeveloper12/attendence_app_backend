@@ -26,7 +26,7 @@ class FaceEngine:
     """
     def __init__(self, providers=None, det_size=(640, 640)):
         self.lock = Lock()
-        self.providers = providers or CPU_PROVIDERS
+        self.providers = providers or ["CPUExecutionProvider"]
         self.det_size = det_size
 
         self._app = None
@@ -40,19 +40,23 @@ class FaceEngine:
         if self._app is not None:
             return
         from insightface.app import FaceAnalysis
+        print("Loading models...")  # Add debug log
 
         errors = []
         for name in ("antelopev2", "buffalo_l"):
+            print(f"Trying to load {name}...")  # Add debug log
             try:
                 app = FaceAnalysis(name=name, providers=self.providers)
+                print(f"Model {name} loaded successfully.")  # Add debug log
                 app.prepare(ctx_id=0, det_size=self.det_size)
                 self._app = app
                 self._app_name = name
                 return
             except Exception as e:
-                errors.append(f"{name}: {e!r}")
-        raise RuntimeError("Failed to load InsightFace models.\n" + "\n".join(errors))
+                errors.append(f"{name}: {str(e)}")
+                print(f"Failed to load model {name}: {str(e)}")
 
+        raise RuntimeError("Failed to load InsightFace models.\n" + "\n".join(errors))
     @property
     def app(self):
         self._load_app_once()
