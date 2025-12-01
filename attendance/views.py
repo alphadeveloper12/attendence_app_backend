@@ -54,7 +54,7 @@ class SiteListView(APIView):
 # ------------------ Register User (DeepFace -> InsightFace) ------------------
 
 class RegisterUserView(APIView):
-    permission_classes = [IsAdminUser]
+    permission_classes = [AllowAny]
 
     @transaction.atomic
     def post(self, request):
