@@ -313,7 +313,7 @@ class EmployeeListView(APIView):
         serializer = EmployeeSerializer(employees, many=True, context={'request': request})
         return Response(serializer.data)
 
-@login_required(login_url='admin-login')
+# @login_required(login_url='admin-login')
 def admin_login_view(request):
     if request.user.is_authenticated:
         return redirect('admin-dashboard')
