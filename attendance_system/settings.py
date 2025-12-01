@@ -37,9 +37,9 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'attendance',
-     'corsheaders',
-     'rest_framework',
+    'attendance.apps.AttendanceConfig',
+    'corsheaders',
+    'rest_framework',
     'rest_framework.authtoken',
     'rest_framework_simplejwt.token_blacklist',
 ]
@@ -105,12 +105,22 @@ WSGI_APPLICATION = 'attendance_system.wsgi.application'
 #         'NAME': BASE_DIR / 'db.sqlite3',
 #     }
 # }
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.postgresql',
+#         'NAME': 'db_attendance2',
+#         'USER': 'dev_attendance',
+#         'PASSWORD': 'attenDance@12',
+#         'HOST': "127.0.0.1",
+#         'PORT': '5432',
+#     }
+# }
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': 'db_attendance2',
         'USER': 'dev_attendance',
-        'PASSWORD': 'attenDance@12',
+        'PASSWORD': 'RocketOps#wnLi$',
         'HOST': "127.0.0.1",
         'PORT': '5432',
     }
