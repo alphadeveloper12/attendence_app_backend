@@ -43,7 +43,7 @@ class FaceEngine:
         print("Loading models...")  # Add debug log
 
         errors = []
-        for name in ("antelopev2", "buffalo_l"):
+        for name in ("buffalo_l", "buffalo_l"):
             print(f"Trying to load {name}...")  # Add debug log
             try:
                 app = FaceAnalysis(name=name, providers=self.providers)
