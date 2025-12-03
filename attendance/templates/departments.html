@@ -1,0 +1,211 @@
+{% extends 'base.html' %}
+
+{% block title %}Departments Management - Admin{% endblock %}
+
+{% block content %}
+<div class="navbar">
+    <h1>🏛️ Departments Management</h1>
+    <div class="user-info">
+        <span>Welcome, {{ user.username }}</span>
+        <a href="{% url 'admin-logout' %}" class="btn btn-danger">Logout</a>
+    </div>
+</div>
+
+<!-- Navigation Menu -->
+<div class="nav-menu">
+    <a href="{% url 'admin-dashboard' %}" class="nav-link">📊 Dashboard</a>
+    <a href="{% url 'admin-sites' %}" class="nav-link">🏢 Sites</a>
+    <a href="{% url 'admin-departments' %}" class="nav-link active">🏛️ Departments</a>
+</div>
+
+<div class="container">
+    {% if error %}
+    <div class="alert alert-error">
+        {{ error }}
+    </div>
+    {% endif %}
+
+    <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+            <h2>All Departments</h2>
+            <button onclick="showAddModal()" class="btn btn-primary">+ Add New Department</button>
+        </div>
+
+        {% if departments_data %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Department Name</th>
+                    <th>Employees</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in departments_data %}
+                <tr>
+                    <td><strong>{{ item.department.name }}</strong></td>
+                    <td><span class="badge badge-info">{{ item.employee_count }} Employee{{ item.employee_count|pluralize }}</span></td>
+                    <td>
+                        <button onclick="showEditModal({{ item.department.id }}, '{{ item.department.name }}')"
+                            class="btn btn-secondary" style="margin-right: 0.5rem;">Edit</button>
+                        <button onclick="confirmDelete({{ item.department.id }}, '{{ item.department.name }}')"
+                            class="btn btn-danger">Delete</button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        {% include "pagination.html" with page_obj=departments_data %}
+        {% else %}
+        <p style="text-align: center; color: #666; padding: 2rem;">No departments found. Add your first department to
+            get started!</p>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Add Department Modal -->
+<div id="addModal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="closeAddModal()">&times;</span>
+        <h2>Add New Department</h2>
+        <form method="POST" action="{% url 'admin-add-department' %}">
+            {% csrf_token %}
+            <div class="form-group">
+                <label for="add-name">Department Name</label>
+                <input type="text" id="add-name" name="name" required>
+            </div>
+            <button type="submit" class="btn btn-primary">Add Department</button>
+        </form>
+    </div>
+</div>
+
+<!-- Edit Department Modal -->
+<div id="editModal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="closeEditModal()">&times;</span>
+        <h2>Edit Department</h2>
+        <form method="POST" id="editForm">
+            {% csrf_token %}
+            <div class="form-group">
+                <label for="edit-name">Department Name</label>
+                <input type="text" id="edit-name" name="name" required>
+            </div>
+            <button type="submit" class="btn btn-primary">Save Changes</button>
+        </form>
+    </div>
+</div>
+
+<style>
+    .nav-menu {
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(10px);
+        padding: 0.5rem 2rem;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+        display: flex;
+        gap: 1rem;
+    }
+
+    .nav-link {
+        padding: 0.8rem 1.5rem;
+        text-decoration: none;
+        color: #666;
+        font-weight: 600;
+        border-radius: 8px;
+        transition: all 0.3s ease;
+    }
+
+    .nav-link:hover {
+        background: #f0f0f0;
+        color: #667eea;
+    }
+
+    .nav-link.active {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+    }
+
+    .modal {
+        display: none;
+        position: fixed;
+        z-index: 1000;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.5);
+    }
+
+    .modal-content {
+        background-color: white;
+        margin: 10% auto;
+        padding: 2rem;
+        border-radius: 16px;
+        width: 90%;
+        max-width: 500px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    }
+
+    .close {
+        color: #aaa;
+        float: right;
+        font-size: 28px;
+        font-weight: bold;
+        cursor: pointer;
+    }
+
+    .close:hover {
+        color: #000;
+    }
+</style>
+
+<script>
+    function showAddModal() {
+        document.getElementById('addModal').style.display = 'block';
+    }
+
+    function closeAddModal() {
+        document.getElementById('addModal').style.display = 'none';
+    }
+
+    function showEditModal(id, name) {
+        document.getElementById('edit-name').value = name;
+        document.getElementById('editForm').action = `/api/attendance/dashboard/departments/edit/${id}/`;
+        document.getElementById('editModal').style.display = 'block';
+    }
+
+    function closeEditModal() {
+        document.getElementById('editModal').style.display = 'none';
+    }
+
+    function confirmDelete(id, name) {
+        if (confirm(`Are you sure you want to delete "${name}"? This action cannot be undone.`)) {
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = `/api/attendance/dashboard/departments/delete/${id}/`;
+
+            const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+            const csrfInput = document.createElement('input');
+            csrfInput.type = 'hidden';
+            csrfInput.name = 'csrfmiddlewaretoken';
+            csrfInput.value = csrfToken;
+            form.appendChild(csrfInput);
+
+            document.body.appendChild(form);
+            form.submit();
+        }
+    }
+
+    // Close modal when clicking outside
+    window.onclick = function (event) {
+        const addModal = document.getElementById('addModal');
+        const editModal = document.getElementById('editModal');
+        if (event.target == addModal) {
+            closeAddModal();
+        }
+        if (event.target == editModal) {
+            closeEditModal();
+        }
+    }
+</script>
+{% endblock %}

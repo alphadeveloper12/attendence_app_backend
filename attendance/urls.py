@@ -16,5 +16,18 @@ urlpatterns = [
     path('dashboard/', admin_dashboard_view, name='admin-dashboard'),
     path('dashboard/user/<int:user_id>/', admin_user_detail_view, name='admin-user-detail'),
     path('dashboard/logout/', admin_logout_view, name='admin-logout'),
+    
+    # Sites Management
+    path('dashboard/sites/', admin_sites_view, name='admin-sites'),
+    path('dashboard/sites/add/', admin_add_site, name='admin-add-site'),
+    path('dashboard/sites/edit/<int:site_id>/', admin_edit_site, name='admin-edit-site'),
+    path('dashboard/sites/delete/<int:site_id>/', admin_delete_site, name='admin-delete-site'),
+    
+    # Departments Management
+    path('dashboard/departments/', admin_departments_view, name='admin-departments'),
+    path('dashboard/departments/add/', admin_add_department, name='admin-add-department'),
+    path('dashboard/departments/edit/<int:dept_id>/', admin_edit_department, name='admin-edit-department'),
+    path('dashboard/departments/delete/<int:dept_id>/', admin_delete_department, name='admin-delete-department'),
 ]
+
 

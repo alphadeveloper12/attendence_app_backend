@@ -13,6 +13,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_http_methods
+from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -74,6 +75,23 @@ class RegisterUserView(APIView):
 
         # Files MUST come from request.FILES
         files = request.FILES.getlist("images") or request.FILES.getlist("images[]")
+        
+        # DEBUG: Save incoming images to inspect them
+        import os
+        from datetime import datetime
+        debug_dir = os.path.join(settings.MEDIA_ROOT, 'debug_images')
+        os.makedirs(debug_dir, exist_ok=True)
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        
+        print(f"[DEBUG] Received {len(files)} files")
+        for idx, f in enumerate(files):
+            debug_path = os.path.join(debug_dir, f'{timestamp}_image_{idx}_{f.name}')
+            with open(debug_path, 'wb') as debug_file:
+                f.seek(0)
+                debug_file.write(f.read())
+            print(f"[DEBUG] Saved image {idx}: {debug_path}")
+            print(f"[DEBUG]   - Size: {f.size} bytes")
+            print(f"[DEBUG]   - Content-Type: {f.content_type}")
 
         if not files:
             return Response(
@@ -459,22 +477,60 @@ def admin_login_view(request):
 def admin_dashboard_view(request):
     if not request.user.is_staff:
         return redirect("admin-login")
-    employees = Employee.objects.select_related("site", "department").all()
+    
+    # Get site filter from query params
+    site_filter = request.GET.get('site', 'all')
+    
+    # Filter employees based on site selection
+    if site_filter != 'all':
+        try:
+            site_id = int(site_filter)
+            employees = Employee.objects.filter(site_id=site_id).select_related("site", "department")
+        except (ValueError, TypeError):
+            employees = Employee.objects.select_related("site", "department").all()
+    else:
+        employees = Employee.objects.select_related("site", "department").all()
+    
+    # Pagination for employees
+    employees_list = list(employees.order_by('name'))
+    paginator = Paginator(employees_list, 20)  # 20 employees per page
+    page = request.GET.get('page', 1)
+    
+    try:
+        employees_page = paginator.page(page)
+    except PageNotAnInteger:
+        employees_page = paginator.page(1)
+    except EmptyPage:
+        employees_page = paginator.page(paginator.num_pages)
+    
+    # Group paginated employees by site
     employees_by_site = defaultdict(list)
-    for e in employees:
+    for e in employees_page:
         site_name = e.site.name if e.site else None
         employees_by_site[site_name].append(e)
-    total_employees = employees.count()
+    
+    total_employees = Employee.objects.count()
     total_sites = Site.objects.count()
     total_departments = Department.objects.count()
     today = timezone.now().date()
     today_attendance = Attendance.objects.filter(date=today).count()
+    
+    # Get all sites for the filter dropdown
+    all_sites = Site.objects.all()
+    # Serialize sites for JavaScript
+    import json
+    sites_json = json.dumps([{"id": site.id, "name": site.name} for site in all_sites])
+    
     context = {
         "employees_by_site": dict(employees_by_site),
         "total_employees": total_employees,
         "total_sites": total_sites,
         "total_departments": total_departments,
         "today_attendance": today_attendance,
+        "all_sites": sites_json,
+        "selected_site": site_filter,
+        "paginator": paginator,
+        "employees_page": employees_page,
     }
     return render(request, "dashboard.html", context)
 
@@ -585,3 +641,235 @@ def admin_user_detail_view(request, user_id):
 def admin_logout_view(request):
     logout(request)
     return redirect("admin-login")
+
+
+# ------------------ Sites Management ------------------
+
+@login_required(login_url="admin-login")
+def admin_sites_view(request):
+    """List all sites with employee counts"""
+    if not request.user.is_staff:
+        return redirect("admin-login")
+    
+    sites = Site.objects.all().order_by('name')
+    sites_data = []
+    for site in sites:
+        employee_count = Employee.objects.filter(site=site).count()
+        sites_data.append({
+            'site': site,
+            'employee_count': employee_count
+        })
+    
+    # Pagination
+    paginator = Paginator(sites_data, 10)  # 10 items per page
+    page = request.GET.get('page', 1)
+    
+    try:
+        sites_page = paginator.page(page)
+    except PageNotAnInteger:
+        sites_page = paginator.page(1)
+    except EmptyPage:
+        sites_page = paginator.page(paginator.num_pages)
+    
+    context = {
+        'sites_data': sites_page,
+        'paginator': paginator,
+    }
+    return render(request, "sites.html", context)
+
+
+@login_required(login_url="admin-login")
+@require_http_methods(["GET", "POST"])
+def admin_add_site(request):
+    """Add a new site"""
+    if not request.user.is_staff:
+        return redirect("admin-login")
+    
+    if request.method == "POST":
+        name = request.POST.get("name", "").strip()
+        if name:
+            if Site.objects.filter(name=name).exists():
+                return render(request, "sites.html", {
+                    'error': f'Site "{name}" already exists.',
+                    'sites_data': _get_sites_data()
+                })
+            Site.objects.create(name=name)
+            return redirect("admin-sites")
+        else:
+            return render(request, "sites.html", {
+                'error': 'Site name is required.',
+                'sites_data': _get_sites_data()
+            })
+    
+    return redirect("admin-sites")
+
+
+@login_required(login_url="admin-login")
+@require_http_methods(["GET", "POST"])
+def admin_edit_site(request, site_id):
+    """Edit an existing site"""
+    if not request.user.is_staff:
+        return redirect("admin-login")
+    
+    site = get_object_or_404(Site, id=site_id)
+    
+    if request.method == "POST":
+        name = request.POST.get("name", "").strip()
+        if name:
+            if Site.objects.filter(name=name).exclude(id=site_id).exists():
+                return render(request, "sites.html", {
+                    'error': f'Site "{name}" already exists.',
+                    'sites_data': _get_sites_data()
+                })
+            site.name = name
+            site.save()
+            return redirect("admin-sites")
+        else:
+            return render(request, "sites.html", {
+                'error': 'Site name is required.',
+                'sites_data': _get_sites_data()
+            })
+    
+    return redirect("admin-sites")
+
+
+@login_required(login_url="admin-login")
+@require_http_methods(["POST"])
+def admin_delete_site(request, site_id):
+    """Delete a site"""
+    if not request.user.is_staff:
+        return redirect("admin-login")
+    
+    site = get_object_or_404(Site, id=site_id)
+    site.delete()
+    return redirect("admin-sites")
+
+
+# ------------------ Departments Management ------------------
+
+@login_required(login_url="admin-login")
+def admin_departments_view(request):
+    """List all departments with employee counts"""
+    if not request.user.is_staff:
+        return redirect("admin-login")
+    
+    departments = Department.objects.all().order_by('name')
+    departments_data = []
+    for dept in departments:
+        employee_count = Employee.objects.filter(department=dept).count()
+        departments_data.append({
+            'department': dept,
+            'employee_count': employee_count
+        })
+    
+    # Pagination
+    paginator = Paginator(departments_data, 10)  # 10 items per page
+    page = request.GET.get('page', 1)
+    
+    try:
+        departments_page = paginator.page(page)
+    except PageNotAnInteger:
+        departments_page = paginator.page(1)
+    except EmptyPage:
+        departments_page = paginator.page(paginator.num_pages)
+    
+    context = {
+        'departments_data': departments_page,
+        'paginator': paginator,
+    }
+    return render(request, "departments.html", context)
+
+
+@login_required(login_url="admin-login")
+@require_http_methods(["GET", "POST"])
+def admin_add_department(request):
+    """Add a new department"""
+    if not request.user.is_staff:
+        return redirect("admin-login")
+    
+    if request.method == "POST":
+        name = request.POST.get("name", "").strip()
+        if name:
+            if Department.objects.filter(name=name).exists():
+                return render(request, "departments.html", {
+                    'error': f'Department "{name}" already exists.',
+                    'departments_data': _get_departments_data()
+                })
+            Department.objects.create(name=name)
+            return redirect("admin-departments")
+        else:
+            return render(request, "departments.html", {
+                'error': 'Department name is required.',
+                'departments_data': _get_departments_data()
+            })
+    
+    return redirect("admin-departments")
+
+
+@login_required(login_url="admin-login")
+@require_http_methods(["GET", "POST"])
+def admin_edit_department(request, dept_id):
+    """Edit an existing department"""
+    if not request.user.is_staff:
+        return redirect("admin-login")
+    
+    dept = get_object_or_404(Department, id=dept_id)
+    
+    if request.method == "POST":
+        name = request.POST.get("name", "").strip()
+        if name:
+            if Department.objects.filter(name=name).exclude(id=dept_id).exists():
+                return render(request, "departments.html", {
+                    'error': f'Department "{name}" already exists.',
+                    'departments_data': _get_departments_data()
+                })
+            dept.name = name
+            dept.save()
+            return redirect("admin-departments")
+        else:
+            return render(request, "departments.html", {
+                'error': 'Department name is required.',
+                'departments_data': _get_departments_data()
+            })
+    
+    return redirect("admin-departments")
+
+
+@login_required(login_url="admin-login")
+@require_http_methods(["POST"])
+def admin_delete_department(request, dept_id):
+    """Delete a department"""
+    if not request.user.is_staff:
+        return redirect("admin-login")
+    
+    dept = get_object_or_404(Department, id=dept_id)
+    dept.delete()
+    return redirect("admin-departments")
+
+
+# Helper functions
+def _get_sites_data():
+    """Helper to get sites data with employee counts"""
+    sites = Site.objects.all()
+    sites_data = []
+    for site in sites:
+        employee_count = Employee.objects.filter(site=site).count()
+        sites_data.append({
+            'site': site,
+            'employee_count': employee_count
+        })
+    return sites_data
+
+
+def _get_departments_data():
+    """Helper to get departments data with employee counts"""
+    departments = Department.objects.all()
+    departments_data = []
+    for dept in departments:
+        employee_count = Employee.objects.filter(department=dept).count()
+        departments_data.append({
+            'department': dept,
+            'employee_count': employee_count
+        })
+    return departments_data
+
