@@ -2,6 +2,7 @@
 import logging
 import base64
 import re
+import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta
 from collections import defaultdict
 
@@ -19,11 +20,12 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAdminUser
+from rest_framework.authentication import SessionAuthentication
 from rest_framework.decorators import permission_classes
 
 from django.contrib.auth.models import User
 import numpy as np
-from .models import Employee, Attendance, Department, Site, FaceTemplate
+from .models import Employee, Attendance, Site, FaceTemplate
 
 # --- NEW: our engine/utils ---
 from .engine import ENGINE
@@ -36,16 +38,10 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 logger = logging.getLogger(__name__)
 
-# ------------------ Departments / Sites (unchanged) ------------------
+# ------------------ Sites API ------------------
 
 
-class DepartmentListView(APIView):
-    permission_classes = [AllowAny]
-
-    def get(self, request):
-        departments = Department.objects.all()
-        serializer = DepartmentSerializer(departments, many=True)
-        return Response(serializer.data)
+# ------------------ Sites API ------------------
 
 
 class SiteListView(APIView):
@@ -55,6 +51,364 @@ class SiteListView(APIView):
         sites = Site.objects.all()
         serializer = SiteSerializer(sites, many=True)
         return Response(serializer.data)
+
+
+class ImportEmployeesView(APIView):
+    authentication_classes = [SessionAuthentication]
+    permission_classes = [IsAdminUser]
+
+    def post(self, request):
+        file = request.FILES.get('file')
+        if not file:
+            return Response({'error': 'No file uploaded'}, status=400)
+
+        try:
+            import pandas as pd
+            # Read the excel file
+            # We'll read the first few rows to understand the structure
+            df = pd.read_excel(file, header=None)
+            
+            # Locate header rows
+            # Scan first 20 rows to find the header
+            header_row_index = -1
+            for i in range(20):
+                row_values = df.iloc[i].astype(str).str.strip().tolist()
+                # Check for key columns
+                if any('Sr. Nr.' in val or 'Name' in val or 'Status' in val for val in row_values):
+                    header_row_index = i
+                    break
+            
+            if header_row_index == -1:
+                 return Response({'error': 'Could not find header row (looked for "Sr. Nr.", "Name", or "Status")'}, status=400)
+
+            header_row_1 = df.iloc[header_row_index].astype(str).str.strip().tolist()
+            # Row 2 might be the next one, or merged. Let's assume next one for now if it exists
+            header_row_2 = []
+            if header_row_index + 1 < len(df):
+                header_row_2 = df.iloc[header_row_index + 1].astype(str).str.strip().tolist()
+            
+            # Helper to find column index
+            def find_col_index(keywords, row_list):
+                for idx, val in enumerate(row_list):
+                    if any(k.lower() in val.lower() for k in keywords):
+                        return idx
+                return -1
+
+            # Map fields to column indices
+            # We look in both rows because of merged headers
+            col_map = {}
+            
+            # Basic Info
+            col_map['name'] = find_col_index(['Name'], header_row_1)
+            
+            col_map['department'] = find_col_index(['Division'], header_row_1)
+            
+            col_map['position'] = find_col_index(['Designation'], header_row_1)
+            
+            col_map['badge_number'] = find_col_index(['KFD & KAMI', 'Emp. ID'], header_row_1)
+            
+            col_map['salary_grade'] = find_col_index(['Category'], header_row_1)
+            
+            col_map['nationality'] = find_col_index(['Nationality'], header_row_1)
+            col_map['gender'] = find_col_index(['Gender'], header_row_1)
+            col_map['marital_status'] = find_col_index(['Marital'], header_row_1)
+            col_map['religion'] = find_col_index(['Religion'], header_row_1)
+            col_map['visa_details'] = find_col_index(['Visa Details'], header_row_1)
+            
+            # Nested columns (Row 2) - usually under the main header
+            # If header_row_2 is empty or useless, we might need to look at header_row_1 too or just rely on 2
+            col_map['labor_card_number'] = find_col_index(['L.Card', 'CEC Nr'], header_row_2)
+            if col_map['labor_card_number'] == -1: col_map['labor_card_number'] = find_col_index(['L.Card', 'CEC Nr'], header_row_1)
+
+            col_map['mol_id'] = find_col_index(['Personal Nr'], header_row_2)
+            if col_map['mol_id'] == -1: col_map['mol_id'] = find_col_index(['Personal Nr'], header_row_1)
+
+            col_map['passport_number'] = find_col_index(['New Passport Nr', 'PP No'], header_row_2)
+            if col_map['passport_number'] == -1: col_map['passport_number'] = find_col_index(['New Passport Nr', 'PP No'], header_row_1)
+
+            col_map['passport_expiry'] = find_col_index(['Expiry Date'], header_row_2)
+            
+            # Dates
+            col_map['dob'] = find_col_index(['Date of Birth'], header_row_1)
+            col_map['doj'] = find_col_index(['D.O.J'], header_row_2)
+            if col_map['doj'] == -1: col_map['doj'] = find_col_index(['D.O.J'], header_row_1)
+
+            col_map['status'] = find_col_index(['Status'], header_row_1)
+            col_map['site'] = find_col_index(['Project', 'Site'], header_row_1)
+
+            # Process data starting from row AFTER headers
+            # If we used header_row_index and header_row_index+1, data starts at header_row_index+2
+            start_data_index = header_row_index + 2
+            
+            success_count = 0
+            errors = []
+            debug_info = []
+            
+            for index, row in df.iloc[start_data_index:].iterrows():
+                try:
+                    # Extract data using the map
+                    def get_val(field):
+                        idx = col_map.get(field)
+                        if idx is not None and idx != -1:
+                            val = row.iloc[idx]
+                            return str(val).strip() if pd.notna(val) else None
+                        return None
+
+                    name = get_val('name')
+                    if not name: 
+                        debug_info.append(f"Row {index}: Skipped (No Name)")
+                        continue # Skip empty rows
+
+                    badge = get_val('badge_number')
+                    # No auto-email generation
+                    email = None
+                    
+                    # Check if exists based on badge or name
+                    emp = None
+                    if badge:
+                        emp = Employee.objects.filter(badge_number=badge).first()
+                    
+                    if not emp:
+                        emp = Employee.objects.filter(name=name).first()
+                        
+                    if not emp:
+                        emp = Employee()
+
+                    emp.name = name
+                    # emp.email = email # Don't set email if it's None
+                    emp.department = get_val('department')
+                    emp.position = get_val('position')
+                    emp.badge_number = badge
+                    emp.salary_grade = get_val('salary_grade')
+                    emp.nationality = get_val('nationality')
+                    emp.gender = get_val('gender')
+                    emp.marital_status = get_val('marital_status')
+                    emp.religion = get_val('religion')
+                    emp.visa_details = get_val('visa_details')
+                    emp.labor_card_number = get_val('labor_card_number')
+                    emp.mol_id = get_val('mol_id')
+                    emp.passport_number = get_val('passport_number')
+                    emp.status = get_val('status')
+                    
+                    # Handle Site
+                    site_name = get_val('site')
+                    if site_name:
+                        site_obj = Site.objects.filter(name__iexact=site_name).first()
+                        if not site_obj:
+                            site_obj = Site.objects.create(name=site_name)
+                        emp.site = site_obj
+                    
+                    # Handle Dates
+                    def parse_date(date_str):
+                        if not date_str: return None
+                        try:
+                            return pd.to_datetime(date_str).date()
+                        except:
+                            return None
+
+                    emp.date_of_birth = parse_date(get_val('dob'))
+                    emp.date_of_joining = parse_date(get_val('doj'))
+                    emp.passport_expiry = parse_date(get_val('passport_expiry'))
+                    
+                    # Phone is required, use dummy if missing
+                    if not emp.phone:
+                        emp.phone = "0000000000"
+
+                    emp.save()
+                    success_count += 1
+                    
+                except Exception as e:
+                    errors.append(f"Row {index}: {str(e)}")
+            
+            response_data = {
+                'success': True, 
+                'imported_count': success_count,
+                'errors': errors[:10] # Return first 10 errors
+            }
+            
+            if success_count == 0:
+                response_data['debug'] = {
+                    'col_map': col_map,
+                    'header_row_1': header_row_1,
+                    'header_row_2': header_row_2,
+                    'row_logs': debug_info[:10]
+                }
+                
+            return Response(response_data)
+
+        except Exception as e:
+            return Response({'error': str(e)}, status=500)
+
+
+class AdminAddEmployeeView(APIView):
+    authentication_classes = [SessionAuthentication]
+    permission_classes = [IsAdminUser]
+
+    def post(self, request):
+        data = request.data
+        try:
+            # Check if email exists
+            email = data.get('email')
+            name = data.get('name')
+            badge = data.get('badge_number')
+            
+            # No auto-email generation
+            
+            # Check for duplicates based on badge or name if needed, but for manual add we might just allow it
+            # or warn. User said "no any field is unique identifier".
+            # So we just create.
+            
+            site_id = data.get('site')
+            site = None
+            if site_id:
+                try:
+                    site = Site.objects.get(id=site_id)
+                except Site.DoesNotExist:
+                    pass
+
+            def parse_date(d): return d if d else None
+
+            Employee.objects.create(
+                name=name,
+                email=email or None,
+                phone=data.get('phone'),
+                department=data.get('department'),
+                position=data.get('position'),
+                badge_number=badge,
+                salary_grade=data.get('salary_grade'),
+                status=data.get('status'),
+                nationality=data.get('nationality'),
+                gender=data.get('gender'),
+                marital_status=data.get('marital_status'),
+                religion=data.get('religion'),
+                date_of_birth=parse_date(data.get('date_of_birth')),
+                date_of_joining=parse_date(data.get('date_of_joining')),
+                passport_number=data.get('passport_number'),
+                passport_expiry=parse_date(data.get('passport_expiry')),
+                visa_details=data.get('visa_details'),
+                labor_card_number=data.get('labor_card_number'),
+                mol_id=data.get('mol_id'),
+                job_description=data.get('job_description'),
+                employer=data.get('employer'),
+                site=site
+            )
+            return Response({'success': True, 'message': 'Employee added successfully'})
+            
+        except Exception as e:
+            return Response({'error': str(e)}, status=500)
+
+
+class AdminEditEmployeeView(APIView):
+    authentication_classes = [SessionAuthentication]
+    permission_classes = [IsAdminUser]
+
+    def get(self, request, employee_id):
+        try:
+            emp = Employee.objects.get(id=employee_id)
+            data = {
+                'id': emp.id,
+                'name': emp.name,
+                'email': emp.email,
+                'phone': emp.phone,
+                'department': emp.department,
+                'position': emp.position,
+                'badge_number': emp.badge_number,
+                'salary_grade': emp.salary_grade,
+                'status': emp.status,
+                'nationality': emp.nationality,
+                'gender': emp.gender,
+                'marital_status': emp.marital_status,
+                'religion': emp.religion,
+                'date_of_birth': str(emp.date_of_birth) if emp.date_of_birth else '',
+                'date_of_joining': str(emp.date_of_joining) if emp.date_of_joining else '',
+                'passport_number': emp.passport_number,
+                'passport_expiry': str(emp.passport_expiry) if emp.passport_expiry else '',
+                'visa_details': emp.visa_details,
+                'labor_card_number': emp.labor_card_number,
+                'mol_id': emp.mol_id,
+                'job_description': emp.job_description,
+                'employer': emp.employer,
+                'site': emp.site.id if emp.site else '',
+            }
+            return Response(data)
+        except Employee.DoesNotExist:
+            return Response({'error': 'Employee not found'}, status=404)
+
+    def put(self, request, employee_id):
+        try:
+            emp = Employee.objects.get(id=employee_id)
+            data = request.data
+            
+            emp.name = data.get('name', emp.name)
+            emp.email = data.get('email') or None
+            emp.phone = data.get('phone')
+            emp.department = data.get('department')
+            emp.position = data.get('position')
+            emp.badge_number = data.get('badge_number')
+            emp.salary_grade = data.get('salary_grade')
+            emp.status = data.get('status')
+            emp.nationality = data.get('nationality')
+            emp.gender = data.get('gender')
+            emp.marital_status = data.get('marital_status')
+            emp.religion = data.get('religion')
+            emp.passport_number = data.get('passport_number')
+            emp.visa_details = data.get('visa_details')
+            emp.labor_card_number = data.get('labor_card_number')
+            emp.mol_id = data.get('mol_id')
+            emp.job_description = data.get('job_description')
+            emp.employer = data.get('employer')
+            
+            site_id = data.get('site')
+            if site_id:
+                try:
+                    emp.site = Site.objects.get(id=site_id)
+                except Site.DoesNotExist:
+                    emp.site = None
+            else:
+                emp.site = None
+            
+            def parse_date(d): return d if d else None
+            emp.date_of_birth = parse_date(data.get('date_of_birth'))
+            emp.date_of_joining = parse_date(data.get('date_of_joining'))
+            emp.passport_expiry = parse_date(data.get('passport_expiry'))
+            
+            emp.save()
+            return Response({'success': True, 'message': 'Employee updated successfully'})
+        except Employee.DoesNotExist:
+            return Response({'error': 'Employee not found'}, status=404)
+        except Exception as e:
+            return Response({'error': str(e)}, status=500)
+
+
+class AdminDeleteEmployeeView(APIView):
+    authentication_classes = [SessionAuthentication]
+    permission_classes = [IsAdminUser]
+
+    def delete(self, request, employee_id):
+        try:
+            emp = Employee.objects.get(id=employee_id)
+            emp.delete()
+            return Response({'success': True, 'message': 'Employee deleted successfully'})
+        except Employee.DoesNotExist:
+            return Response({'error': 'Employee not found'}, status=404)
+        except Exception as e:
+            return Response({'error': str(e)}, status=500)
+
+
+class AdminBulkDeleteEmployeeView(APIView):
+    authentication_classes = [SessionAuthentication]
+    permission_classes = [IsAdminUser]
+
+    def post(self, request):
+        try:
+            ids = request.data.get('ids', [])
+            if not ids:
+                return Response({'error': 'No IDs provided'}, status=400)
+            
+            Employee.objects.filter(id__in=ids).delete()
+            return Response({'success': True, 'message': f'{len(ids)} employees deleted successfully'})
+        except Exception as e:
+            return Response({'error': str(e)}, status=500)
 
 
 # ------------------ Register User (DeepFace -> InsightFace) ------------------
@@ -104,7 +458,7 @@ class RegisterUserView(APIView):
         name = data.get("name")
         email = data.get("email")
         phone = data.get("phone")
-        department_id = data.get("department")
+        department = data.get("department") or ""  # Changed to text field
         position = data.get("position") or ""
         job_description = data.get("job_description") or ""
         salary_grade = data.get("salary_grade") or ""
@@ -120,18 +474,13 @@ class RegisterUserView(APIView):
                 status=400,
             )
 
-        department_obj = (
-            Department.objects.filter(id=department_id).first()
-            if department_id
-            else None
-        )
         site_obj = Site.objects.filter(id=site_id).first() if site_id else None
 
         emp = Employee.objects.create(
             name=name,
             email=email,
             phone=phone,
-            department=department_obj,
+            department=department,  # Now a simple text field
             position=position,
             job_description=job_description,
             salary_grade=salary_grade,
@@ -481,37 +830,39 @@ def admin_dashboard_view(request):
     # Get site filter from query params
     site_filter = request.GET.get('site', 'all')
     
+    # Initialize employees queryset and selected_site
+    employees = Employee.objects.select_related("site").order_by('name')
+    selected_site = site_filter
+    
     # Filter employees based on site selection
     if site_filter != 'all':
         try:
-            site_id = int(site_filter)
-            employees = Employee.objects.filter(site_id=site_id).select_related("site", "department")
+            selected_site_id = int(site_filter)
+            employees = employees.filter(site_id=selected_site_id)
         except (ValueError, TypeError):
-            employees = Employee.objects.select_related("site", "department").all()
-    else:
-        employees = Employee.objects.select_related("site", "department").all()
+            # If site_filter is not a valid int, treat as 'all' or handle error
+            pass # employees remains unfiltered or handle as needed
     
-    # Pagination for employees
-    employees_list = list(employees.order_by('name'))
-    paginator = Paginator(employees_list, 20)  # 20 employees per page
-    page = request.GET.get('page', 1)
-    
+    # Pagination
+    per_page = request.GET.get('per_page', 20)
     try:
-        employees_page = paginator.page(page)
+        per_page = int(per_page)
+        if per_page not in [20, 100, 500, 1000, 2000]:
+            per_page = 20
+    except ValueError:
+        per_page = 20
+
+    paginator = Paginator(employees, per_page)
+    page_number = request.GET.get('page')
+    try:
+        page_obj = paginator.page(page_number)
     except PageNotAnInteger:
-        employees_page = paginator.page(1)
+        page_obj = paginator.page(1)
     except EmptyPage:
-        employees_page = paginator.page(paginator.num_pages)
-    
-    # Group paginated employees by site
-    employees_by_site = defaultdict(list)
-    for e in employees_page:
-        site_name = e.site.name if e.site else None
-        employees_by_site[site_name].append(e)
+        page_obj = paginator.page(paginator.num_pages)
     
     total_employees = Employee.objects.count()
     total_sites = Site.objects.count()
-    total_departments = Department.objects.count()
     today = timezone.now().date()
     today_attendance = Attendance.objects.filter(date=today).count()
     
@@ -522,15 +873,12 @@ def admin_dashboard_view(request):
     sites_json = json.dumps([{"id": site.id, "name": site.name} for site in all_sites])
     
     context = {
-        "employees_by_site": dict(employees_by_site),
         "total_employees": total_employees,
         "total_sites": total_sites,
-        "total_departments": total_departments,
         "today_attendance": today_attendance,
         "all_sites": sites_json,
         "selected_site": site_filter,
-        "paginator": paginator,
-        "employees_page": employees_page,
+        "employees": page_obj,
     }
     return render(request, "dashboard.html", context)
 
@@ -661,7 +1009,13 @@ def admin_sites_view(request):
         })
     
     # Pagination
-    paginator = Paginator(sites_data, 10)  # 10 items per page
+    per_page = request.GET.get('per_page', 10)
+    try:
+        per_page = int(per_page)
+    except ValueError:
+        per_page = 10
+        
+    paginator = Paginator(sites_data, per_page)
     page = request.GET.get('page', 1)
     
     try:
@@ -674,8 +1028,59 @@ def admin_sites_view(request):
     context = {
         'sites_data': sites_page,
         'paginator': paginator,
+        'per_page': per_page
     }
     return render(request, "sites.html", context)
+
+class ImportSitesView(APIView):
+    permission_classes = [IsAdminUser]
+    authentication_classes = [SessionAuthentication]
+
+    def post(self, request):
+        if 'file' not in request.FILES:
+            return Response({'error': 'No file uploaded'}, status=status.HTTP_400_BAD_REQUEST)
+
+        file = request.FILES['file']
+        if not file.name.endswith(('.xlsx', '.xls')):
+            return Response({'error': 'Invalid file format. Please upload Excel file.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            import pandas as pd
+            df = pd.read_excel(file)
+            
+            # Normalize column names
+            df.columns = df.columns.str.strip().str.lower()
+            
+            # Look for 'name' or 'site name' column
+            name_col = next((col for col in df.columns if col in ['name', 'site name', 'site']), None)
+            
+            if not name_col:
+                return Response({
+                    'error': 'Column "Name" or "Site Name" not found.',
+                    'debug': {'columns': list(df.columns)}
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            imported_count = 0
+            errors = []
+
+            for index, row in df.iterrows():
+                try:
+                    site_name = str(row[name_col]).strip()
+                    if site_name and site_name.lower() != 'nan':
+                        if not Site.objects.filter(name=site_name).exists():
+                            Site.objects.create(name=site_name)
+                            imported_count += 1
+                except Exception as e:
+                    errors.append(f"Row {index + 1}: {str(e)}")
+
+            return Response({
+                'message': 'Import successful',
+                'imported_count': imported_count,
+                'errors': errors
+            })
+
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @login_required(login_url="admin-login")
@@ -693,7 +1098,31 @@ def admin_add_site(request):
                     'error': f'Site "{name}" already exists.',
                     'sites_data': _get_sites_data()
                 })
-            Site.objects.create(name=name)
+            
+            coordinates = None
+            if 'kml_file' in request.FILES:
+                try:
+                    kml_file = request.FILES['kml_file']
+                    tree = ET.parse(kml_file)
+                    root = tree.getroot()
+                    namespace = {'kml': 'http://www.opengis.net/kml/2.2'}
+                    coords_elements = root.findall('.//kml:coordinates', namespace)
+                    
+                    coords_list = []
+                    for coord in coords_elements:
+                        coords = coord.text.strip().split()
+                        for point in coords:
+                            parts = point.split(',')
+                            if len(parts) >= 2:
+                                lon, lat = parts[0], parts[1]
+                                coords_list.append((float(lat), float(lon)))
+                    
+                    if coords_list:
+                        coordinates = coords_list
+                except Exception as e:
+                    print(f"Error parsing KML: {e}")
+
+            Site.objects.create(name=name, coordinates=coordinates)
             return redirect("admin-sites")
         else:
             return render(request, "sites.html", {
@@ -721,6 +1150,31 @@ def admin_edit_site(request, site_id):
                     'error': f'Site "{name}" already exists.',
                     'sites_data': _get_sites_data()
                 })
+            
+            # Handle KML File Update
+            if 'kml_file' in request.FILES:
+                try:
+                    kml_file = request.FILES['kml_file']
+                    tree = ET.parse(kml_file)
+                    root = tree.getroot()
+                    namespace = {'kml': 'http://www.opengis.net/kml/2.2'}
+                    coords_elements = root.findall('.//kml:coordinates', namespace)
+                    
+                    coords_list = []
+                    for coord in coords_elements:
+                        coords = coord.text.strip().split()
+                        for point in coords:
+                            parts = point.split(',')
+                            if len(parts) >= 2:
+                                lon, lat = parts[0], parts[1]
+                                coords_list.append((float(lat), float(lon)))
+                    
+                    if coords_list:
+                        site.coordinates = coords_list
+                except Exception as e:
+                    print(f"Error parsing KML: {e}")
+                    # Optionally handle error, e.g., return with error message
+            
             site.name = name
             site.save()
             return redirect("admin-sites")
@@ -745,106 +1199,66 @@ def admin_delete_site(request, site_id):
     return redirect("admin-sites")
 
 
-# ------------------ Departments Management ------------------
-
 @login_required(login_url="admin-login")
-def admin_departments_view(request):
-    """List all departments with employee counts"""
+def admin_site_detail_view(request, site_id):
+    """View site details and map"""
     if not request.user.is_staff:
         return redirect("admin-login")
     
-    departments = Department.objects.all().order_by('name')
-    departments_data = []
-    for dept in departments:
-        employee_count = Employee.objects.filter(department=dept).count()
-        departments_data.append({
-            'department': dept,
-            'employee_count': employee_count
-        })
-    
-    # Pagination
-    paginator = Paginator(departments_data, 10)  # 10 items per page
-    page = request.GET.get('page', 1)
-    
-    try:
-        departments_page = paginator.page(page)
-    except PageNotAnInteger:
-        departments_page = paginator.page(1)
-    except EmptyPage:
-        departments_page = paginator.page(paginator.num_pages)
+    site = get_object_or_404(Site, id=site_id)
+    employee_count = Employee.objects.filter(site=site).count()
     
     context = {
-        'departments_data': departments_page,
-        'paginator': paginator,
+        'site': site,
+        'employee_count': employee_count,
     }
-    return render(request, "departments.html", context)
+    return render(request, "site_detail.html", context)
 
 
-@login_required(login_url="admin-login")
-@require_http_methods(["GET", "POST"])
-def admin_add_department(request):
-    """Add a new department"""
-    if not request.user.is_staff:
-        return redirect("admin-login")
+class SiteCoordinatesView(APIView):
+    """API endpoint to get site coordinates for AJAX requests"""
+    permission_classes = [AllowAny]
     
-    if request.method == "POST":
-        name = request.POST.get("name", "").strip()
-        if name:
-            if Department.objects.filter(name=name).exists():
-                return render(request, "departments.html", {
-                    'error': f'Department "{name}" already exists.',
-                    'departments_data': _get_departments_data()
-                })
-            Department.objects.create(name=name)
-            return redirect("admin-departments")
-        else:
-            return render(request, "departments.html", {
-                'error': 'Department name is required.',
-                'departments_data': _get_departments_data()
-            })
-    
-    return redirect("admin-departments")
-
-
-@login_required(login_url="admin-login")
-@require_http_methods(["GET", "POST"])
-def admin_edit_department(request, dept_id):
-    """Edit an existing department"""
-    if not request.user.is_staff:
-        return redirect("admin-login")
-    
-    dept = get_object_or_404(Department, id=dept_id)
-    
-    if request.method == "POST":
-        name = request.POST.get("name", "").strip()
-        if name:
-            if Department.objects.filter(name=name).exclude(id=dept_id).exists():
-                return render(request, "departments.html", {
-                    'error': f'Department "{name}" already exists.',
-                    'departments_data': _get_departments_data()
-                })
-            dept.name = name
-            dept.save()
-            return redirect("admin-departments")
-        else:
-            return render(request, "departments.html", {
-                'error': 'Department name is required.',
-                'departments_data': _get_departments_data()
-            })
-    
-    return redirect("admin-departments")
-
-
-@login_required(login_url="admin-login")
-@require_http_methods(["POST"])
-def admin_delete_department(request, dept_id):
-    """Delete a department"""
-    if not request.user.is_staff:
-        return redirect("admin-login")
-    
-    dept = get_object_or_404(Department, id=dept_id)
-    dept.delete()
-    return redirect("admin-departments")
+    def get(self, request, site_id):
+        try:
+            site = Site.objects.get(id=site_id)
+            
+            # Prepare coordinates for map
+            map_coords = []
+            center_lat = 25.0058  # Default center (Dubai)
+            center_lng = 55.4364
+            
+            if site.coordinates:
+                try:
+                    # site.coordinates is stored as [(lat, lon), ...]
+                    # We need [{'lat': lat, 'lng': lon}, ...]
+                    for lat, lon in site.coordinates:
+                        map_coords.append({'lat': float(lat), 'lng': float(lon)})
+                    
+                    # Calculate center if we have coordinates
+                    if map_coords:
+                        lats = [c['lat'] for c in map_coords]
+                        lngs = [c['lng'] for c in map_coords]
+                        center_lat = sum(lats) / len(lats)
+                        center_lng = sum(lngs) / len(lngs)
+                except Exception as e:
+                    print(f"Error processing coordinates: {e}")
+            
+            return Response({
+                'success': True,
+                'coordinates': map_coords,
+                'center': {
+                    'lat': center_lat,
+                    'lng': center_lng
+                },
+                'has_coordinates': len(map_coords) > 0
+            }, status=200)
+            
+        except Site.DoesNotExist:
+            return Response({
+                'success': False,
+                'error': 'Site not found'
+            }, status=404)
 
 
 # Helper functions
@@ -861,15 +1275,21 @@ def _get_sites_data():
     return sites_data
 
 
-def _get_departments_data():
-    """Helper to get departments data with employee counts"""
-    departments = Department.objects.all()
-    departments_data = []
-    for dept in departments:
-        employee_count = Employee.objects.filter(department=dept).count()
-        departments_data.append({
-            'department': dept,
-            'employee_count': employee_count
-        })
-    return departments_data
+class AdminBulkDeleteSiteView(APIView):
+    permission_classes = [IsAdminUser]
+    authentication_classes = [SessionAuthentication]
 
+    def post(self, request):
+        try:
+            ids = request.data.get('ids', [])
+            if not ids:
+                return Response({'error': 'No IDs provided'}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Delete sites
+            deleted_count, _ = Site.objects.filter(id__in=ids).delete()
+
+            return Response({
+                'message': f'Successfully deleted {deleted_count} sites.'
+            })
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

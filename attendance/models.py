@@ -10,18 +10,19 @@ class Department(models.Model):
 
 class Site(models.Model):
     name = models.CharField(max_length=100, unique=True)
+    coordinates = models.JSONField(null=True, blank=True)  # Store extracted coordinates
 
     def __str__(self):
         return self.name
 
 class Employee(models.Model):
     name = models.CharField(max_length=100)
-    email = models.EmailField(unique=True)
-    phone = models.CharField(max_length=15)
-    department = models.ForeignKey(Department, on_delete=models.SET_NULL, null=True, blank=True)
-    position = models.CharField(max_length=50)
-    face_embedding = models.JSONField(null=True)  # Store face embeddings
-    profile_picture = models.ImageField(upload_to='profiles/')
+    email = models.EmailField(null=True, blank=True)
+    phone = models.CharField(max_length=15, null=True, blank=True)
+    department = models.CharField(max_length=100, null=True, blank=True)  # Changed to CharField
+    position = models.CharField(max_length=50, null=True, blank=True)
+    face_embedding = models.JSONField(null=True, blank=True)  # Store face embeddings
+    profile_picture = models.ImageField(upload_to='profiles/', null=True, blank=True)
     
     # New fields added
     job_description = models.TextField(null=True, blank=True)  # Job Description
@@ -31,6 +32,18 @@ class Employee(models.Model):
     labor_card_number = models.CharField(max_length=50, null=True, blank=True)  # Labor Card/ Work Permit Numbers
     site = models.ForeignKey(Site, on_delete=models.SET_NULL, null=True, blank=True)  # Site
     employer = models.CharField(max_length=100, null=True, blank=True)  # Employer (PIC or Sub contract)
+    
+    # New fields from Excel Import
+    nationality = models.CharField(max_length=50, null=True, blank=True)
+    gender = models.CharField(max_length=10, null=True, blank=True)
+    marital_status = models.CharField(max_length=20, null=True, blank=True)
+    religion = models.CharField(max_length=50, null=True, blank=True)
+    date_of_birth = models.DateField(null=True, blank=True)
+    date_of_joining = models.DateField(null=True, blank=True)
+    passport_number = models.CharField(max_length=50, null=True, blank=True)
+    passport_expiry = models.DateField(null=True, blank=True)
+    visa_details = models.CharField(max_length=100, null=True, blank=True)
+    status = models.CharField(max_length=50, null=True, blank=True)  # Active, Leave, etc.
     
     def __str__(self):
         return self.name

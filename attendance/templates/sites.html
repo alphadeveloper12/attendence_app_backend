@@ -15,7 +15,6 @@
 <div class="nav-menu">
     <a href="{% url 'admin-dashboard' %}" class="nav-link">📊 Dashboard</a>
     <a href="{% url 'admin-sites' %}" class="nav-link active">🏢 Sites</a>
-    <a href="{% url 'admin-departments' %}" class="nav-link">🏛️ Departments</a>
 </div>
 
 <div class="container">
@@ -28,13 +27,29 @@
     <div class="card">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
             <h2>All Sites</h2>
-            <button onclick="showAddModal()" class="btn btn-primary">+ Add New Site</button>
+            <div class="action-buttons">
+                <button onclick="showImportModal()" class="btn btn-success" style="margin-right: 0.5rem;">📥 Import
+                    Sites</button>
+                <button onclick="showAddModal()" class="btn btn-primary">+ Add New Site</button>
+            </div>
+        </div>
+
+        <div style="margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center;">
+            <button id="bulkDeleteBtn" onclick="bulkDeleteSites()" class="btn btn-danger" style="display: none;">Delete
+                Selected</button>
+            <select id="perPageSelect" onchange="changePerPage()" class="form-control" style="width: auto;">
+                <option value="10">10 per page</option>
+                <option value="20">20 per page</option>
+                <option value="50">50 per page</option>
+                <option value="100">100 per page</option>
+            </select>
         </div>
 
         {% if sites_data %}
         <table>
             <thead>
                 <tr>
+                    <th style="width: 40px;"><input type="checkbox" id="selectAll" onclick="toggleSelectAll()"></th>
                     <th>Site Name</th>
                     <th>Employees</th>
                     <th>Actions</th>
@@ -43,8 +58,12 @@
             <tbody>
                 {% for item in sites_data %}
                 <tr>
-                    <td><strong>{{ item.site.name }}</strong></td>
-                    <td><span class="badge badge-info">{{ item.employee_count }} Employee{{ item.employee_count|pluralize }}</span></td>
+                    <td><input type="checkbox" class="site-checkbox" value="{{ item.site.id }}"
+                            onclick="updateBulkDeleteBtn()"></td>
+                    <td><a href="{% url 'admin-site-detail' item.site.id %}"
+                            style="text-decoration: none; color: inherit;"><strong>{{ item.site.name }}</strong></a>
+                    </td>
+                    <td><span class="badge badge-info">{{ item.employee_count }} Employee</span></td>
                     <td>
                         <button onclick="showEditModal({{ item.site.id }}, '{{ item.site.name }}')"
                             class="btn btn-secondary" style="margin-right: 0.5rem;">Edit</button>
@@ -69,11 +88,15 @@
     <div class="modal-content">
         <span class="close" onclick="closeAddModal()">&times;</span>
         <h2>Add New Site</h2>
-        <form method="POST" action="{% url 'admin-add-site' %}">
+        <form method="POST" action="{% url 'admin-add-site' %}" enctype="multipart/form-data">
             {% csrf_token %}
             <div class="form-group">
                 <label for="add-name">Site Name</label>
                 <input type="text" id="add-name" name="name" required>
+            </div>
+            <div class="form-group">
+                <label for="add-kml">KML File (Optional)</label>
+                <input type="file" id="add-kml" name="kml_file" accept=".kml">
             </div>
             <button type="submit" class="btn btn-primary">Add Site</button>
         </form>
@@ -85,13 +108,36 @@
     <div class="modal-content">
         <span class="close" onclick="closeEditModal()">&times;</span>
         <h2>Edit Site</h2>
-        <form method="POST" id="editForm">
+        <form method="POST" id="editForm" enctype="multipart/form-data">
             {% csrf_token %}
             <div class="form-group">
                 <label for="edit-name">Site Name</label>
                 <input type="text" id="edit-name" name="name" required>
             </div>
+            <div class="form-group">
+                <label for="edit-kml">Update KML File (Optional)</label>
+                <input type="file" id="edit-kml" name="kml_file" accept=".kml">
+                <small style="display: block; margin-top: 0.5rem; color: #666;">Upload a new KML file to update site
+                    coordinates.</small>
+            </div>
             <button type="submit" class="btn btn-primary">Save Changes</button>
+        </form>
+    </div>
+</div>
+
+<!-- Import Modal -->
+<div id="importModal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="closeImportModal()">&times;</span>
+        <h2>Import Sites from Excel</h2>
+        <p>Upload an Excel file with a "Name" column.</p>
+        <form id="importForm" onsubmit="handleImport(event)">
+            <div class="form-group">
+                <input type="file" id="excelFile" accept=".xlsx, .xls" required class="form-control"
+                    style="padding: 0.5rem;">
+            </div>
+            <div id="importResult" style="margin-bottom: 1rem; display: none;"></div>
+            <button type="submit" class="btn btn-primary">Upload & Import</button>
         </form>
     </div>
 </div>
@@ -178,6 +224,14 @@
         document.getElementById('editModal').style.display = 'none';
     }
 
+    function showImportModal() {
+        document.getElementById('importModal').style.display = 'block';
+    }
+
+    function closeImportModal() {
+        document.getElementById('importModal').style.display = 'none';
+    }
+
     function confirmDelete(id, name) {
         if (confirm(`Are you sure you want to delete "${name}"? This action cannot be undone.`)) {
             const form = document.createElement('form');
@@ -196,15 +250,121 @@
         }
     }
 
+    // Handle Excel Import
+    async function handleImport(e) {
+        e.preventDefault();
+        const formData = new FormData();
+        const fileField = document.getElementById('excelFile');
+        formData.append('file', fileField.files[0]);
+
+        const resultDiv = document.getElementById('importResult');
+        resultDiv.style.display = 'block';
+        resultDiv.innerHTML = 'Importing... Please wait.';
+        resultDiv.className = 'alert alert-info';
+
+        try {
+            const response = await fetch('{% url "import-sites" %}', {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': '{{ csrf_token }}'
+                },
+                body: formData
+            });
+
+            const data = await response.json();
+
+            if (response.ok && data.imported_count > 0) {
+                resultDiv.className = 'alert alert-success';
+                resultDiv.innerHTML = `Success! Imported ${data.imported_count} sites.`;
+                setTimeout(() => window.location.reload(), 2000);
+            } else {
+                resultDiv.className = 'alert alert-danger';
+                let errorMsg = `Error: ${data.error || 'Import failed'}. Imported: ${data.imported_count || 0}.`;
+                if (data.debug) {
+                    errorMsg += `<br><small>Columns found: ${data.debug.columns}</small>`;
+                }
+                resultDiv.innerHTML = errorMsg;
+            }
+        } catch (error) {
+            resultDiv.className = 'alert alert-danger';
+            resultDiv.innerHTML = `Error: ${error.message}`;
+        }
+    }
+
+    // Pagination Size Logic
+    function changePerPage() {
+        const perPage = document.getElementById('perPageSelect').value;
+        const urlParams = new URLSearchParams(window.location.search);
+        urlParams.set('per_page', perPage);
+        urlParams.set('page', 1);
+        window.location.search = urlParams.toString();
+    }
+
+    // Set initial value for per page select
+    document.addEventListener('DOMContentLoaded', function () {
+        const urlParams = new URLSearchParams(window.location.search);
+        const perPage = urlParams.get('per_page') || '{{ per_page|default:"10" }}';
+        const select = document.getElementById('perPageSelect');
+        if (select) select.value = perPage;
+    });
+
     // Close modal when clicking outside
     window.onclick = function (event) {
         const addModal = document.getElementById('addModal');
         const editModal = document.getElementById('editModal');
-        if (event.target == addModal) {
-            closeAddModal();
+        const importModal = document.getElementById('importModal');
+        if (event.target == addModal) closeAddModal();
+        if (event.target == editModal) closeEditModal();
+        if (event.target == importModal) closeImportModal();
+    }
+
+    // Bulk Delete Logic
+    function toggleSelectAll() {
+        const selectAll = document.getElementById('selectAll');
+        const checkboxes = document.querySelectorAll('.site-checkbox');
+        checkboxes.forEach(cb => cb.checked = selectAll.checked);
+        updateBulkDeleteBtn();
+    }
+
+    function updateBulkDeleteBtn() {
+        const checkboxes = document.querySelectorAll('.site-checkbox:checked');
+        const btn = document.getElementById('bulkDeleteBtn');
+        if (checkboxes.length > 0) {
+            btn.style.display = 'block';
+            btn.innerText = `Delete Selected (${checkboxes.length})`;
+        } else {
+            btn.style.display = 'none';
         }
-        if (event.target == editModal) {
-            closeEditModal();
+    }
+
+    async function bulkDeleteSites() {
+        const checkboxes = document.querySelectorAll('.site-checkbox:checked');
+        const ids = Array.from(checkboxes).map(cb => cb.value);
+
+        if (ids.length === 0) return;
+
+        if (confirm(`Are you sure you want to delete ${ids.length} sites? This action cannot be undone.`)) {
+            try {
+                const response = await fetch('{% url "admin-bulk-delete-sites" %}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': '{{ csrf_token }}'
+                    },
+                    body: JSON.stringify({ ids: ids })
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    alert(result.message);
+                    window.location.reload();
+                } else {
+                    alert('Error: ' + (result.error || 'Unknown error'));
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
         }
     }
 </script>

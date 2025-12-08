@@ -1,0 +1,146 @@
+{% extends 'base.html' %}
+
+{% block title %}Site Details - {{ site.name }}{% endblock %}
+
+{% block content %}
+<div class="navbar">
+    <h1>📍 {{ site.name }}</h1>
+    <div class="user-info">
+        <span>Welcome, {{ user.username }}</span>
+        <a href="{% url 'admin-logout' %}" class="btn btn-danger">Logout</a>
+    </div>
+</div>
+
+<!-- Navigation Menu -->
+<div class="nav-menu">
+    <a href="{% url 'admin-dashboard' %}" class="nav-link">📊 Dashboard</a>
+    <a href="{% url 'admin-sites' %}" class="nav-link active">🏢 Sites</a>
+</div>
+
+<div class="container">
+    <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+            <h2>Site Information</h2>
+            <a href="{% url 'admin-sites' %}" class="btn btn-secondary">Back to Sites</a>
+        </div>
+
+        <div class="site-info">
+            <p><strong>Name:</strong> {{ site.name }}</p>
+            <p><strong>Total Employees:</strong> {{ employee_count }}</p>
+        </div>
+
+        <div class="map-container">
+            <h3>Site Boundary</h3>
+            <div id="map" style="height: 500px; width: 100%; border-radius: 12px;"></div>
+            <div id="map-message" class="alert alert-warning" style="display: none; margin-top: 1rem;">
+                No boundary coordinates available for this site.
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .nav-menu {
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(10px);
+        padding: 0.5rem 2rem;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+        display: flex;
+        gap: 1rem;
+    }
+
+    .nav-link {
+        padding: 0.8rem 1.5rem;
+        text-decoration: none;
+        color: #666;
+        font-weight: 600;
+        border-radius: 8px;
+        transition: all 0.3s ease;
+    }
+
+    .nav-link:hover {
+        background: #f0f0f0;
+        color: #667eea;
+    }
+
+    .nav-link.active {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+    }
+
+    .site-info {
+        margin-bottom: 2rem;
+        padding: 1rem;
+        background: #f8f9fa;
+        border-radius: 8px;
+    }
+
+    .site-info p {
+        margin: 0.5rem 0;
+        font-size: 1.1rem;
+    }
+
+    .map-container {
+        margin-top: 2rem;
+    }
+</style>
+
+<script
+    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCYAsBPyik1DZcOH3jcR-awecFjyYXr5Qw&libraries=geometry"></script>
+<script>
+    async function initMap() {
+        const siteId = '{{ site.id }}';
+
+        try {
+            // Fetch coordinates via AJAX
+            const response = await fetch(`/api/attendance/api/sites/${siteId}/coordinates/`);
+            const data = await response.json();
+
+            if (!data.success) {
+                console.error('Failed to load coordinates:', data.error);
+                document.getElementById('map-message').style.display = 'block';
+                return;
+            }
+
+            // Initialize map with center from API
+            const map = new google.maps.Map(document.getElementById("map"), {
+                center: { lat: data.center.lat, lng: data.center.lng },
+                zoom: 15
+            });
+
+            // Only draw polygon if coordinates exist
+            if (data.has_coordinates && data.coordinates.length > 0) {
+                const boundaryCoords = data.coordinates;
+
+                // Close the polygon if not already closed
+                const first = boundaryCoords[0];
+                const last = boundaryCoords[boundaryCoords.length - 1];
+                if (first.lat !== last.lat || first.lng !== last.lng) {
+                    boundaryCoords.push(first);
+                }
+
+                // Create and display polygon
+                const polygon = new google.maps.Polygon({
+                    paths: boundaryCoords,
+                    strokeColor: "#FF0000",
+                    strokeOpacity: 0.8,
+                    strokeWeight: 2,
+                    fillColor: "#FF0000",
+                    fillOpacity: 0.35
+                });
+                polygon.setMap(map);
+            } else {
+                // Show message if no coordinates
+                document.getElementById('map-message').style.display = 'block';
+            }
+        } catch (error) {
+            console.error('Error loading map:', error);
+            document.getElementById('map-message').style.display = 'block';
+        }
+    }
+
+    // Initialize map when window loads
+    window.onload = initMap;
+</script>
+
+{% endblock %}
