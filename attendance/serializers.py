@@ -37,6 +37,7 @@ class EmployeeSerializer(serializers.ModelSerializer):
         return None
 
 class EnrollSerializer(serializers.Serializer):
+    id = serializers.IntegerField(required=False)
     name = serializers.CharField(max_length=100)
     email = serializers.EmailField()
     phone = serializers.CharField(max_length=20)
@@ -49,6 +50,16 @@ class EnrollSerializer(serializers.Serializer):
     labor_card_number = serializers.CharField(required=False, allow_blank=True)
     site = serializers.IntegerField(required=False)
     employer = serializers.CharField(required=False, allow_blank=True)
+    nationality = serializers.CharField(required=False, allow_blank=True)
+    gender = serializers.CharField(required=False, allow_blank=True)
+    marital_status = serializers.CharField(required=False, allow_blank=True)
+    religion = serializers.CharField(required=False, allow_blank=True)
+    date_of_birth = serializers.DateField(required=False, allow_null=True)
+    date_of_joining = serializers.DateField(required=False, allow_null=True)
+    passport_number = serializers.CharField(required=False, allow_blank=True)
+    passport_expiry = serializers.DateField(required=False, allow_null=True)
+    visa_details = serializers.CharField(required=False, allow_blank=True)
+    status = serializers.CharField(required=False, allow_blank=True)
     # images = serializers.ListField(
     #     child=serializers.FileField(), allow_empty=False, write_only=True
     # )
@@ -59,3 +70,4 @@ class VerifySerializer(serializers.Serializer):
     latitude = serializers.FloatField()
     longitude = serializers.FloatField()
     image = serializers.ImageField()
+    site_id = serializers.IntegerField(required=False, allow_null=True)

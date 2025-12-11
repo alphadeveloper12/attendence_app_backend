@@ -35,8 +35,19 @@
         </div>
 
         <div style="margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center;">
-            <button id="bulkDeleteBtn" onclick="bulkDeleteSites()" class="btn btn-danger" style="display: none;">Delete
-                Selected</button>
+            <div style="display: flex; gap: 1rem; align-items: center;">
+                <button id="bulkDeleteBtn" onclick="bulkDeleteSites()" class="btn btn-danger"
+                    style="display: none;">Delete Selected</button>
+                <form method="GET" style="display: flex; gap: 0.5rem;">
+                    <input type="text" name="search" placeholder="Search sites..." value="{{ search_query }}"
+                        class="form-control" style="padding: 0.5rem; width: 250px;">
+                    <button type="submit" class="btn btn-secondary">Search</button>
+                    {% if search_query %}
+                    <a href="{% url 'admin-sites' %}" class="btn btn-outline-secondary"
+                        style="text-decoration: none; display: flex; align-items: center;">Clear</a>
+                    {% endif %}
+                </form>
+            </div>
             <select id="perPageSelect" onchange="changePerPage()" class="form-control" style="width: auto;">
                 <option value="10">10 per page</option>
                 <option value="20">20 per page</option>
@@ -45,7 +56,7 @@
             </select>
         </div>
 
-        {% if sites_data %}
+        {% if sites %}
         <table>
             <thead>
                 <tr>
@@ -56,18 +67,18 @@
                 </tr>
             </thead>
             <tbody>
-                {% for item in sites_data %}
+                {% for site in sites %}
                 <tr>
-                    <td><input type="checkbox" class="site-checkbox" value="{{ item.site.id }}"
+                    <td><input type="checkbox" class="site-checkbox" value="{{ site.id }}"
                             onclick="updateBulkDeleteBtn()"></td>
-                    <td><a href="{% url 'admin-site-detail' item.site.id %}"
-                            style="text-decoration: none; color: inherit;"><strong>{{ item.site.name }}</strong></a>
+                    <td><a href="{% url 'admin-site-detail' site.id %}"
+                            style="text-decoration: none; color: inherit;"><strong>{{ site.name }}</strong></a>
                     </td>
-                    <td><span class="badge badge-info">{{ item.employee_count }} Employee</span></td>
+                    <td><span class="badge badge-info">{{ site.employee_count }} Employee</span></td>
                     <td>
-                        <button onclick="showEditModal({{ item.site.id }}, '{{ item.site.name }}')"
+                        <button onclick="showEditModal({{ site.id }}, '{{ site.name|escapejs }}')"
                             class="btn btn-secondary" style="margin-right: 0.5rem;">Edit</button>
-                        <button onclick="confirmDelete({{ item.site.id }}, '{{ item.site.name }}')"
+                        <button onclick="confirmDelete({{ site.id }}, '{{ site.name|escapejs }}')"
                             class="btn btn-danger">Delete</button>
                     </td>
                 </tr>
@@ -75,7 +86,9 @@
             </tbody>
         </table>
 
-        {% include "pagination.html" with page_obj=sites_data %}
+
+
+        {% include "pagination.html" with page_obj=sites %}
         {% else %}
         <p style="text-align: center; color: #666; padding: 2rem;">No sites found. Add your first site to get started!
         </p>

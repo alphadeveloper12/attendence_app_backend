@@ -13,6 +13,7 @@ urlpatterns = [
     path('employees/edit/<int:employee_id>/', AdminEditEmployeeView.as_view(), name='admin-edit-employee'),
     path('employees/delete/<int:employee_id>/', AdminDeleteEmployeeView.as_view(), name='admin-delete-employee'),
     path('employees/delete/bulk/', AdminBulkDeleteEmployeeView.as_view(), name='admin-bulk-delete-employees'),
+    path('employees/export/', ExportAttendanceView.as_view(), name='export-attendance'),
     path('sites/', SiteListView.as_view(), name='site-list'),
     
     # Admin Dashboard Template Views
@@ -32,5 +33,12 @@ urlpatterns = [
     
     # API endpoint for site coordinates
     path('api/sites/<int:site_id>/coordinates/', SiteCoordinatesView.as_view(), name='site-coordinates-api'),
+    
+    # Site Admin Management
+    path('dashboard/site-admins/', admin_site_admins_view, name='admin-site-admins'),
+    path('dashboard/site-admins/add/', admin_add_site_admin, name='admin-add-site-admin'),
+    path('dashboard/site-admins/edit/<int:admin_id>/', admin_edit_site_admin, name='admin-edit-site-admin'),
+    path('dashboard/site-admins/delete/<int:admin_id>/', admin_delete_site_admin, name='admin-delete-site-admin'),
+    path('dashboard/site-admins/delete/bulk/', admin_bulk_delete_site_admins, name='admin-bulk-delete-site-admins'),
 ]
 

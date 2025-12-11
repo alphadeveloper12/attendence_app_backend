@@ -1,6 +1,7 @@
 from django.db import models
 from datetime import datetime, time
 from django.utils import timezone
+from django.contrib.auth.models import User
 
 class Department(models.Model):
     name = models.CharField(max_length=100, unique=True)
@@ -11,9 +12,19 @@ class Department(models.Model):
 class Site(models.Model):
     name = models.CharField(max_length=100, unique=True)
     coordinates = models.JSONField(null=True, blank=True)  # Store extracted coordinates
+    geofence_lat = models.FloatField(null=True, blank=True)
+    geofence_lng = models.FloatField(null=True, blank=True)
+    geofence_radius_meters = models.FloatField(default=100.0)
 
     def __str__(self):
         return self.name
+
+class AdminProfile(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='admin_profile')
+    site = models.ForeignKey(Site, on_delete=models.SET_NULL, null=True, blank=True)
+
+    def __str__(self):
+        return f"{self.user.username} - {self.site.name if self.site else 'No Site'}"
 
 class Employee(models.Model):
     name = models.CharField(max_length=100)
@@ -60,15 +71,14 @@ class Attendance(models.Model):
     date = models.DateField(auto_now_add=True)  # Track date for attendance
     latitude = models.FloatField(null=True, blank=True)  # Store latitude
     longitude = models.FloatField(null=True, blank=True)  # Store longitude
-    slot = models.CharField(max_length=10, null=True, blank=True, choices=[
-        ('slot1', 'Slot 1 (9-11 AM)'),
-        ('slot2', 'Slot 2 (11-1 PM)'),
-        ('slot3', 'Slot 3 (2-4 PM)'),
-        ('slot4', 'Slot 4 (4-6 PM)'),
+    slot = models.CharField(max_length=20, null=True, blank=True, choices=[
+        ('office_in', 'Office In'),
+        ('office_out', 'Office Out'),
     ])
+    is_within_geofence = models.BooleanField(default=True)  # Track if attendance was marked within geofence
     
     class Meta:
-        unique_together = ['user', 'date', 'slot']  # Prevent duplicate records for same user, date, and slot
+        unique_together = ['user', 'date']  # Prevent duplicate records for same user and date
 
     
     def __str__(self):

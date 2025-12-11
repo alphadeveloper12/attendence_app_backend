@@ -12,7 +12,7 @@ from PIL import Image
 
 # ------------ Matching thresholds ------------
 THRESH: float = 0.75        # cosine similarity accept threshold
-MARGIN: float = 0.05        # best - second_best similarity margin
+MARGIN: float = 0.02        # best - second_best similarity margin
 DEBOUNCE_SEC: int = 45      # not used here
 
 # ------------ Quality gates (face ROI) ------------

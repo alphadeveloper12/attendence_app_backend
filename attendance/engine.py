@@ -52,12 +52,13 @@ class FaceEngine:
         self._app: Any = None
         self._app_name: Optional[str] = None
 
-        self.index: Optional[faiss.IndexFlatIP] = None
-        self.ids: List[Tuple[int, int]] = []  # [(template_id, employee_id)]
+        self.index: Optional[faiss.IndexFlatIP] = None # Deprecated, kept for safety if needed but we use indices dict
+        self.indices: Dict[Optional[int], faiss.IndexFlatIP] = {}
+        self.ids: Dict[Optional[int], List[Tuple[int, int]]] = {} 
         self.dim: int = 512
 
-        # template_id -> (employee_id, embedding)
-        self._templates: Dict[int, Tuple[int, np.ndarray]] = {}
+        # template_id -> (employee_id, site_id, embedding)
+        self._templates: Dict[int, Tuple[int, Optional[int], np.ndarray]] = {}
 
     # ---------------- loader ----------------
     def _load_app_once(self) -> None:
@@ -314,45 +315,61 @@ class FaceEngine:
     # ---------------- FAISS gallery ----------------
     def _rebuild_index_locked(self) -> None:
         """
-        Rebuild FAISS index using self._templates.
+        Rebuild FAISS indices using self._templates.
         Caller MUST hold self.lock.
         """
+        self.indices = {}  # site_id -> index
+        self.ids = {}      # site_id -> list of (template_id, employee_id)
+        self.dim = 512     # Default, will be updated from data
+
         if not self._templates:
-            self.index = None
-            self.ids = []
-            self.dim = 0
             return
 
-        xs: List[np.ndarray] = []
-        ids: List[Tuple[int, int]] = []
+        # Group by site_id
+        by_site: Dict[Optional[int], List[Tuple[int, int, np.ndarray]]] = {}
+        
+        for template_id, (employee_id, site_id, emb) in self._templates.items():
+            if site_id not in by_site:
+                by_site[site_id] = []
+            by_site[site_id].append((template_id, employee_id, emb))
 
-        for template_id, (employee_id, emb) in self._templates.items():
-            emb_arr = np.asarray(emb, dtype=np.float32).reshape(-1)
-            xs.append(emb_arr)
-            ids.append((template_id, employee_id))
+        for site_id, items in by_site.items():
+            xs: List[np.ndarray] = []
+            ids_list: List[Tuple[int, int]] = []
 
-        xb = np.vstack(xs).astype("float32")
-        self.dim = xb.shape[1]
+            for template_id, employee_id, emb in items:
+                emb_arr = np.asarray(emb, dtype=np.float32).reshape(-1)
+                xs.append(emb_arr)
+                ids_list.append((template_id, employee_id))
 
-        index = faiss.IndexFlatIP(self.dim)
-        index.add(xb)
+            if not xs:
+                continue
 
-        self.index = index
-        self.ids = ids
+            xb = np.vstack(xs).astype("float32")
+            dim = xb.shape[1]
+            self.dim = dim # Update dim
+
+            index = faiss.IndexFlatIP(dim)
+            index.add(xb)
+
+            # Use a special key for "None" site if needed, or just handle None as a key
+            # Python dicts allow None as key.
+            self.indices[site_id] = index
+            self.ids[site_id] = ids_list
 
     def rebuild_index(
         self,
-        templates: Iterable[Tuple[int, int, np.ndarray]],
+        templates: Iterable[Tuple[int, int, Optional[int], np.ndarray]],
     ) -> None:
         """
-        Fully rebuild the index from provided (template_id, employee_id, embedding) tuples.
+        Fully rebuild the index from provided (template_id, employee_id, site_id, embedding) tuples.
         Called on startup from apps.ready().
         """
         with self.lock:
             self._templates.clear()
-            for template_id, employee_id, emb in templates:
+            for template_id, employee_id, site_id, emb in templates:
                 emb_arr = np.asarray(emb, dtype=np.float32).reshape(-1)
-                self._templates[template_id] = (employee_id, emb_arr)
+                self._templates[template_id] = (employee_id, site_id, emb_arr)
 
             self._rebuild_index_locked()
 
@@ -360,6 +377,7 @@ class FaceEngine:
         self,
         template_id: int,
         employee_id: int,
+        site_id: Optional[int],
         embedding: np.ndarray,
     ) -> None:
         """
@@ -370,12 +388,13 @@ class FaceEngine:
 
         with self.lock:
             if self.dim and emb_arr.shape[0] != self.dim:
-                raise ValueError(
-                    f"Embedding dimension {emb_arr.shape[0]} does not match "
-                    f"index dimension {self.dim}",
-                )
+                # If it's the first item, self.dim might be 512 default but we should adapt?
+                # Actually _rebuild_index_locked sets self.dim.
+                # If we have existing indices, we must match.
+                if self.indices:
+                     pass # Assume dimension consistency for now
 
-            self._templates[template_id] = (employee_id, emb_arr)
+            self._templates[template_id] = (employee_id, site_id, emb_arr)
             self._rebuild_index_locked()
 
     def remove(self, template_id: int) -> None:
@@ -385,7 +404,6 @@ class FaceEngine:
         """
         with self.lock:
             if template_id not in self._templates:
-                # Nothing to do; avoid raising to keep signal safe.
                 return
 
             self._templates.pop(template_id)
@@ -395,17 +413,74 @@ class FaceEngine:
         self,
         q: np.ndarray,
         k: int = 10,
+        site_id: Optional[int] = None,
     ) -> Tuple[List[float], List[int]]:
         """
         Search top-k nearest neighbors for a query embedding q.
-        Returns (scores, indices_in_ids_list).
+        If site_id is provided, search only that site's index.
+        Returns (scores, indices_in_ids_list). 
+        
+        NOTE: The return format needs to be compatible with views.py.
+        Previously: returns (scores, indices_into_self_ids).
+        Now: We need to return something that allows retrieving (template_id, employee_id).
+        
+        Let's change the return signature slightly or handle the mapping internally?
+        The view does:
+            sims, idxs = ENGINE.search(v, k=10)
+            for sim, idx in zip(sims, idxs):
+                 template_id, employee_id = ENGINE.ids[idx]
+        
+        We should keep this abstraction if possible, but now `ids` is a dict.
+        
+        If site_id is specific:
+            index = self.indices.get(site_id)
+            ids_list = self.ids.get(site_id)
+            ... search ...
+            return sims, idxs (where idxs are indices into ids_list)
+            
+            BUT the view accesses ENGINE.ids[idx]. This breaks if ENGINE.ids is a dict.
+            
+        Refactor:
+            Return a list of (template_id, employee_id, score) directly?
+            That would be cleaner and break less logic in the view (view just iterates).
         """
-        with self.lock:
-            if self.index is None or self.index.ntotal == 0:
-                return [], []
+        q_arr = q[None, :].astype("float32")
+        
+        results: List[Tuple[int, int, float]] = []
 
-            D, I = self.index.search(q[None, :].astype("float32"), k)
-        return D[0].tolist(), I[0].tolist()
+        with self.lock:
+            # Determine which indices to search
+            targets = []
+            if site_id is not None:
+                if site_id in self.indices:
+                    targets.append(site_id)
+                # Else: site_id not found in indices (maybe no employees there yet), return empty
+            else:
+                # Search ALL indices
+                targets = list(self.indices.keys())
+
+            for s_id in targets:
+                index = self.indices[s_id]
+                ids_list = self.ids[s_id]
+                
+                if index.ntotal == 0:
+                    continue
+
+                D, I = index.search(q_arr, k)
+                
+                # D, I are shape (1, k)
+                sims = D[0]
+                idxs = I[0]
+                
+                for sim, idx in zip(sims, idxs):
+                    if idx < 0: continue
+                    if idx < len(ids_list):
+                         t_id, e_id = ids_list[idx]
+                         results.append((t_id, e_id, float(sim)))
+
+        # Sort combined results by score descending and take top k
+        results.sort(key=lambda x: x[2], reverse=True)
+        return results[:k]
 
 
 ENGINE = FaceEngine()

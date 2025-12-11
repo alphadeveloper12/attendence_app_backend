@@ -13,6 +13,7 @@ django-cors-headers==4.9.0
 djangorestframework==3.16.1
 djangorestframework_simplejwt==5.5.1
 easydict==1.13
+et_xmlfile==2.0.0
 faiss-cpu==1.13.0
 flatbuffers==25.9.23
 fonttools==4.61.0
@@ -31,7 +32,9 @@ numpy==2.2.6
 onnx==1.19.1
 onnxruntime==1.23.2
 opencv-python-headless==4.12.0.88
+openpyxl==3.1.5
 packaging==25.0
+pandas==2.3.3
 pillow==12.0.0
 prettytable==3.17.0
 protobuf==6.33.1
@@ -41,6 +44,7 @@ pydantic_core==2.41.5
 PyJWT==2.10.1
 pyparsing==3.2.5
 python-dateutil==2.9.0.post0
+pytz==2025.2
 PyYAML==6.0.3
 requests==2.32.5
 scikit-image==0.25.2
@@ -56,5 +60,6 @@ tifffile==2025.10.16
 tqdm==4.67.1
 typing-inspection==0.4.2
 typing_extensions==4.15.0
+tzdata==2025.2
 urllib3==2.5.0
 wcwidth==0.2.14

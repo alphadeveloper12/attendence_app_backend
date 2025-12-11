@@ -22,9 +22,9 @@ class AttendanceConfig(AppConfig):
             from .models import FaceTemplate
             import numpy as np
 
-            qs = FaceTemplate.objects.all().only("id", "employee_id", "embedding")
+            qs = FaceTemplate.objects.all().select_related('employee').only("id", "employee_id", "embedding", "employee__site_id")
             tuples = [
-                (t.id, t.employee_id, np.array(t.embedding, dtype=np.float32))
+                (t.id, t.employee_id, t.employee.site_id, np.array(t.embedding, dtype=np.float32))
                 for t in qs
             ]
             ENGINE.rebuild_index(tuples)

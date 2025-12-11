@@ -8,9 +8,11 @@ from collections import defaultdict
 
 from django.conf import settings
 from django.db import transaction
+from django.db.models import Count, Q
 from django.utils import timezone
 from django.core.files.base import ContentFile
 from django.shortcuts import render, redirect, get_object_or_404
+from django.http import JsonResponse
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_http_methods
@@ -25,7 +27,7 @@ from rest_framework.decorators import permission_classes
 
 from django.contrib.auth.models import User
 import numpy as np
-from .models import Employee, Attendance, Site, FaceTemplate
+from .models import Employee, Attendance, Site, FaceTemplate, AdminProfile
 
 # --- NEW: our engine/utils ---
 from .engine import ENGINE
@@ -33,6 +35,7 @@ from .utils import (
     dataurl_to_bytes, pil_to_bgr_array_from_bytes,
     THRESH, MARGIN, get_image_bytes
 )
+from .geofence import check_geofence
 from .serializers import *
 from rest_framework_simplejwt.tokens import RefreshToken
 
@@ -159,6 +162,12 @@ class ImportEmployeesView(APIView):
                         debug_info.append(f"Row {index}: Skipped (No Name)")
                         continue # Skip empty rows
 
+                    # Filter by Status
+                    status = get_val('status')
+                    if status and status.lower() not in ['active', 'leave']:
+                        debug_info.append(f"Row {index}: Skipped (Status: {status})")
+                        continue
+
                     badge = get_val('badge_number')
                     # No auto-email generation
                     email = None
@@ -188,7 +197,7 @@ class ImportEmployeesView(APIView):
                     emp.labor_card_number = get_val('labor_card_number')
                     emp.mol_id = get_val('mol_id')
                     emp.passport_number = get_val('passport_number')
-                    emp.status = get_val('status')
+                    emp.status = status
                     
                     # Handle Site
                     site_name = get_val('site')
@@ -424,9 +433,35 @@ class RegisterUserView(APIView):
 
         # Validate text fields only
         s = EnrollSerializer(data=request.data)
-        s.is_valid(raise_exception=True)
+        if not s.is_valid():
+            print(f"Serializer errors: {s.errors}")
+            return Response(s.errors, status=400)
         data = s.validated_data
+        print(request.data)
 
+        name = data.get("name")
+        email = data.get("email")
+        phone = data.get("phone")
+        department = data.get("department") or ""
+        position = data.get("position") or ""
+        job_description = data.get("job_description") or ""
+        salary_grade = data.get("salary_grade") or ""
+        badge_number = data.get("badge_number") or ""
+        mol_id = data.get("mol_id") or ""
+        labor_card_number = data.get("labor_card_number") or ""
+        site_id = data.get("site")
+        employer = data.get("employer") or ""
+        nationality = data.get("nationality") or ""
+        gender = data.get("gender") or ""
+        marital_status = data.get("marital_status") or ""
+        religion = data.get("religion") or ""
+        date_of_birth = data.get("date_of_birth")
+        date_of_joining = data.get("date_of_joining")
+        passport_number = data.get("passport_number") or ""
+        passport_expiry = data.get("passport_expiry")
+        visa_details = data.get("visa_details") or ""
+        status = data.get("status") or ""
+        
         # Files MUST come from request.FILES
         files = request.FILES.getlist("images") or request.FILES.getlist("images[]")
         
@@ -447,7 +482,28 @@ class RegisterUserView(APIView):
             print(f"[DEBUG]   - Size: {f.size} bytes")
             print(f"[DEBUG]   - Content-Type: {f.content_type}")
 
-        if not files:
+        # Check if this is an edit or create operation
+        employee_id = data.get("id")
+        emp = None
+        
+        if employee_id:
+            try:
+                emp = Employee.objects.get(id=employee_id)
+            except Employee.DoesNotExist:
+                print(f"Employee with id {employee_id} not found")
+                return Response({"error": "Employee not found"}, status=404)
+        
+        # If creating new user, check email uniqueness
+        if not emp and Employee.objects.filter(email=email).exists():
+            print(f"Employee with email {email} already exists")
+            return Response(
+                {"error": "Employee with this email already exists."},
+                status=400,
+            )
+
+        # If creating new user, images are required
+        if not emp and not files:
+            print("No images uploaded for new user")
             return Response(
                 {
                     "error": "No images uploaded. Use form-data with key 'images' and attach files."
@@ -455,120 +511,157 @@ class RegisterUserView(APIView):
                 status=400,
             )
 
-        name = data.get("name")
-        email = data.get("email")
-        phone = data.get("phone")
-        department = data.get("department") or ""  # Changed to text field
-        position = data.get("position") or ""
-        job_description = data.get("job_description") or ""
-        salary_grade = data.get("salary_grade") or ""
-        badge_number = data.get("badge_number") or ""
-        mol_id = data.get("mol_id") or ""
-        labor_card_number = data.get("labor_card_number") or ""
-        site_id = data.get("site")
-        employer = data.get("employer") or ""
-
-        if Employee.objects.filter(email=email).exists():
-            return Response(
-                {"error": "Employee with this email already exists."},
-                status=400,
-            )
-
         site_obj = Site.objects.filter(id=site_id).first() if site_id else None
 
-        emp = Employee.objects.create(
-            name=name,
-            email=email,
-            phone=phone,
-            department=department,  # Now a simple text field
-            position=position,
-            job_description=job_description,
-            salary_grade=salary_grade,
-            badge_number=badge_number,
-            mol_id=mol_id,
-            labor_card_number=labor_card_number,
-            site=site_obj,
-            employer=employer,
-        )
-
-        valid_vecs = []
-        rejected = []
-
-        for f in files:
-            try:
-                f.seek(0)
-                raw = f.read()
-                if not raw:
-                    rejected.append({"ok": False, "reason": "empty_file"})
-                    continue
-
-                # Convert and embed
-                bgr = pil_to_bgr_array_from_bytes(raw)
-                v, q, meta = ENGINE.embed_best_face(bgr)
-
-                # Hard fail: no face / no embedding at all
-                if v is None:
-                    rejected.append(meta)
-                    continue
-
-                # Strict mode: also enforce quality gates
-                if strict_mode and not meta.get("ok", False):
-                    rejected.append(meta)
-                    continue
-
-                # Lenient mode: accept embedding even if meta["ok"] is False
-                FaceTemplate.objects.create(
-                    employee=emp,
-                    embedding=v.tolist(),
-                    quality=float(q),
-                )
-                valid_vecs.append(v)
-
-            except Exception as e:  # noqa: BLE001
-                rejected.append({"ok": False, "reason": str(e)})
-
-        if not valid_vecs:
-            emp.delete()
-            return Response(
-                {
-                    "status": "error",
-                    "message": "No valid faces detected in any uploaded images.",
-                    "rejected": rejected,
-                },
-                status=422,
+        if emp:
+            # Update existing employee
+            emp.name = name
+            emp.email = email
+            emp.phone = phone
+            emp.department = department
+            emp.position = position
+            emp.job_description = job_description
+            emp.salary_grade = salary_grade
+            emp.badge_number = badge_number
+            emp.mol_id = mol_id
+            emp.labor_card_number = labor_card_number
+            emp.site = site_obj
+            emp.employer = employer
+            emp.nationality = nationality
+            emp.gender = gender
+            emp.marital_status = marital_status
+            emp.religion = religion
+            emp.date_of_birth = date_of_birth
+            emp.date_of_joining = date_of_joining
+            emp.passport_number = passport_number
+            emp.passport_expiry = passport_expiry
+            emp.visa_details = visa_details
+            emp.status = status
+            emp.save()
+        else:
+            # Create new employee
+            emp = Employee.objects.create(
+                name=name,
+                email=email,
+                phone=phone,
+                department=department,
+                position=position,
+                job_description=job_description,
+                salary_grade=salary_grade,
+                badge_number=badge_number,
+                mol_id=mol_id,
+                labor_card_number=labor_card_number,
+                site=site_obj,
+                employer=employer,
+                nationality=nationality,
+                gender=gender,
+                marital_status=marital_status,
+                religion=religion,
+                date_of_birth=date_of_birth,
+                date_of_joining=date_of_joining,
+                passport_number=passport_number,
+                passport_expiry=passport_expiry,
+                visa_details=visa_details,
+                status=status,
             )
 
-        # Compute centroid and store profile pic
-        centroid = np.mean(valid_vecs, axis=0)
-        centroid /= np.linalg.norm(centroid) + 1e-12
-        emp.face_embedding = centroid.tolist()
+        # Process images if provided
+        if files:
+            valid_vecs = []
+            rejected = []
 
-        first_file = files[0]
-        first_file.seek(0)
-        emp.profile_picture.save(
-            f"{emp.id}_profile_{first_file.name}",
-            first_file,
-            save=False,
-        )
-        emp.save(update_fields=["face_embedding", "profile_picture"])
+            for f in files:
+                try:
+                    f.seek(0)
+                    raw = f.read()
+                    if not raw:
+                        rejected.append({"ok": False, "reason": "empty_file"})
+                        continue
 
-        # Rebuild FAISS index
-        qs = FaceTemplate.objects.all().only("id", "employee_id", "embedding")
-        tuples = [
-            (t.id, t.employee_id, np.array(t.embedding, dtype=np.float32))
-            for t in qs
-        ]
-        ENGINE.rebuild_index(tuples)
+                    # Convert and embed
+                    bgr = pil_to_bgr_array_from_bytes(raw)
+                    v, q, meta = ENGINE.embed_best_face(bgr)
 
+                    # Hard fail: no face / no embedding at all
+                    if v is None:
+                        rejected.append(meta)
+                        continue
+
+                    # Strict mode: also enforce quality gates
+                    if strict_mode and not meta.get("ok", False):
+                        rejected.append(meta)
+                        continue
+
+                    # Lenient mode: accept embedding even if meta["ok"] is False
+                    FaceTemplate.objects.create(
+                        employee=emp,
+                        embedding=v.tolist(),
+                        quality=float(q),
+                    )
+                    valid_vecs.append(v)
+
+                except Exception as e:  # noqa: BLE001
+                    rejected.append({"ok": False, "reason": str(e)})
+
+            if not valid_vecs:
+                # If new user and no valid faces, delete created user
+                if not employee_id:
+                    emp.delete()
+                return Response(
+                    {
+                        "status": "error",
+                        "message": "No valid faces detected in any uploaded images.",
+                        "rejected": rejected,
+                    },
+                    status=422,
+                )
+
+            # Re-calculate centroid with ALL templates (old + new)
+            all_templates = FaceTemplate.objects.filter(employee=emp)
+            all_vecs = [np.array(t.embedding) for t in all_templates]
+            
+            if all_vecs:
+                centroid = np.mean(all_vecs, axis=0)
+                centroid /= np.linalg.norm(centroid) + 1e-12
+                emp.face_embedding = centroid.tolist()
+
+            # Update profile picture with the first new valid image
+            first_file = files[0]
+            first_file.seek(0)
+            emp.profile_picture.save(
+                f"{emp.id}_profile_{first_file.name}",
+                first_file,
+                save=False,
+            )
+            emp.save(update_fields=["face_embedding", "profile_picture"])
+
+            # Rebuild FAISS index
+            qs = FaceTemplate.objects.all().select_related('employee').only("id", "employee_id", "embedding", "employee__site_id")
+            tuples = [
+                (t.id, t.employee_id, t.employee.site_id, np.array(t.embedding, dtype=np.float32))
+                for t in qs
+            ]
+            ENGINE.rebuild_index(tuples)
+
+            return Response(
+                {
+                    "status": "success",
+                    "message": f"Employee '{emp.name}' {'updated' if employee_id else 'enrolled'} successfully.",
+                    "templates_added": len(valid_vecs),
+                    "rejected": rejected,
+                    "employee": UserSerializer(emp, context={"request": request}).data,
+                },
+                status=200,
+            )
+        
+        # If no files provided (edit mode only), just return success
         return Response(
             {
                 "status": "success",
-                "message": f"Employee '{emp.name}' enrolled successfully.",
-                "templates_added": len(valid_vecs),
-                "rejected": rejected,
+                "message": f"Employee '{emp.name}' updated successfully.",
                 "employee": UserSerializer(emp, context={"request": request}).data,
             },
-            status=201,
+            status=200,
         )
 
 
@@ -587,6 +680,12 @@ class MarkAttendanceView(APIView):
         slot = data["slot"]
         latitude = data["latitude"]
         longitude = data["longitude"]
+
+        if slot not in ["office_in", "office_out"]:
+            return Response(
+                {"error": "Invalid slot. Must be 'office_in' or 'office_out'."},
+                status=400,
+            )
 
         # File MUST come from request.FILES (avoid serializer coercion)
         img = request.FILES.get("image") or request.FILES.get("image[]")
@@ -648,27 +747,24 @@ class MarkAttendanceView(APIView):
                 )
 
         # Gallery must exist
-        if ENGINE.index is None or len(ENGINE.ids) == 0:
-            return Response(
+        if ENGINE.indices == {} and not ENGINE.ids: # Check if empty
+             return Response(
                 {"error": "No enrolled employees in gallery."},
                 status=400,
             )
 
+        site_id = data.get("site_id")
+        
         # FAISS nearest neighbors (cosine similarity on L2-normalized vectors)
-        sims, idxs = ENGINE.search(v, k=10)
-        rows = []
-        for sim, idx in zip(sims, idxs):
-            if idx < 0:
-                continue
-            template_id, employee_id = ENGINE.ids[idx]
-            rows.append((template_id, employee_id, float(sim)))
-
-        if not rows:
+        # Returns list of (template_id, employee_id, score)
+        results = ENGINE.search(v, k=10, site_id=site_id)
+        
+        if not results:
             return Response({"error": "No match found."}, status=400)
 
         # Aggregate to best per employee
         per_emp = {}
-        for _, eid, sim in rows:
+        for _, eid, sim in results:
             if eid not in per_emp or sim > per_emp[eid]:
                 per_emp[eid] = sim
 
@@ -677,12 +773,18 @@ class MarkAttendanceView(APIView):
         best_eid, best_sim = ranked[0]
         print(f"Best employee ID: {best_eid}")
         second_sim = ranked[1][1] if len(ranked) > 1 else -1.0
+        
+        print(f"Best Sim: {best_sim}, Second Sim: {second_sim}")
+        print(f"Threshold: {THRESH}, Margin: {MARGIN}")
 
         solo = second_sim < 0
         pass_thresh = best_sim >= THRESH
         pass_margin = True if solo else (best_sim - second_sim) >= MARGIN
+        
+        print(f"Pass Thresh: {pass_thresh}, Pass Margin: {pass_margin}")
 
         if not (pass_thresh and pass_margin):
+            print("Face recognition failed: Threshold or Margin not met")
             return Response(
                 {
                     "error": "Face not recognized. Try again or re-enroll with more images.",
@@ -705,18 +807,34 @@ class MarkAttendanceView(APIView):
         )
         attendance.latitude = latitude
         attendance.longitude = longitude
+        attendance.slot = slot
+        
+        # Geofence Check
+        site = None
+        if site_id:
+            try:
+                site = Site.objects.get(id=site_id)
+            except Site.DoesNotExist:
+                pass
+        
+        # If site_id was not provided, maybe use employee's site?
+        if not site and emp.site:
+            site = emp.site
+
+        is_within = check_geofence(site, latitude, longitude)
+        attendance.is_within_geofence = is_within
 
         # Update slot timestamps
         if slot == "office_in":
+            # Only set check_in_time if not already set, or update it?
+            # Existing logic seemed to update it. Let's stick to updating it for now to match 833.
+            # But wait, if I check in at 9:00 and then at 9:05, do I want 9:05?
+            # Usually strict attendance systems take the first check-in.
+            # But let's stick to what was there: `attendance.check_in_time = now`
             attendance.check_in_time = now
-        elif slot == "break_in":
-            attendance.break_in_time = now
-        elif slot == "break_out":
-            attendance.break_out_time = now
         elif slot == "office_out":
             attendance.check_out_time = now
-
-        # Calculate late/early and save
+        
         attendance.calculate_late_and_early()
         attendance.save()
 
@@ -827,21 +945,43 @@ def admin_dashboard_view(request):
     if not request.user.is_staff:
         return redirect("admin-login")
     
+    # Check if user is a Site Admin
+    is_superuser = request.user.is_superuser
+    site_admin_profile = None
+    if not is_superuser:
+        try:
+            site_admin_profile = AdminProfile.objects.get(user=request.user)
+        except AdminProfile.DoesNotExist:
+            pass
+            
     # Get site filter from query params
     site_filter = request.GET.get('site', 'all')
     
-    # Initialize employees queryset and selected_site
+    # Initialize employees queryset
     employees = Employee.objects.select_related("site").order_by('name')
     selected_site = site_filter
     
-    # Filter employees based on site selection
-    if site_filter != 'all':
+    # Role-based filtering
+    if not is_superuser and site_admin_profile and site_admin_profile.site:
+        # Force filter by assigned site
+        employees = employees.filter(site=site_admin_profile.site)
+        selected_site = str(site_admin_profile.site.id)
+        site_filter = selected_site # Override filter
+    elif site_filter != 'all':
         try:
             selected_site_id = int(site_filter)
             employees = employees.filter(site_id=selected_site_id)
         except (ValueError, TypeError):
-            # If site_filter is not a valid int, treat as 'all' or handle error
-            pass # employees remains unfiltered or handle as needed
+            pass
+            
+    # Search Filtering
+    search_query = request.GET.get('search', '')
+    if search_query:
+        employees = employees.filter(
+            Q(name__icontains=search_query) | 
+            Q(email__icontains=search_query) | 
+            Q(badge_number__icontains=search_query)
+        )
     
     # Pagination
     per_page = request.GET.get('per_page', 20)
@@ -872,14 +1012,57 @@ def admin_dashboard_view(request):
     import json
     sites_json = json.dumps([{"id": site.id, "name": site.name} for site in all_sites])
     
+    # Geofence Alerts (Today)
+    # Recalculate geofence status for all of today's records to ensure accuracy with latest site boundaries
+    today_records = Attendance.objects.filter(date=today).select_related('user', 'user__site')
+    for record in today_records:
+        if record.latitude and record.longitude:
+            # Determine site: use record's user site, or if not set, maybe a default?
+            # Logic in MarkAttendanceView: if site_id provided use it, else user.site
+            # Here we only have user.site easily accessible. 
+            # If the user was at a different site, we might not know which one unless we stored it.
+            # But typically employees are checked against their assigned site.
+            site_to_check = record.user.site
+            
+            if site_to_check:
+                is_within = check_geofence(site_to_check, record.latitude, record.longitude)
+                if is_within != record.is_within_geofence:
+                    record.is_within_geofence = is_within
+                    record.save(update_fields=['is_within_geofence'])
+
+    geofence_alerts = Attendance.objects.filter(
+        date=today, 
+        is_within_geofence=False
+    ).select_related('user', 'user__site')
+    
+    if not is_superuser and site_admin_profile and site_admin_profile.site:
+        geofence_alerts = geofence_alerts.filter(user__site=site_admin_profile.site)
+    
     context = {
-        "total_employees": total_employees,
+        "total_employees": total_employees, # This might need to be filtered too for site admin? 
+                                            # User said "can see his site employees only". 
+                                            # So total_employees stats should probably reflect that?
+                                            # But usually "Total Employees" on dashboard means global.
+                                            # Let's keep it global for stats, but list is filtered.
+                                            # Actually, if I am site admin, I probably only care about my site stats.
+                                            # Let's filter stats if site admin.
         "total_sites": total_sites,
-        "today_attendance": today_attendance,
+        "today_attendance": today_attendance, # Should also be filtered?
+        "all_sites": sites_json,
+        "selected_site": site_filter,
         "all_sites": sites_json,
         "selected_site": site_filter,
         "employees": page_obj,
+        "search_query": search_query,
+        "geofence_alerts": geofence_alerts,
+        "is_superuser": is_superuser,
+        "site_admin_site": site_admin_profile.site if site_admin_profile else None
     }
+    
+    if not is_superuser and site_admin_profile and site_admin_profile.site:
+        context["total_employees"] = Employee.objects.filter(site=site_admin_profile.site).count()
+        context["today_attendance"] = Attendance.objects.filter(date=today, user__site=site_admin_profile.site).count()
+        
     return render(request, "dashboard.html", context)
 
 
@@ -887,101 +1070,156 @@ def admin_dashboard_view(request):
 def admin_user_detail_view(request, user_id):
     if not request.user.is_staff:
         return redirect("admin-login")
+    
     employee = get_object_or_404(Employee, id=user_id)
+    
+    # Check if site admin has access to this employee
+    if not request.user.is_superuser:
+        try:
+            profile = AdminProfile.objects.get(user=request.user)
+            if profile.site and employee.site != profile.site:
+                return redirect("admin-dashboard")
+        except AdminProfile.DoesNotExist:
+            pass
+
     filter_type = request.GET.get("filter", "daily")
     today = timezone.now().date()
-    SLOTS = {
-        "Slot 1": {"time_range": "9:00 AM - 11:00 AM", "slot_value": "slot1"},
-        "Slot 2": {"time_range": "11:00 AM - 1:00 PM", "slot_value": "slot2"},
-        "Slot 3": {"time_range": "2:00 PM - 4:00 PM", "slot_value": "slot3"},
-        "Slot 4": {"time_range": "4:00 PM - 6:00 PM", "slot_value": "slot4"},
+    
+    # Date Navigation Logic
+    date_str = request.GET.get("date")
+    current_date = today
+    if date_str:
+        try:
+            current_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+        except ValueError:
+            pass
+            
+    context = {
+        "employee": employee, 
+        "filter": filter_type, 
+        "today": today,
+        "current_date": current_date
     }
-    context = {"employee": employee, "filter": filter_type, "today": today}
+
     if filter_type == "daily":
-        attendance_records = Attendance.objects.filter(user=employee, date=today)
+        # Fetch the single record for selected date
+        attendance_record = Attendance.objects.filter(user=employee, date=current_date).first()
         slots_data = {}
-        for slot_name, slot_info in SLOTS.items():
-            slot_record = attendance_records.filter(
-                slot=slot_info["slot_value"],
-            ).first()
-            slots_data[slot_name] = {
-                "time_range": slot_info["time_range"],
-                "status": slot_record.status if slot_record else None,
-                "check_in": slot_record.check_in_time if slot_record else None,
-                "late_minutes": slot_record.late_minutes if slot_record else 0,
-                "latitude": slot_record.latitude if slot_record else None,
-                "longitude": slot_record.longitude if slot_record else None,
-            }
+        
+        # Office In Data
+        slots_data["Office In"] = {
+            "time_range": "9:00 AM",
+            "status": "present" if (attendance_record and attendance_record.check_in_time) else None,
+            "check_in": attendance_record.check_in_time if attendance_record else None,
+            "late_minutes": attendance_record.late_minutes if attendance_record else 0,
+            "latitude": attendance_record.latitude if attendance_record else None,
+            "longitude": attendance_record.longitude if attendance_record else None,
+        }
+        
+        # Office Out Data
+        slots_data["Office Out"] = {
+            "time_range": "6:00 PM",
+            "status": "present" if (attendance_record and attendance_record.check_out_time) else None,
+            "check_in": attendance_record.check_out_time if attendance_record else None,
+            "early_minutes": attendance_record.early_minutes if attendance_record else 0,
+            "latitude": attendance_record.latitude if attendance_record else None,
+            "longitude": attendance_record.longitude if attendance_record else None,
+        }
+        
         context["slots"] = slots_data
-        context["total_records"] = attendance_records.count()
-        context["present_count"] = attendance_records.filter(
-            status="present",
-        ).count()
-        context["late_count"] = attendance_records.filter(
-            status="late",
-        ).count()
-        context["absent_count"] = attendance_records.filter(
-            status="absent",
-        ).count()
-    elif filter_type == "weekly":
-        start_of_week = today - timedelta(days=today.weekday())
-        end_of_week = start_of_week + timedelta(days=6)
+        context["total_records"] = 1 if attendance_record else 0
+        context["present_count"] = 1 if (attendance_record and attendance_record.status == 'present') else 0
+        context["late_count"] = 1 if (attendance_record and attendance_record.status == 'late') else 0
+        context["absent_count"] = 1 if (attendance_record and attendance_record.status == 'absent') else 0
+        
+    elif filter_type in ["weekly", "monthly", "custom"]:
+        start_date = None
+        end_date = None
+        
+        if filter_type == "weekly":
+            # Week containing current_date
+            start_date = current_date - timedelta(days=current_date.weekday())
+            end_date = start_date + timedelta(days=6)
+        elif filter_type == "monthly":
+            # Month containing current_date
+            start_date = current_date.replace(day=1)
+            # Last day of month
+            next_month = start_date.replace(day=28) + timedelta(days=4)
+            end_date = next_month - timedelta(days=next_month.day)
+        elif filter_type == "custom":
+            start_str = request.GET.get("start_date")
+            end_str = request.GET.get("end_date")
+            if start_str and end_str:
+                try:
+                    start_date = datetime.strptime(start_str, "%Y-%m-%d").date()
+                    end_date = datetime.strptime(end_str, "%Y-%m-%d").date()
+                except ValueError:
+                    start_date = current_date
+                    end_date = current_date
+            else:
+                start_date = current_date
+                end_date = current_date
+
         attendance_records = Attendance.objects.filter(
             user=employee,
-            date__range=[start_of_week, end_of_week],
-        )
+            date__range=[start_date, end_date]
+        ).order_by('date')
+        
+        # Calculate Totals
+        total_late = sum(r.late_minutes for r in attendance_records)
+        total_early = sum(r.early_minutes for r in attendance_records)
+        present_count = attendance_records.filter(status='present').count()
+        late_count = attendance_records.filter(status='late').count()
+        absent_count = attendance_records.filter(status='absent').count()
+        
+        context.update({
+            "start_date": start_date,
+            "end_date": end_date,
+            "attendance_records": attendance_records,
+            "total_late_minutes": total_late,
+            "total_early_minutes": total_early,
+            "present_count": present_count,
+            "late_count": late_count,
+            "absent_count": absent_count,
+            "total_records": attendance_records.count()
+        })
+        
+        # Calendar Grid Logic (for monthly/weekly view)
+        # Generate list of days from start to end
         calendar_days = []
-        current_date = start_of_week
-        while current_date <= end_of_week:
-            day_records = attendance_records.filter(date=current_date)
-            day_slots = []
-            for slot_name, slot_info in SLOTS.items():
-                slot_record = day_records.filter(
-                    slot=slot_info["slot_value"],
-                ).first()
-                day_slots.append(
-                    {
-                        "name": slot_name.replace("Slot ", "S"),
-                        "status": slot_record.status if slot_record else "empty",
-                    },
-                )
-            calendar_days.append(
-                {
-                    "date": current_date,
-                    "slots": day_slots,
-                },
-            )
-            current_date += timedelta(days=1)
+        curr = start_date
+        
+        # Pad start if monthly view to start on Monday
+        if filter_type == "monthly":
+            pad_start = start_date - timedelta(days=start_date.weekday())
+            while pad_start < start_date:
+                calendar_days.append({"date": None, "slots": []})
+                pad_start += timedelta(days=1)
+                
+        while curr <= end_date:
+            record = next((r for r in attendance_records if r.date == curr), None)
+            slots = []
+            if record:
+                if record.check_in_time:
+                    slots.append({"name": "In", "status": "present", "time": record.check_in_time})
+                if record.check_out_time:
+                    slots.append({"name": "Out", "status": "present", "time": record.check_out_time})
+                if record.status == 'absent':
+                     slots.append({"name": "Absent", "status": "absent"})
+                elif not record.check_in_time and not record.check_out_time:
+                     # Maybe late but no check in? Or just marked late manually?
+                     if record.status == 'late':
+                         slots.append({"name": "Late", "status": "late"})
+            
+            calendar_days.append({
+                "date": curr,
+                "record": record,
+                "slots": slots
+            })
+            curr += timedelta(days=1)
+            
         context["calendar_days"] = calendar_days
-        context["week_start"] = start_of_week
-        context["week_end"] = end_of_week
-        context["total_records"] = attendance_records.count()
-        context["present_count"] = attendance_records.filter(
-            status="present",
-        ).count()
-        context["late_count"] = attendance_records.filter(
-            status="late",
-        ).count()
-        context["absent_count"] = attendance_records.filter(
-            status="absent",
-        ).count()
-    else:
-        attendance_records = Attendance.objects.filter(
-            user=employee,
-            date__month=today.month,
-            date__year=today.year,
-        ).order_by("-date", "slot")
-        context["attendance_records"] = attendance_records
-        context["total_records"] = attendance_records.count()
-        context["present_count"] = attendance_records.filter(
-            status="present",
-        ).count()
-        context["late_count"] = attendance_records.filter(
-            status="late",
-        ).count()
-        context["absent_count"] = attendance_records.filter(
-            status="absent",
-        ).count()
+
     return render(request, "user_detail.html", context)
 
 
@@ -999,15 +1237,13 @@ def admin_sites_view(request):
     if not request.user.is_staff:
         return redirect("admin-login")
     
-    sites = Site.objects.all().order_by('name')
-    sites_data = []
-    for site in sites:
-        employee_count = Employee.objects.filter(site=site).count()
-        sites_data.append({
-            'site': site,
-            'employee_count': employee_count
-        })
+    sites = Site.objects.annotate(employee_count=Count('employee')).order_by('name')
     
+    # Search Filtering
+    search_query = request.GET.get('search', '')
+    if search_query:
+        sites = sites.filter(name__icontains=search_query)
+        
     # Pagination
     per_page = request.GET.get('per_page', 10)
     try:
@@ -1015,20 +1251,21 @@ def admin_sites_view(request):
     except ValueError:
         per_page = 10
         
-    paginator = Paginator(sites_data, per_page)
+    paginator = Paginator(sites, per_page)
     page = request.GET.get('page', 1)
     
     try:
-        sites_page = paginator.page(page)
+        page_obj = paginator.page(page)
     except PageNotAnInteger:
-        sites_page = paginator.page(1)
+        page_obj = paginator.page(1)
     except EmptyPage:
-        sites_page = paginator.page(paginator.num_pages)
+        page_obj = paginator.page(paginator.num_pages)
     
     context = {
-        'sites_data': sites_page,
-        'paginator': paginator,
-        'per_page': per_page
+        "sites": page_obj,
+        "search_query": search_query,
+        "paginator": paginator,
+        "per_page": per_page
     }
     return render(request, "sites.html", context)
 
@@ -1094,9 +1331,15 @@ def admin_add_site(request):
         name = request.POST.get("name", "").strip()
         if name:
             if Site.objects.filter(name=name).exists():
+                # Re-fetch sites with pagination for error display
+                sites = Site.objects.annotate(employee_count=Count('employee')).order_by('name')
+                paginator = Paginator(sites, 10) # Default per_page for error
+                page_obj = paginator.page(1)
                 return render(request, "sites.html", {
                     'error': f'Site "{name}" already exists.',
-                    'sites_data': _get_sites_data()
+                    'sites': page_obj,
+                    'paginator': paginator,
+                    'per_page': 10
                 })
             
             coordinates = None
@@ -1125,9 +1368,15 @@ def admin_add_site(request):
             Site.objects.create(name=name, coordinates=coordinates)
             return redirect("admin-sites")
         else:
+            # Re-fetch sites with pagination for error display
+            sites = Site.objects.annotate(employee_count=Count('employee')).order_by('name')
+            paginator = Paginator(sites, 10) # Default per_page for error
+            page_obj = paginator.page(1)
             return render(request, "sites.html", {
                 'error': 'Site name is required.',
-                'sites_data': _get_sites_data()
+                'sites': page_obj,
+                'paginator': paginator,
+                'per_page': 10
             })
     
     return redirect("admin-sites")
@@ -1146,9 +1395,15 @@ def admin_edit_site(request, site_id):
         name = request.POST.get("name", "").strip()
         if name:
             if Site.objects.filter(name=name).exclude(id=site_id).exists():
+                # Re-fetch sites with pagination for error display
+                sites = Site.objects.annotate(employee_count=Count('employee')).order_by('name')
+                paginator = Paginator(sites, 10) # Default per_page for error
+                page_obj = paginator.page(1)
                 return render(request, "sites.html", {
                     'error': f'Site "{name}" already exists.',
-                    'sites_data': _get_sites_data()
+                    'sites': page_obj,
+                    'paginator': paginator,
+                    'per_page': 10
                 })
             
             # Handle KML File Update
@@ -1179,9 +1434,15 @@ def admin_edit_site(request, site_id):
             site.save()
             return redirect("admin-sites")
         else:
+            # Re-fetch sites with pagination for error display
+            sites = Site.objects.annotate(employee_count=Count('employee')).order_by('name')
+            paginator = Paginator(sites, 10) # Default per_page for error
+            page_obj = paginator.page(1)
             return render(request, "sites.html", {
                 'error': 'Site name is required.',
-                'sites_data': _get_sites_data()
+                'sites': page_obj,
+                'paginator': paginator,
+                'per_page': 10
             })
     
     return redirect("admin-sites")
@@ -1293,3 +1554,203 @@ class AdminBulkDeleteSiteView(APIView):
             })
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+# ------------------ Site Admin Management ------------------
+
+@login_required(login_url="admin-login")
+def admin_site_admins_view(request):
+    """List all site admins"""
+    if not request.user.is_superuser:
+        return redirect("admin-dashboard")
+        
+    admins = AdminProfile.objects.select_related('user', 'site').all()
+    
+    # Search Filtering
+    search_query = request.GET.get('search', '')
+    if search_query:
+        admins = admins.filter(
+            Q(user__username__icontains=search_query) |
+            Q(user__email__icontains=search_query) |
+            Q(site__name__icontains=search_query)
+        )
+        
+    context = {
+        "admins": admins,
+        "sites": Site.objects.all(),
+        "search_query": search_query,
+    }
+    return render(request, "site_admins.html", context)
+
+@login_required(login_url="admin-login")
+@require_http_methods(["POST"])
+def admin_add_site_admin(request):
+    """Add a new site admin"""
+    if not request.user.is_superuser:
+        return redirect("admin-dashboard")
+    
+    username = request.POST.get("username")
+    email = request.POST.get("email")
+    password = request.POST.get("password")
+    site_id = request.POST.get("site")
+    
+    if not (username and email and password and site_id):
+        return redirect("admin-site-admins")
+        
+    try:
+        with transaction.atomic():
+            if User.objects.filter(username=username).exists():
+                 # Handle error
+                 pass
+            
+            user = User.objects.create_user(username=username, email=email, password=password)
+            user.is_staff = True
+            user.save()
+            
+            site = Site.objects.get(id=site_id)
+            AdminProfile.objects.create(user=user, site=site)
+            
+        return redirect("admin-site-admins")
+    except Exception as e:
+        print(f"Error adding site admin: {e}")
+        return redirect("admin-site-admins")
+
+@login_required(login_url="admin-login")
+@require_http_methods(["POST"])
+def admin_edit_site_admin(request, admin_id):
+    """Edit a site admin"""
+    if not request.user.is_superuser:
+        return redirect("admin-dashboard")
+    
+    user = get_object_or_404(User, id=admin_id)
+    
+    username = request.POST.get("username")
+    email = request.POST.get("email")
+    site_id = request.POST.get("site")
+    password = request.POST.get("password") # Optional
+    
+    try:
+        with transaction.atomic():
+            user.username = username
+            user.email = email
+            if password:
+                user.set_password(password)
+            user.save()
+            
+            # Update or create profile
+            site = Site.objects.get(id=site_id)
+            profile, created = AdminProfile.objects.get_or_create(user=user)
+            profile.site = site
+            profile.save()
+            
+        return redirect("admin-site-admins")
+    except Exception as e:
+        print(f"Error editing site admin: {e}")
+        return redirect("admin-site-admins")
+
+@login_required(login_url="admin-login")
+@require_http_methods(["POST"])
+def admin_delete_site_admin(request, admin_id):
+    """Delete a site admin"""
+    if not request.user.is_superuser:
+        return redirect("admin-dashboard")
+    
+    user = get_object_or_404(User, id=admin_id)
+    if not user.is_superuser: # Prevent deleting superuser
+        user.delete()
+    
+    return redirect("admin-site-admins")
+
+@login_required(login_url="admin-login")
+@require_http_methods(["POST"])
+def admin_bulk_delete_site_admins(request):
+    """Bulk delete site admins"""
+    if not request.user.is_superuser:
+        return JsonResponse({'error': 'Unauthorized'}, status=403)
+        
+    try:
+        import json
+        data = json.loads(request.body)
+        ids = data.get('ids', [])
+        
+        if not ids:
+             return JsonResponse({'error': 'No IDs provided'}, status=400)
+             
+        # Filter to ensure we don't delete superusers
+        User.objects.filter(id__in=ids, is_superuser=False, is_staff=True).delete()
+        
+        return JsonResponse({'message': 'Site admins deleted successfully'})
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+# ------------------ Excel Export ------------------
+
+class ExportAttendanceView(APIView):
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        import openpyxl
+        from openpyxl.utils import get_column_letter
+        from django.http import HttpResponse
+
+        user_id = request.GET.get('user_id')
+        start_str = request.GET.get('start_date')
+        end_str = request.GET.get('end_date')
+
+        if not user_id:
+            return Response({'error': 'User ID required'}, status=400)
+
+        employee = get_object_or_404(Employee, id=user_id)
+        
+        # Check permission for site admin
+        if not request.user.is_superuser:
+            try:
+                profile = AdminProfile.objects.get(user=request.user)
+                if profile.site and employee.site != profile.site:
+                     return Response({'error': 'Unauthorized'}, status=403)
+            except AdminProfile.DoesNotExist:
+                pass
+
+        try:
+            start_date = datetime.strptime(start_str, "%Y-%m-%d").date() if start_str else None
+            end_date = datetime.strptime(end_str, "%Y-%m-%d").date() if end_str else None
+        except ValueError:
+            return Response({'error': 'Invalid date format'}, status=400)
+
+        queryset = Attendance.objects.filter(user=employee).order_by('date')
+        if start_date and end_date:
+            queryset = queryset.filter(date__range=[start_date, end_date])
+
+        # Create Workbook
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = f"Attendance - {employee.name}"
+
+        # Headers
+        headers = ['Date', 'Status', 'Check In', 'Check Out', 'Late (min)', 'Early (min)', 'Location']
+        ws.append(headers)
+
+        # Data
+        for record in queryset:
+            check_in = record.check_in_time.strftime("%H:%M:%S") if record.check_in_time else "-"
+            check_out = record.check_out_time.strftime("%H:%M:%S") if record.check_out_time else "-"
+            location = f"{record.latitude}, {record.longitude}" if record.latitude else "-"
+            
+            ws.append([
+                record.date,
+                record.status,
+                check_in,
+                check_out,
+                record.late_minutes,
+                record.early_minutes,
+                location
+            ])
+
+        # Adjust column widths
+        for col in range(1, len(headers) + 1):
+            ws.column_dimensions[get_column_letter(col)].width = 15
+
+        response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        response['Content-Disposition'] = f'attachment; filename=attendance_{employee.name}_{start_date}_{end_date}.xlsx'
+        
+        wb.save(response)
+        return response
