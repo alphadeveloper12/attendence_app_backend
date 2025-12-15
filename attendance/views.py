@@ -713,7 +713,7 @@ class MarkAttendanceView(APIView):
                 status=400,
             )
 
-        v, q, meta = ENGINE.embed_best_face(bgr, fast_mode=True)
+        v, q, meta = ENGINE.embed_best_face(bgr)
         if v is None:
             return Response(
                 {"error": "No face detected in image."},
