@@ -874,10 +874,12 @@ class AdminLoginView(APIView):
                 status=400,
             )
         if not user.is_superuser:
-            return Response(
-                {"error": "You must be an admin to login."},
-                status=403,
-            )
+            # Check if site admin
+            if not AdminProfile.objects.filter(user=user).exists():
+                return Response(
+                    {"error": "You must be an admin to login."},
+                    status=403,
+                )
         user = authenticate(request, username=user.username, password=password)
         if user is not None:
             refresh = RefreshToken.for_user(user)
