@@ -6,7 +6,7 @@
 <style>
     .slot-grid {
         display: grid;
-        grid-template-columns: repeat(4, 1fr);
+        grid-template-columns: repeat(2, 1fr);
         gap: 1rem;
         margin-top: 1.5rem;
     }
@@ -161,6 +161,16 @@
             padding: 0.2rem;
         }
     }
+
+    .custom-date-range {
+        display: flex;
+        gap: 0.5rem;
+        align-items: center;
+    }
+
+    .hidden {
+        display: none !important;
+    }
 </style>
 
 <div class="navbar">
@@ -199,21 +209,56 @@
     </div>
 
     <div class="card">
-        <h2>Attendance Records</h2>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+            <h2>Attendance Records</h2>
+            <a href="{% url 'export-attendance' %}?user_id={{ employee.id }}&start_date={{ start_date|date:'Y-m-d' }}&end_date={{ end_date|date:'Y-m-d' }}"
+                class="btn btn-success" target="_blank">
+                📥 Download Excel
+            </a>
+        </div>
 
-        <div class="filter-tabs">
-            <button class="filter-tab {% if filter == 'daily' %}active{% endif %}"
-                onclick="window.location.href='?filter=daily'">
-                Daily
-            </button>
-            <button class="filter-tab {% if filter == 'weekly' %}active{% endif %}"
-                onclick="window.location.href='?filter=weekly'">
-                Weekly
-            </button>
-            <button class="filter-tab {% if filter == 'monthly' %}active{% endif %}"
-                onclick="window.location.href='?filter=monthly'">
-                Monthly
-            </button>
+        <div class="filter-tabs" style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+            <div class="btn-group">
+                <button class="filter-tab {% if filter == 'daily' %}active{% endif %}"
+                    onclick="window.location.href='?filter=daily'">
+                    Daily
+                </button>
+                <button class="filter-tab {% if filter == 'weekly' %}active{% endif %}"
+                    onclick="window.location.href='?filter=weekly'">
+                    Weekly
+                </button>
+                <button class="filter-tab {% if filter == 'monthly' %}active{% endif %}"
+                    onclick="window.location.href='?filter=monthly'">
+                    Monthly
+                </button>
+                <button class="filter-tab {% if filter == 'custom' %}active{% endif %}" onclick="toggleCustomDate()">
+                    Custom
+                </button>
+            </div>
+
+            <!-- Date Navigation for Daily/Weekly/Monthly -->
+            {% if filter != 'custom' %}
+            <div class="date-nav" style="display: flex; align-items: center; gap: 0.5rem;">
+                <form method="GET" style="display: flex; align-items: center; gap: 0.5rem;">
+                    <input type="hidden" name="filter" value="{{ filter }}">
+                    <input type="date" name="date" value="{{ current_date|date:'Y-m-d' }}" class="form-control"
+                        onchange="this.form.submit()">
+                </form>
+            </div>
+            {% endif %}
+
+            <!-- Custom Date Range -->
+            <div id="customDateRange" class="custom-date-range {% if filter != 'custom' %}hidden{% endif %}">
+                <form method="GET" style="display: flex; align-items: center; gap: 0.5rem;">
+                    <input type="hidden" name="filter" value="custom">
+                    <input type="date" name="start_date" value="{{ start_date|date:'Y-m-d' }}" class="form-control"
+                        required>
+                    <span>to</span>
+                    <input type="date" name="end_date" value="{{ end_date|date:'Y-m-d' }}" class="form-control"
+                        required>
+                    <button type="submit" class="btn btn-primary btn-sm">Go</button>
+                </form>
+            </div>
         </div>
 
         <div class="stats-grid">
@@ -222,22 +267,23 @@
                 <div class="stat-value">{{ total_records }}</div>
             </div>
             <div class="stat-card">
-                <h3>Present Slots</h3>
-                <div class="stat-value">{{ present_count }}</div>
+                <h3>Present</h3>
+                <div class="stat-value" style="color: #10b981;">{{ present_count }}</div>
             </div>
             <div class="stat-card">
-                <h3>Late Slots</h3>
-                <div class="stat-value">{{ late_count }}</div>
+                <h3>Late</h3>
+                <div class="stat-value" style="color: #f59e0b;">{{ late_count }}</div>
+                <div style="font-size: 0.9rem; color: #666;">Total: {{ total_late_minutes|default:"0" }} min</div>
             </div>
             <div class="stat-card">
-                <h3>Absent Slots</h3>
-                <div class="stat-value">{{ absent_count }}</div>
+                <h3>Early Leavings</h3>
+                <div class="stat-value" style="color: #ef4444;">{{ total_early_minutes|default:"0" }} min</div>
             </div>
         </div>
 
         {% if filter == 'daily' %}
         <!-- Daily View: Show 4 Slots -->
-        <h3 style="margin-top: 2rem; color: #333;">Today's Slots - {{ today|date:"M d, Y" }}</h3>
+        <h3 style="margin-top: 2rem; color: #333;">Today's Slots - {{ current_date|date:"M d, Y" }}</h3>
         <div class="slot-grid">
             {% for slot_name, slot_data in slots.items %}
             <div class="slot-card {% if slot_data.status %}{{ slot_data.status }}{% endif %}">
@@ -255,21 +301,23 @@
                 </div>
                 {% if slot_data.check_in %}
                 <div style="margin-top: 0.5rem; font-size: 0.85rem; color: #666;">
-                    In: {{ slot_data.check_in|time:"h:i A" }}
+                    Time: {{ slot_data.check_in|time:"h:i A" }}
                 </div>
                 {% endif %}
+                {% if slot_data.early_minutes %}
+                <div style="margin-top: 0.2rem; font-size: 0.85rem; color: #ef4444;">
+                    Early: {{ slot_data.early_minutes }} min
+                </div>
+                {% endif %}
+
                 {% if slot_data.latitude and slot_data.longitude %}
                 <div style="margin-top: 0.8rem;">
                     <div style="font-size: 0.75rem; color: #666; margin-bottom: 0.3rem;">
                         📍 Location
                     </div>
-                    <div
-                        style="width: 100%; height: 150px; border-radius: 8px; overflow: hidden; border: 2px solid #e0e0e0;">
-                        <iframe width="100%" height="150" frameborder="0" scrolling="no" marginheight="0"
-                            marginwidth="0"
-                            src="https://www.openstreetmap.org/export/embed.html?bbox={{ slot_data.longitude|floatformat:6 }}%2C{{ slot_data.latitude|floatformat:6 }}%2C{{ slot_data.longitude|floatformat:6 }}%2C{{ slot_data.latitude|floatformat:6 }}&layer=mapnik&marker={{ slot_data.latitude|floatformat:6 }}%2C{{ slot_data.longitude|floatformat:6 }}"
-                            style="border: none;">
-                        </iframe>
+                    <div class="slot-map-container" data-lat="{{ slot_data.latitude }}"
+                        data-lng="{{ slot_data.longitude }}"
+                        style="width: 100%; height: 200px; border-radius: 8px; overflow: hidden; border: 2px solid #e0e0e0;">
                     </div>
                     <div style="font-size: 0.7rem; color: #999; margin-top: 0.3rem; text-align: center;">
                         {{ slot_data.latitude|floatformat:4 }}, {{ slot_data.longitude|floatformat:4 }}
@@ -283,10 +331,12 @@
             {% endfor %}
         </div>
 
-        {% elif filter == 'weekly' %}
-        <!-- Weekly View: Calendar Grid -->
-        <h3 style="margin-top: 2rem; color: #333;">Week of {{ week_start|date:"M d" }} - {{ week_end|date:"M d, Y" }}
+        {% else %}
+        <!-- Calendar Grid View (Weekly/Monthly/Custom) -->
+        <h3 style="margin-top: 2rem; color: #333;">
+            Period: {{ start_date|date:"M d" }} - {{ end_date|date:"M d, Y" }}
         </h3>
+
         <div class="calendar-grid">
             <!-- Headers -->
             <div class="calendar-header">Mon</div>
@@ -298,71 +348,114 @@
             <div class="calendar-header">Sun</div>
 
             <!-- Days -->
+            <!-- Days -->
             {% for day in calendar_days %}
-            <div class="calendar-day {% if not day.date %}empty{% endif %}">
+            <div class="calendar-day {% if not day.date %}empty{% endif %}" {% if day.date %}onclick="window.location.href='?filter=daily&date={{ day.date|date:" Y-m-d" }}'"{% endif %}>
                 {% if day.date %}
-                <div class="day-number">{{ day.date|date:"d" }}</div>
+                <div class="day-number">
+                    {{ day.date|date:"d" }}
+                    <span style="font-size: 0.7rem; color: #999;">{{ day.date|date:"M" }}</span>
+                </div>
                 <div class="day-slots">
                     {% for slot in day.slots %}
                     <div class="mini-slot {{ slot.status }}">
                         {{ slot.name }}
+                        {% if slot.time %}{{ slot.time|time:"H:i" }}{% endif %}
                     </div>
                     {% endfor %}
+
+                    {% if day.record %}
+                    {% if day.record.late_minutes > 0 %}
+                    <div class="mini-slot late" style="font-size: 0.6rem;">Late: {{ day.record.late_minutes }}m</div>
+                    {% endif %}
+                    {% if day.record.early_minutes > 0 %}
+                    <div class="mini-slot absent" style="font-size: 0.6rem;">Early: {{ day.record.early_minutes }}m
+                    </div>
+                    {% endif %}
+                    {% endif %}
                 </div>
                 {% endif %}
             </div>
             {% endfor %}
         </div>
-
-        {% else %}
-        <!-- Monthly View: Table -->
-        {% if attendance_records %}
-        <table style="margin-top: 1.5rem;">
-            <thead>
-                <tr>
-                    <th>Date</th>
-                    <th>Slot</th>
-                    <th>Status</th>
-                    <th>Check In</th>
-                    <th>Check Out</th>
-                    <th>Late Minutes</th>
-                    <th>Location</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for record in attendance_records %}
-                <tr>
-                    <td>{{ record.date|date:"M d, Y" }}</td>
-                    <td><strong>{{ record.slot|default:"N/A" }}</strong></td>
-                    <td>
-                        {% if record.status == 'present' %}
-                        <span class="badge badge-success">Present</span>
-                        {% elif record.status == 'late' %}
-                        <span class="badge badge-warning">Late</span>
-                        {% elif record.status == 'absent' %}
-                        <span class="badge badge-danger">Absent</span>
-                        {% else %}
-                        <span class="badge badge-info">{{ record.status|title }}</span>
-                        {% endif %}
-                    </td>
-                    <td>{{ record.check_in_time|time:"h:i A"|default:"—" }}</td>
-                    <td>{{ record.check_out_time|time:"h:i A"|default:"—" }}</td>
-                    <td>{{ record.late_minutes|default:"0" }} min</td>
-                    <td>
-                        {% if record.latitude and record.longitude %}
-                        {{ record.latitude|floatformat:4 }}, {{ record.longitude|floatformat:4 }}
-                        {% else %}
-                        —
-                        {% endif %}
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-        {% else %}
-        <p style="text-align: center; color: #666; padding: 2rem;">No attendance records found for this period.</p>
-        {% endif %}
         {% endif %}
     </div>
 </div>
+
+<script
+    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCYAsBPyik1DZcOH3jcR-awecFjyYXr5Qw&libraries=geometry"></script>
+<script>
+    function toggleCustomDate() {
+        const customDiv = document.getElementById('customDateRange');
+        customDiv.classList.toggle('hidden');
+    }
+
+    async function initMaps() {
+        const maps = document.querySelectorAll('.slot-map-container');
+        if (maps.length === 0) return;
+
+        const siteId = '{{ employee.site.id|default:"" }}';
+        let siteCoordinates = [];
+
+        // Fetch site coordinates if site exists
+        if (siteId) {
+            try {
+                const response = await fetch(`/api/attendance/api/sites/${siteId}/coordinates/`);
+                const data = await response.json();
+                if (data.success && data.has_coordinates) {
+                    siteCoordinates = data.coordinates;
+                    // Close polygon
+                    if (siteCoordinates.length > 0) {
+                        const first = siteCoordinates[0];
+                        const last = siteCoordinates[siteCoordinates.length - 1];
+                        if (first.lat !== last.lat || first.lng !== last.lng) {
+                            siteCoordinates.push(first);
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error("Error fetching site coordinates:", error);
+            }
+        }
+
+        // Initialize each map
+        maps.forEach(container => {
+            const lat = parseFloat(container.dataset.lat);
+            const lng = parseFloat(container.dataset.lng);
+
+            if (isNaN(lat) || isNaN(lng)) return;
+
+            const map = new google.maps.Map(container, {
+                center: { lat: lat, lng: lng },
+                zoom: 15,
+                mapTypeId: google.maps.MapTypeId.ROADMAP
+            });
+
+            // Attendance Marker (Blue)
+            new google.maps.Marker({
+                position: { lat: lat, lng: lng },
+                map: map,
+                title: "Attendance Location",
+                icon: {
+                    url: "http://maps.google.com/mapfiles/ms/icons/blue-dot.png"
+                }
+            });
+
+            // Site Boundary (Red Polygon)
+            if (siteCoordinates.length > 0) {
+                const polygon = new google.maps.Polygon({
+                    paths: siteCoordinates,
+                    strokeColor: "#FF0000",
+                    strokeOpacity: 0.8,
+                    strokeWeight: 2,
+                    fillColor: "#FF0000",
+                    fillOpacity: 0.35
+                });
+                polygon.setMap(map);
+            }
+        });
+    }
+
+    window.onload = initMaps;
+</script>
 {% endblock %}

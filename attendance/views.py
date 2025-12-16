@@ -37,6 +37,7 @@ from .utils import (
 )
 from .geofence import check_geofence
 from .serializers import *
+from .permissions import IsSiteAdmin
 from rest_framework_simplejwt.tokens import RefreshToken
 
 logger = logging.getLogger(__name__)
@@ -909,10 +910,23 @@ class AttendanceStatsView(APIView):
             return Response({"error": str(e)}, status=500)
 
 
-@permission_classes([IsAdminUser])
+@permission_classes([IsAdminUser | IsSiteAdmin])
 class EmployeeListView(APIView):
     def get(self, request):
         employees = Employee.objects.all()
+        
+        # Filter by site if user is a site admin
+        if not request.user.is_superuser:
+            try:
+                profile = AdminProfile.objects.get(user=request.user)
+                if profile.site:
+                    employees = employees.filter(site=profile.site)
+                else:
+                    # Site Admin but no site assigned -> see nothing
+                    employees = employees.none()
+            except AdminProfile.DoesNotExist:
+                pass
+
         serializer = EmployeeSerializer(
             employees,
             many=True,

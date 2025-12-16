@@ -27,7 +27,7 @@ class EmployeeSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Employee
-        fields = ['id', 'name', 'email', 'phone', 'department', 'position', 'profile_picture_url']
+        fields = ['id', 'name', 'email', 'phone', 'department', 'position', 'profile_picture_url', 'site']
 
     def get_profile_picture_url(self, obj):
         # This will return the absolute URL for the profile picture
