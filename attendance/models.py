@@ -116,3 +116,16 @@ class FaceTemplate(models.Model):
 
     def __str__(self):
         return f"Template of {self.employee.name} (q={self.quality:.2f})"
+
+class AppBuild(models.Model):
+    APP_CHOICES = [
+        ('attendance', 'Attendance App'),
+        ('fuel', 'Fuel App'),
+    ]
+    app_type = models.CharField(max_length=20, choices=APP_CHOICES, unique=True)
+    file = models.FileField(upload_to='builds/')
+    uploaded_at = models.DateTimeField(auto_now=True)
+    version = models.CharField(max_length=50, blank=True, null=True)
+
+    def __str__(self):
+        return f"{self.get_app_type_display()} - {self.uploaded_at}"

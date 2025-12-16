@@ -40,5 +40,13 @@ urlpatterns = [
     path('dashboard/site-admins/edit/<int:admin_id>/', admin_edit_site_admin, name='admin-edit-site-admin'),
     path('dashboard/site-admins/delete/<int:admin_id>/', admin_delete_site_admin, name='admin-delete-site-admin'),
     path('dashboard/site-admins/delete/bulk/', admin_bulk_delete_site_admins, name='admin-bulk-delete-site-admins'),
+    
+    # App Builds
+    path('builds/upload/', UploadBuildView.as_view(), name='upload-build'),
+    path('builds/download/<str:app_type>/', DownloadBuildView.as_view(), name='download-build'),
+
+    # Reports
+    path('dashboard/reports/', admin_reports_view, name='admin-reports'),
+    path('dashboard/reports/export/', export_reports_view, name='export-reports'),
 ]
 

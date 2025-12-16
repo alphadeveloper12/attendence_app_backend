@@ -36,9 +36,63 @@ from .utils import (
     THRESH, MARGIN, get_image_bytes
 )
 from .geofence import check_geofence
+from .models import Employee, Attendance, Site, FaceTemplate, AdminProfile, AppBuild
 from .serializers import *
 from .permissions import IsSiteAdmin
 from rest_framework_simplejwt.tokens import RefreshToken
+from django.http import FileResponse, Http404
+
+# ------------------ App Build API ------------------
+
+class UploadBuildView(APIView):
+    permission_classes = [IsAdminUser]
+    authentication_classes = [SessionAuthentication]
+
+    def post(self, request):
+        if not request.user.is_superuser:
+            return Response({'error': 'Only superusers can upload builds'}, status=403)
+        
+        app_type = request.data.get('app_type')
+        file = request.FILES.get('file')
+        version = request.data.get('version')
+
+        if not app_type or not file:
+            return Response({'error': 'App type and file are required'}, status=400)
+        
+        if app_type not in ['attendance', 'fuel']:
+             return Response({'error': 'Invalid app type'}, status=400)
+
+        try:
+            # Delete existing build of same type
+            existing_build = AppBuild.objects.filter(app_type=app_type).first()
+            if existing_build:
+                existing_build.file.delete()
+                existing_build.delete()
+            
+            # Create new build
+            build = AppBuild.objects.create(
+                app_type=app_type,
+                file=file,
+                version=version
+            )
+            
+            return Response({'message': f'{build.get_app_type_display()} uploaded successfully'})
+        except Exception as e:
+            return Response({'error': str(e)}, status=500)
+
+class DownloadBuildView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request, app_type):
+        if app_type not in ['attendance', 'fuel']:
+            return Response({'error': 'Invalid app type'}, status=400)
+            
+        build = AppBuild.objects.filter(app_type=app_type).first()
+        if not build or not build.file:
+            raise Http404("Build not found")
+            
+        response = FileResponse(build.file.open('rb'), as_attachment=True)
+        return response
 
 logger = logging.getLogger(__name__)
 
@@ -1781,3 +1835,228 @@ class ExportAttendanceView(APIView):
         
         wb.save(response)
         return response
+# ------------------ Reports Module ------------------
+
+@login_required
+def admin_reports_view(request):
+    # Permission Check
+    is_superuser = request.user.is_superuser
+    try:
+        admin_profile = request.user.admin_profile
+        site_admin_site = admin_profile.site
+    except AdminProfile.DoesNotExist:
+        admin_profile = None
+        site_admin_site = None
+
+    if not is_superuser and not admin_profile:
+        return render(request, 'dashboard.html', {'error': 'Permission Denied'})
+
+    # Filters
+    date_str = request.GET.get('date')
+    department = request.GET.get('department')
+    search_query = request.GET.get('search')
+    status_filter = request.GET.get('status')
+    page = request.GET.get('page', 1)
+
+    # Date Logic
+    if date_str:
+        try:
+            selected_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+        except ValueError:
+            selected_date = timezone.localdate()
+    else:
+        selected_date = timezone.localdate()
+
+    # Base Queryset
+    employees = Employee.objects.all()
+
+    # Site Filter (for Site Admins)
+    if not is_superuser and site_admin_site:
+        employees = employees.filter(site=site_admin_site)
+
+    # Department Filter
+    if department:
+        employees = employees.filter(department=department)
+
+    # Search Filter
+    if search_query:
+        employees = employees.filter(
+            Q(name__icontains=search_query) |
+            Q(badge_number__icontains=search_query) |
+            Q(email__icontains=search_query)
+        )
+
+    # Fetch Attendance for Selected Date
+    attendance_records = Attendance.objects.filter(
+        date=selected_date,
+        user__in=employees
+    ).select_related('user', 'user__site')
+
+    attendance_map = {att.user_id: att for att in attendance_records}
+
+    # Process Data
+    report_data = []
+    stats = {
+        'total': 0,
+        'present': 0,
+        'absent': 0,
+        'late': 0
+    }
+
+    for emp in employees:
+        att = attendance_map.get(emp.id)
+        status = 'Absent'
+        check_in = '-'
+        check_out = '-'
+        site_name = emp.site.name if emp.site else '-'
+
+        if att:
+            status = 'Present'
+            check_in = att.check_in_time.strftime('%H:%M') if att.check_in_time else '-'
+            check_out = att.check_out_time.strftime('%H:%M') if att.check_out_time else '-'
+            
+            # Late Logic
+            if att.late_minutes > 0:
+                 # You might want to count this as Present AND Late, or just Late.
+                 # For stats, let's increment Late count but keep status as Present for the table unless you want a specific 'Late' badge.
+                 stats['late'] += 1
+
+        # Apply Status Filter
+        if status_filter:
+            if status_filter.lower() == 'present' and status != 'Present':
+                continue
+            if status_filter.lower() == 'absent' and status != 'Absent':
+                continue
+            # Add 'late' filter logic if needed
+
+        stats['total'] += 1
+        if status == 'Present':
+            stats['present'] += 1
+        else:
+            stats['absent'] += 1
+
+        report_data.append({
+            'employee': emp,
+            'status': status,
+            'check_in': check_in,
+            'check_out': check_out,
+            'site': site_name,
+            'site_id': emp.site.id if emp.site else None,
+            'latitude': att.latitude if att else None,
+            'longitude': att.longitude if att else None
+        })
+
+    # Pagination
+    paginator = Paginator(report_data, 20)
+    try:
+        report_page = paginator.page(page)
+    except PageNotAnInteger:
+        report_page = paginator.page(1)
+    except EmptyPage:
+        report_page = paginator.page(paginator.num_pages)
+
+    # Departments for Filter
+    departments = Employee.objects.values_list('department', flat=True).distinct()
+
+    context = {
+        'report_data': report_page,
+        'stats': stats,
+        'selected_date': selected_date.strftime('%Y-%m-%d'),
+        'departments': departments,
+        'selected_department': department,
+        'search_query': search_query,
+        'status_filter': status_filter,
+        'is_superuser': is_superuser,
+        'site_admin_site': site_admin_site,
+    }
+    return render(request, 'reports.html', context)
+
+import csv
+from django.http import HttpResponse
+
+@login_required
+def export_reports_view(request):
+    # Permission Check
+    is_superuser = request.user.is_superuser
+    try:
+        admin_profile = request.user.admin_profile
+        site_admin_site = admin_profile.site
+    except AdminProfile.DoesNotExist:
+        admin_profile = None
+        site_admin_site = None
+
+    if not is_superuser and not admin_profile:
+        return HttpResponse("Permission Denied", status=403)
+
+    # Filters (Same as above)
+    date_str = request.GET.get('date')
+    department = request.GET.get('department')
+    search_query = request.GET.get('search')
+    status_filter = request.GET.get('status')
+
+    if date_str:
+        try:
+            selected_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+        except ValueError:
+            selected_date = timezone.localdate()
+    else:
+        selected_date = timezone.localdate()
+
+    employees = Employee.objects.all()
+
+    if not is_superuser and site_admin_site:
+        employees = employees.filter(site=site_admin_site)
+
+    if department:
+        employees = employees.filter(department=department)
+
+    if search_query:
+        employees = employees.filter(
+            Q(name__icontains=search_query) |
+            Q(badge_number__icontains=search_query) |
+            Q(email__icontains=search_query)
+        )
+
+    attendance_records = Attendance.objects.filter(
+        date=selected_date,
+        user__in=employees
+    ).select_related('user', 'user__site')
+    attendance_map = {att.user_id: att for att in attendance_records}
+
+    # Generate CSV
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = f'attachment; filename="attendance_report_{selected_date}.csv"'
+
+    writer = csv.writer(response)
+    writer.writerow(['Employee Name', 'Badge ID', 'Department', 'Site', 'Date', 'Status', 'Check In', 'Check Out'])
+
+    for emp in employees:
+        att = attendance_map.get(emp.id)
+        status = 'Absent'
+        check_in = '-'
+        check_out = '-'
+        site_name = emp.site.name if emp.site else '-'
+
+        if att:
+            status = 'Present'
+            check_in = att.check_in_time.strftime('%H:%M') if att.check_in_time else '-'
+            check_out = att.check_out_time.strftime('%H:%M') if att.check_out_time else '-'
+
+        if status_filter:
+            if status_filter.lower() == 'present' and status != 'Present':
+                continue
+            if status_filter.lower() == 'absent' and status != 'Absent':
+                continue
+
+        writer.writerow([
+            emp.name,
+            emp.badge_number,
+            emp.department,
+            site_name,
+            selected_date,
+            status,
+            check_in,
+            check_out
+        ])
+
+    return response

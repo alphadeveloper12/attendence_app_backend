@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -357,14 +358,45 @@
                 font-size: 0.9rem;
             }
 
-            table th, table td {
+            table th,
+            table td {
                 padding: 0.5rem;
             }
         }
+
+        .nav-menu {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 0.5rem 2rem;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+            display: flex;
+            gap: 1rem;
+        }
+
+        .nav-link {
+            padding: 0.8rem 1.5rem;
+            text-decoration: none;
+            color: #666;
+            font-weight: 600;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+
+        .nav-link:hover {
+            background: #f0f0f0;
+            color: #667eea;
+        }
+
+        .nav-link.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
     </style>
 </head>
+
 <body>
     {% block content %}
     {% endblock %}
 </body>
+
 </html>

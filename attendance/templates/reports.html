@@ -1,0 +1,350 @@
+{% extends 'base.html' %}
+
+{% block title %}Reports - Admin Dashboard{% endblock %}
+
+{% block content %}
+<div class="navbar">
+    <h1>📊 Attendance Reports</h1>
+    <div class="user-info" style="display: flex; align-items: center; gap: 1rem;">
+        <div id="liveClock"
+            style="font-weight: 600; color: #555; background: #fff; padding: 0.5rem 1rem; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+        </div>
+        <span>Welcome, {{ user.username }}</span>
+        <a href="{% url 'admin-dashboard' %}" class="btn btn-secondary">Back to Dashboard</a>
+        <a href="{% url 'admin-logout' %}" class="btn btn-danger">Logout</a>
+    </div>
+</div>
+
+<!-- Navigation Menu -->
+<div class="nav-menu">
+    <a href="{% url 'admin-dashboard' %}" class="nav-link">📊 Dashboard</a>
+    <a href="{% url 'admin-reports' %}" class="nav-link active">📈 Reports</a>
+    {% if is_superuser %}
+    <a href="{% url 'admin-sites' %}" class="nav-link">🏢 Sites</a>
+    <a href="{% url 'admin-site-admins' %}" class="nav-link">👤 Site Admins</a>
+    {% endif %}
+</div>
+
+<div class="container">
+    <!-- Filters -->
+    <div class="card">
+        <form method="GET" style="display: flex; gap: 1rem; flex-wrap: wrap; align-items: end;">
+            <div class="form-group" style="margin-bottom: 0; flex: 1; min-width: 200px;">
+                <label>Date</label>
+                <input type="date" name="date" value="{{ selected_date }}" class="form-control"
+                    onchange="this.form.submit()">
+            </div>
+
+            <div class="form-group" style="margin-bottom: 0; flex: 1; min-width: 200px;">
+                <label>Department</label>
+                <select name="department" class="form-control" onchange="this.form.submit()">
+                    <option value="">All Departments</option>
+                    {% for dept in departments %}
+                    <option value="{{ dept }}" {% if selected_department == dept %}selected{% endif %}>{{ dept }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group" style="margin-bottom: 0; flex: 1; min-width: 200px;">
+                <label>Search</label>
+                <input type="text" name="search" value="{{ search_query|default:'' }}" placeholder="Name, Badge ID..."
+                    class="form-control">
+            </div>
+
+            <div style="display: flex; gap: 0.5rem;">
+                <button type="submit" class="btn btn-primary">Filter</button>
+                <a href="{% url 'admin-reports' %}" class="btn btn-secondary">Reset</a>
+            </div>
+
+            <div style="margin-left: auto;">
+                <a href="{% url 'export-reports' %}?date={{ selected_date }}&department={{ selected_department|default:'' }}&search={{ search_query|default:'' }}&status={{ status_filter|default:'' }}"
+                    class="btn btn-success" target="_blank">
+                    📥 Download Excel
+                </a>
+            </div>
+        </form>
+    </div>
+
+    <!-- Stats Grid -->
+    <div class="stats-grid">
+        <a href="?date={{ selected_date }}&department={{ selected_department|default:'' }}&search={{ search_query|default:'' }}"
+            style="text-decoration: none;">
+            <div class="stat-card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                <h3>Total Employees</h3>
+                <div class="stat-value">{{ stats.total }}</div>
+            </div>
+        </a>
+        <a href="?date={{ selected_date }}&department={{ selected_department|default:'' }}&search={{ search_query|default:'' }}&status=Present"
+            style="text-decoration: none;">
+            <div class="stat-card" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);">
+                <h3>Present Today</h3>
+                <div class="stat-value">{{ stats.present }}</div>
+            </div>
+        </a>
+        <a href="?date={{ selected_date }}&department={{ selected_department|default:'' }}&search={{ search_query|default:'' }}&status=Absent"
+            style="text-decoration: none;">
+            <div class="stat-card" style="background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);">
+                <h3>Absent Today</h3>
+                <div class="stat-value">{{ stats.absent }}</div>
+            </div>
+        </a>
+        <!-- Placeholder for Late -->
+        <div class="stat-card" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);">
+            <h3>Late Arrivals</h3>
+            <div class="stat-value">{{ stats.late }}</div>
+        </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 2rem;">
+        <!-- Table -->
+        <div class="card" style="overflow-x: auto;">
+            <h3>Employee Attendance List {% if status_filter %}- <span style="color: #667eea;">{{ status_filter
+                    }}</span>{% endif %}</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Employee</th>
+                        <th>Badge ID</th>
+                        <th>Department</th>
+                        <th>Site</th>
+                        <th>Status</th>
+                        <th>Check In</th>
+                        <th>Check Out</th>
+                        <th>Location</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in report_data %}
+                    <tr>
+                        <td>
+                            <div style="font-weight: 600;">{{ item.employee.name }}</div>
+                            <div style="font-size: 0.85rem; color: #666;">{{ item.employee.email|default:"" }}</div>
+                        </td>
+                        <td>{{ item.employee.badge_number|default:"-" }}</td>
+                        <td>{{ item.employee.department|default:"-" }}</td>
+                        <td>{{ item.site }}</td>
+                        <td>
+                            {% if item.status == 'Present' %}
+                            <span class="badge badge-success">Present</span>
+                            {% else %}
+                            <span class="badge badge-danger">Absent</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ item.check_in }}</td>
+                        <td>{{ item.check_out }}</td>
+                        <td>
+                            {% if item.latitude and item.longitude and item.site_id %}
+                            <button
+                                onclick="viewLocation({{ item.site_id }}, {{ item.latitude }}, {{ item.longitude }})"
+                                class="btn btn-sm btn-info">View</button>
+                            {% else %}
+                            <span style="color: #ccc;">-</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="8" style="text-align: center; padding: 2rem; color: #666;">No records found.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+
+            <!-- Pagination -->
+            <div style="margin-top: 1rem; display: flex; justify-content: center;">
+                {% if report_data.has_other_pages %}
+                <div style="display: flex; gap: 0.5rem;">
+                    {% if report_data.has_previous %}
+                    <a href="?page={{ report_data.previous_page_number }}&date={{ selected_date }}&department={{ selected_department|default:'' }}&search={{ search_query|default:'' }}&status={{ status_filter|default:'' }}"
+                        class="btn btn-secondary">Previous</a>
+                    {% endif %}
+
+                    <span style="padding: 0.6rem 1rem; background: #f0f0f0; border-radius: 8px;">
+                        Page {{ report_data.number }} of {{ report_data.paginator.num_pages }}
+                    </span>
+
+                    {% if report_data.has_next %}
+                    <a href="?page={{ report_data.next_page_number }}&date={{ selected_date }}&department={{ selected_department|default:'' }}&search={{ search_query|default:'' }}&status={{ status_filter|default:'' }}"
+                        class="btn btn-secondary">Next</a>
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Chart -->
+        <div class="card">
+            <h3>Attendance Distribution</h3>
+            <canvas id="attendanceChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<!-- Map Modal -->
+<div id="mapModal" class="modal">
+    <div class="modal-content" style="max-width: 800px; width: 90%;">
+        <span class="close" onclick="closeMapModal()">&times;</span>
+        <h2>Attendance Location</h2>
+        <div id="map" style="height: 500px; width: 100%; border-radius: 12px; margin-top: 1rem;"></div>
+    </div>
+</div>
+
+<style>
+    .modal {
+        display: none;
+        position: fixed;
+        z-index: 1000;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.5);
+    }
+
+    .modal-content {
+        background-color: white;
+        margin: 5% auto;
+        padding: 2rem;
+        border-radius: 16px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    }
+
+    .close {
+        color: #aaa;
+        float: right;
+        font-size: 28px;
+        font-weight: bold;
+        cursor: pointer;
+    }
+
+    .close:hover {
+        color: #000;
+    }
+</style>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script
+    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCYAsBPyik1DZcOH3jcR-awecFjyYXr5Qw&libraries=geometry"></script>
+<script>
+    // Map Logic
+    let map;
+    let marker;
+    let polygon;
+
+    async function viewLocation(siteId, lat, lng) {
+        document.getElementById('mapModal').style.display = 'block';
+
+        if (!map) {
+            map = new google.maps.Map(document.getElementById("map"), {
+                center: { lat: lat, lng: lng },
+                zoom: 16
+            });
+        } else {
+            map.setCenter({ lat: lat, lng: lng });
+            map.setZoom(16);
+        }
+
+        // Clear previous markers/polygons
+        if (marker) marker.setMap(null);
+        if (polygon) polygon.setMap(null);
+
+        // Add User Marker
+        marker = new google.maps.Marker({
+            position: { lat: lat, lng: lng },
+            map: map,
+            title: "Employee Location",
+            icon: {
+                url: "http://maps.google.com/mapfiles/ms/icons/blue-dot.png"
+            }
+        });
+
+        // Fetch Site Polygon
+        try {
+            const response = await fetch(`/api/attendance/api/sites/${siteId}/coordinates/`);
+            const data = await response.json();
+
+            if (data.success && data.has_coordinates && data.coordinates.length > 0) {
+                const boundaryCoords = data.coordinates;
+
+                // Close polygon
+                const first = boundaryCoords[0];
+                const last = boundaryCoords[boundaryCoords.length - 1];
+                if (first.lat !== last.lat || first.lng !== last.lng) {
+                    boundaryCoords.push(first);
+                }
+
+                polygon = new google.maps.Polygon({
+                    paths: boundaryCoords,
+                    strokeColor: "#FF0000",
+                    strokeOpacity: 0.8,
+                    strokeWeight: 2,
+                    fillColor: "#FF0000",
+                    fillOpacity: 0.35
+                });
+                polygon.setMap(map);
+
+                // Fit bounds to include both user and site
+                const bounds = new google.maps.LatLngBounds();
+                bounds.extend({ lat: lat, lng: lng });
+                boundaryCoords.forEach(coord => bounds.extend(coord));
+                map.fitBounds(bounds);
+            }
+        } catch (error) {
+            console.error("Error fetching site coordinates:", error);
+        }
+    }
+
+    function closeMapModal() {
+        document.getElementById('mapModal').style.display = 'none';
+    }
+
+    // Close modal when clicking outside
+    window.onclick = function (event) {
+        const modal = document.getElementById('mapModal');
+        if (event.target == modal) {
+            closeMapModal();
+        }
+    }
+
+    // Live Clock (Reused)
+    function updateClock() {
+        const now = new Date();
+        const options = {
+            timeZone: 'Asia/Dubai',
+            weekday: 'short',
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: true
+        };
+        document.getElementById('liveClock').innerText = '🇦🇪 ' + now.toLocaleString('en-US', options);
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+
+    // Chart
+    const ctx = document.getElementById('attendanceChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Present', 'Absent'],
+            datasets: [{
+                data: [{{ stats.present }}, {{ stats.absent }}],
+        backgroundColor: ['#10b981', '#ef4444'],
+        borderWidth: 0
+    }]
+        },
+        options: {
+        responsive: true,
+        plugins: {
+            legend: {
+                position: 'bottom'
+            }
+        }
+    }
+    });
+</script>
+{% endblock %}
