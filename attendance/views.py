@@ -893,18 +893,29 @@ class AdminLoginView(APIView):
         return Response({"error": "Invalid email or password"}, status=400)
 
 
+@permission_classes([IsAdminUser | IsSiteAdmin])
 class AttendanceStatsView(APIView):
-    permission_classes = [AllowAny]
-
     def get(self, request):
         try:
-            total_employees = Employee.objects.count()
-            today = timezone.localdate()
-            today_attendance_count = Attendance.objects.filter(date=today).count()
+            employees = Employee.objects.all()
+            attendance = Attendance.objects.filter(date=timezone.localdate())
+
+            if not request.user.is_superuser:
+                try:
+                    profile = AdminProfile.objects.get(user=request.user)
+                    if profile.site:
+                        employees = employees.filter(site=profile.site)
+                        attendance = attendance.filter(user__site=profile.site)
+                    else:
+                        employees = employees.none()
+                        attendance = attendance.none()
+                except AdminProfile.DoesNotExist:
+                    pass
+
             return Response(
                 {
-                    "total_employees": total_employees,
-                    "today_attendance_count": today_attendance_count,
+                    "total_employees": employees.count(),
+                    "today_attendance_count": attendance.count(),
                 },
                 status=200,
             )
