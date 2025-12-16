@@ -3,87 +3,80 @@
 {% block title %}Site Details - {{ site.name }}{% endblock %}
 
 {% block content %}
-<div class="navbar">
-    <h1>📍 {{ site.name }}</h1>
-    <div class="user-info">
-        <span>Welcome, {{ user.username }}</span>
-        <a href="{% url 'admin-logout' %}" class="btn btn-danger">Logout</a>
+{% extends 'base.html' %}
+
+{% block title %}Site Details - {{ site.name }}{% endblock %}
+
+{% block content %}
+<!-- Navbar -->
+<nav class="navbar navbar-expand-lg navbar-custom mb-4 shadow-sm">
+    <div class="container-fluid">
+        <a class="navbar-brand d-flex align-items-center gap-2" href="#">
+            <span class="fs-4">📍 {{ site.name }}</span>
+        </a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarContent">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarContent">
+            <div class="ms-auto d-flex align-items-center gap-3">
+                <span class="text-white">Welcome, {{ user.username }}</span>
+                <a href="{% url 'admin-logout' %}" class="btn btn-danger btn-sm">Logout</a>
+            </div>
+        </div>
     </div>
-</div>
+</nav>
 
 <!-- Navigation Menu -->
-<div class="nav-menu">
-    <a href="{% url 'admin-dashboard' %}" class="nav-link">📊 Dashboard</a>
-    <a href="{% url 'admin-sites' %}" class="nav-link active">🏢 Sites</a>
+<div class="container mb-4">
+    <ul class="nav nav-pills nav-fill bg-white p-2 rounded shadow-sm">
+        <li class="nav-item">
+            <a class="nav-link" href="{% url 'admin-dashboard' %}">📊 Dashboard</a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" href="{% url 'admin-reports' %}">📈 Reports</a>
+        </li>
+        {% if user.is_superuser %}
+        <li class="nav-item">
+            <a class="nav-link active" href="{% url 'admin-sites' %}">🏢 Sites</a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" href="{% url 'admin-site-admins' %}">👤 Site Admins</a>
+        </li>
+        {% endif %}
+    </ul>
 </div>
 
 <div class="container">
-    <div class="card">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-            <h2>Site Information</h2>
-            <a href="{% url 'admin-sites' %}" class="btn btn-secondary">Back to Sites</a>
+    <div class="card shadow-sm">
+        <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+            <h2 class="h5 mb-0">Site Information</h2>
+            <a href="{% url 'admin-sites' %}" class="btn btn-secondary btn-sm">Back to Sites</a>
         </div>
 
-        <div class="site-info">
-            <p><strong>Name:</strong> {{ site.name }}</p>
-            <p><strong>Total Employees:</strong> {{ employee_count }}</p>
-        </div>
+        <div class="card-body">
+            <div class="bg-light p-3 rounded mb-4">
+                <div class="row">
+                    <div class="col-md-6">
+                        <p class="mb-1"><strong>Name:</strong></p>
+                        <p class="fs-5">{{ site.name }}</p>
+                    </div>
+                    <div class="col-md-6">
+                        <p class="mb-1"><strong>Total Employees:</strong></p>
+                        <p class="fs-5">{{ employee_count }}</p>
+                    </div>
+                </div>
+            </div>
 
-        <div class="map-container">
-            <h3>Site Boundary</h3>
-            <div id="map" style="height: 500px; width: 100%; border-radius: 12px;"></div>
-            <div id="map-message" class="alert alert-warning" style="display: none; margin-top: 1rem;">
-                No boundary coordinates available for this site.
+            <div class="map-container">
+                <h3 class="h6 mb-3">Site Boundary</h3>
+                <div id="map" style="height: 500px; width: 100%; border-radius: 12px;"></div>
+                <div id="map-message" class="alert alert-warning d-none mt-3" role="alert">
+                    No boundary coordinates available for this site.
+                </div>
             </div>
         </div>
     </div>
 </div>
-
-<style>
-    .nav-menu {
-        background: rgba(255, 255, 255, 0.95);
-        backdrop-filter: blur(10px);
-        padding: 0.5rem 2rem;
-        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
-        display: flex;
-        gap: 1rem;
-    }
-
-    .nav-link {
-        padding: 0.8rem 1.5rem;
-        text-decoration: none;
-        color: #666;
-        font-weight: 600;
-        border-radius: 8px;
-        transition: all 0.3s ease;
-    }
-
-    .nav-link:hover {
-        background: #f0f0f0;
-        color: #667eea;
-    }
-
-    .nav-link.active {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-    }
-
-    .site-info {
-        margin-bottom: 2rem;
-        padding: 1rem;
-        background: #f8f9fa;
-        border-radius: 8px;
-    }
-
-    .site-info p {
-        margin: 0.5rem 0;
-        font-size: 1.1rem;
-    }
-
-    .map-container {
-        margin-top: 2rem;
-    }
-</style>
 
 <script
     src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCYAsBPyik1DZcOH3jcR-awecFjyYXr5Qw&libraries=geometry"></script>
@@ -98,7 +91,8 @@
 
             if (!data.success) {
                 console.error('Failed to load coordinates:', data.error);
-                document.getElementById('map-message').style.display = 'block';
+                const msg = document.getElementById('map-message');
+                msg.classList.remove('d-none');
                 return;
             }
 
@@ -131,16 +125,17 @@
                 polygon.setMap(map);
             } else {
                 // Show message if no coordinates
-                document.getElementById('map-message').style.display = 'block';
+                const msg = document.getElementById('map-message');
+                msg.classList.remove('d-none');
             }
         } catch (error) {
             console.error('Error loading map:', error);
-            document.getElementById('map-message').style.display = 'block';
+            const msg = document.getElementById('map-message');
+            msg.classList.remove('d-none');
         }
     }
 
     // Initialize map when window loads
     window.onload = initMap;
 </script>
-
 {% endblock %}

@@ -1874,16 +1874,13 @@ def admin_reports_view(request):
     if not is_superuser and site_admin_site:
         employees = employees.filter(site=site_admin_site)
 
-    # Department Filter
-    if department:
-        employees = employees.filter(department=department)
-
     # Search Filter
     if search_query:
         employees = employees.filter(
             Q(name__icontains=search_query) |
             Q(badge_number__icontains=search_query) |
-            Q(email__icontains=search_query)
+            Q(email__icontains=search_query) |
+            Q(department__icontains=search_query)
         )
 
     # Fetch Attendance for Selected Date
@@ -1955,15 +1952,10 @@ def admin_reports_view(request):
     except EmptyPage:
         report_page = paginator.page(paginator.num_pages)
 
-    # Departments for Filter
-    departments = Employee.objects.values_list('department', flat=True).distinct()
-
     context = {
         'report_data': report_page,
         'stats': stats,
         'selected_date': selected_date.strftime('%Y-%m-%d'),
-        'departments': departments,
-        'selected_department': department,
         'search_query': search_query,
         'status_filter': status_filter,
         'is_superuser': is_superuser,

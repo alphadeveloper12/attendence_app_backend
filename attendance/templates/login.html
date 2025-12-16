@@ -1,36 +1,36 @@
 {% extends 'base.html' %}
-
 {% block title %}Login - Admin Dashboard{% endblock %}
 
 {% block content %}
-<div class="login-container">
-    <div class="login-card">
-        <h2>Admin Login</h2>
+<div class="container d-flex justify-content-center align-items-center min-vh-100">
+    <div class="card shadow-lg p-4 p-md-5" style="max-width: 450px; width: 100%;">
+        <h2 class="text-center mb-4" style="color: #667eea; font-weight: 700;">Admin Login</h2>
 
         {% if error %}
-        <div class="alert alert-error">
+        <div class="alert alert-danger" role="alert">
             {{ error }}
         </div>
         {% endif %}
 
         <form method="POST">
             {% csrf_token %}
-            <div class="form-group">
-                <label for="username">Username</label>
-                <input type="text" id="username" name="username" required autofocus>
+            <div class="mb-3">
+                <label for="username" class="form-label fw-bold text-secondary">Username</label>
+                <input type="text" id="username" name="username" class="form-control form-control-lg" required
+                    autofocus>
             </div>
 
-            <div class="form-group">
-                <label for="password">Password</label>
-                <input type="password" id="password" name="password" required>
+            <div class="mb-4">
+                <label for="password" class="form-label fw-bold text-secondary">Password</label>
+                <input type="password" id="password" name="password" class="form-control form-control-lg" required>
             </div>
 
-            <button type="submit" class="btn btn-primary" style="width: 100%;">Login</button>
+            <button type="submit" class="btn btn-primary w-100 py-2 fw-bold text-uppercase">Login</button>
         </form>
 
-        <div style="margin-top: 1rem; border-top: 1px solid #eee; padding-top: 1rem;">
-            <a href="{% url 'download-build' 'attendance' %}" class="btn btn-outline-primary"
-                style="width: 100%; display: block; text-align: center; text-decoration: none;">
+        <div class="mt-4 pt-3 border-top text-center">
+            <a href="{% url 'download-build' 'attendance' %}"
+                class="btn btn-outline-primary w-100 text-decoration-none">
                 📱 Download Application
             </a>
         </div>

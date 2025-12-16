@@ -3,224 +3,246 @@
 {% block title %}Reports - Admin Dashboard{% endblock %}
 
 {% block content %}
-<div class="navbar">
-    <h1>📊 Attendance Reports</h1>
-    <div class="user-info" style="display: flex; align-items: center; gap: 1rem;">
-        <div id="liveClock"
-            style="font-weight: 600; color: #555; background: #fff; padding: 0.5rem 1rem; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+
+<!-- Navbar -->
+<nav class="navbar navbar-expand-lg navbar-custom mb-4 shadow-sm">
+    <div class="container-fluid">
+        <a class="navbar-brand d-flex align-items-center gap-2" href="#">
+            <span class="fs-4">📊 Attendance Reports</span>
+        </a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarContent">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarContent">
+            <div class="ms-auto d-flex align-items-center gap-3 flex-wrap">
+                <div id="liveClock" class="badge bg-light text-dark border p-2 fs-6 fw-normal"></div>
+                <span class="text-white">Welcome, {{ user.username }}</span>
+                <a href="{% url 'admin-dashboard' %}" class="btn btn-secondary btn-sm">Back to Dashboard</a>
+                <a href="{% url 'admin-logout' %}" class="btn btn-danger btn-sm">Logout</a>
+            </div>
         </div>
-        <span>Welcome, {{ user.username }}</span>
-        <a href="{% url 'admin-dashboard' %}" class="btn btn-secondary">Back to Dashboard</a>
-        <a href="{% url 'admin-logout' %}" class="btn btn-danger">Logout</a>
     </div>
-</div>
+</nav>
 
 <!-- Navigation Menu -->
-<div class="nav-menu">
-    <a href="{% url 'admin-dashboard' %}" class="nav-link">📊 Dashboard</a>
-    <a href="{% url 'admin-reports' %}" class="nav-link active">📈 Reports</a>
-    {% if is_superuser %}
-    <a href="{% url 'admin-sites' %}" class="nav-link">🏢 Sites</a>
-    <a href="{% url 'admin-site-admins' %}" class="nav-link">👤 Site Admins</a>
-    {% endif %}
+<div class="container mb-4">
+    <ul class="nav nav-pills nav-fill bg-white p-2 rounded shadow-sm">
+        <li class="nav-item">
+            <a class="nav-link" href="{% url 'admin-dashboard' %}">📊 Dashboard</a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link active" href="{% url 'admin-reports' %}">📈 Reports</a>
+        </li>
+        {% if is_superuser %}
+        <li class="nav-item">
+            <a class="nav-link" href="{% url 'admin-sites' %}">🏢 Sites</a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" href="{% url 'admin-site-admins' %}">👤 Site Admins</a>
+        </li>
+        {% endif %}
+    </ul>
 </div>
 
 <div class="container">
     <!-- Filters -->
-    <div class="card">
-        <form method="GET" style="display: flex; gap: 1rem; flex-wrap: wrap; align-items: end;">
-            <div class="form-group" style="margin-bottom: 0; flex: 1; min-width: 200px;">
-                <label>Date</label>
-                <input type="date" name="date" value="{{ selected_date }}" class="form-control"
-                    onchange="this.form.submit()">
-            </div>
+    <div class="card mb-4 shadow-sm">
+        <div class="card-body">
+            <form method="GET" class="row g-3 align-items-end">
+                <div class="col-md-3">
+                    <label class="form-label">Date</label>
+                    <input type="date" name="date" value="{{ selected_date }}" class="form-control"
+                        onchange="this.form.submit()">
+                </div>
 
-            <div class="form-group" style="margin-bottom: 0; flex: 1; min-width: 200px;">
-                <label>Department</label>
-                <select name="department" class="form-control" onchange="this.form.submit()">
-                    <option value="">All Departments</option>
-                    {% for dept in departments %}
-                    <option value="{{ dept }}" {% if selected_department == dept %}selected{% endif %}>{{ dept }}</option>
-                    {% endfor %}
-                </select>
-            </div>
+                <div class="col-md-3">
+                    <label class="form-label">Search</label>
+                    <input type="text" name="search" value="{{ search_query|default:'' }}"
+                        placeholder="Name, Badge ID..." class="form-control">
+                </div>
 
-            <div class="form-group" style="margin-bottom: 0; flex: 1; min-width: 200px;">
-                <label>Search</label>
-                <input type="text" name="search" value="{{ search_query|default:'' }}" placeholder="Name, Badge ID..."
-                    class="form-control">
-            </div>
+                <div class="col-md-3 d-flex gap-2">
+                    <button type="submit" class="btn btn-primary flex-grow-1">Filter</button>
+                    <a href="{% url 'admin-reports' %}" class="btn btn-secondary">Reset</a>
+                </div>
 
-            <div style="display: flex; gap: 0.5rem;">
-                <button type="submit" class="btn btn-primary">Filter</button>
-                <a href="{% url 'admin-reports' %}" class="btn btn-secondary">Reset</a>
-            </div>
-
-            <div style="margin-left: auto;">
-                <a href="{% url 'export-reports' %}?date={{ selected_date }}&department={{ selected_department|default:'' }}&search={{ search_query|default:'' }}&status={{ status_filter|default:'' }}"
-                    class="btn btn-success" target="_blank">
-                    📥 Download Excel
-                </a>
-            </div>
-        </form>
-    </div>
-
-    <!-- Stats Grid -->
-    <div class="stats-grid">
-        <a href="?date={{ selected_date }}&department={{ selected_department|default:'' }}&search={{ search_query|default:'' }}"
-            style="text-decoration: none;">
-            <div class="stat-card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
-                <h3>Total Employees</h3>
-                <div class="stat-value">{{ stats.total }}</div>
-            </div>
-        </a>
-        <a href="?date={{ selected_date }}&department={{ selected_department|default:'' }}&search={{ search_query|default:'' }}&status=Present"
-            style="text-decoration: none;">
-            <div class="stat-card" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);">
-                <h3>Present Today</h3>
-                <div class="stat-value">{{ stats.present }}</div>
-            </div>
-        </a>
-        <a href="?date={{ selected_date }}&department={{ selected_department|default:'' }}&search={{ search_query|default:'' }}&status=Absent"
-            style="text-decoration: none;">
-            <div class="stat-card" style="background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);">
-                <h3>Absent Today</h3>
-                <div class="stat-value">{{ stats.absent }}</div>
-            </div>
-        </a>
-        <!-- Placeholder for Late -->
-        <div class="stat-card" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);">
-            <h3>Late Arrivals</h3>
-            <div class="stat-value">{{ stats.late }}</div>
+                <div class="col-12 text-end mt-3">
+                    <a href="{% url 'export-reports' %}?date={{ selected_date }}&department={{ selected_department|default:'' }}&search={{ search_query|default:'' }}&status={{ status_filter|default:'' }}"
+                        class="btn btn-success" target="_blank">
+                        📥 Download Excel
+                    </a>
+                </div>
+            </form>
         </div>
     </div>
 
-    <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 2rem;">
+    <!-- Stats Grid -->
+    <div class="row g-4 mb-4">
+        <div class="col-12 col-md-6 col-xl-3">
+            <a href="?date={{ selected_date }}&department={{ selected_department|default:'' }}&search={{ search_query|default:'' }}"
+                class="text-decoration-none">
+                <div class="card text-white h-100"
+                    style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                    <div class="card-body text-center">
+                        <h5 class="card-title">Total Employees</h5>
+                        <p class="card-text display-4 fw-bold">{{ stats.total }}</p>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col-12 col-md-6 col-xl-3">
+            <a href="?date={{ selected_date }}&department={{ selected_department|default:'' }}&search={{ search_query|default:'' }}&status=Present"
+                class="text-decoration-none">
+                <div class="card text-white h-100"
+                    style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);">
+                    <div class="card-body text-center">
+                        <h5 class="card-title">Present Today</h5>
+                        <p class="card-text display-4 fw-bold">{{ stats.present }}</p>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col-12 col-md-6 col-xl-3">
+            <a href="?date={{ selected_date }}&department={{ selected_department|default:'' }}&search={{ search_query|default:'' }}&status=Absent"
+                class="text-decoration-none">
+                <div class="card text-white h-100"
+                    style="background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);">
+                    <div class="card-body text-center">
+                        <h5 class="card-title">Absent Today</h5>
+                        <p class="card-text display-4 fw-bold">{{ stats.absent }}</p>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col-12 col-md-6 col-xl-3">
+            <div class="card text-white h-100" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);">
+                <div class="card-body text-center">
+                    <h5 class="card-title">Late Arrivals</h5>
+                    <p class="card-text display-4 fw-bold">{{ stats.late }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4">
         <!-- Table -->
-        <div class="card" style="overflow-x: auto;">
-            <h3>Employee Attendance List {% if status_filter %}- <span style="color: #667eea;">{{ status_filter
-                    }}</span>{% endif %}</h3>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Employee</th>
-                        <th>Badge ID</th>
-                        <th>Department</th>
-                        <th>Site</th>
-                        <th>Status</th>
-                        <th>Check In</th>
-                        <th>Check Out</th>
-                        <th>Location</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for item in report_data %}
-                    <tr>
-                        <td>
-                            <div style="font-weight: 600;">{{ item.employee.name }}</div>
-                            <div style="font-size: 0.85rem; color: #666;">{{ item.employee.email|default:"" }}</div>
-                        </td>
-                        <td>{{ item.employee.badge_number|default:"-" }}</td>
-                        <td>{{ item.employee.department|default:"-" }}</td>
-                        <td>{{ item.site }}</td>
-                        <td>
-                            {% if item.status == 'Present' %}
-                            <span class="badge badge-success">Present</span>
-                            {% else %}
-                            <span class="badge badge-danger">Absent</span>
+        <div class="col-lg-8">
+            <div class="card shadow-sm h-100">
+                <div class="card-header bg-white py-3">
+                    <h5 class="mb-0">Employee Attendance List {% if status_filter %}- <span class="text-primary">{{
+                            status_filter }}</span>{% endif %}</h5>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0 align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Employee</th>
+                                <th>Badge ID</th>
+                                <th>Department</th>
+                                <th>Site</th>
+                                <th>Status</th>
+                                <th>Check In</th>
+                                <th>Check Out</th>
+                                <th>Location</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in report_data %}
+                            <tr>
+                                <td>
+                                    <div class="fw-bold">{{ item.employee.name }}</div>
+                                    <div class="small text-muted">{{ item.employee.email|default:"" }}</div>
+                                </td>
+                                <td>{{ item.employee.badge_number|default:"-" }}</td>
+                                <td>{{ item.employee.department|default:"-" }}</td>
+                                <td>{{ item.site }}</td>
+                                <td>
+                                    {% if item.status == 'Present' %}
+                                    <span class="badge bg-success">Present</span>
+                                    {% else %}
+                                    <span class="badge bg-danger">Absent</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ item.check_in }}</td>
+                                <td>{{ item.check_out }}</td>
+                                <td>
+                                    {% if item.latitude and item.longitude and item.site_id %}
+                                    <button
+                                        onclick="viewLocation({{ item.site_id }}, {{ item.latitude }}, {{ item.longitude }})"
+                                        class="btn btn-sm btn-info text-white">View</button>
+                                    {% else %}
+                                    <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="8" class="text-center py-5 text-muted">No records found.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Pagination -->
+                <div class="card-footer bg-white d-flex justify-content-center">
+                    {% if report_data.has_other_pages %}
+                    <nav aria-label="Page navigation">
+                        <ul class="pagination mb-0">
+                            {% if report_data.has_previous %}
+                            <li class="page-item">
+                                <a class="page-link"
+                                    href="?page={{ report_data.previous_page_number }}&date={{ selected_date }}&department={{ selected_department|default:'' }}&search={{ search_query|default:'' }}&status={{ status_filter|default:'' }}">Previous</a>
+                            </li>
                             {% endif %}
-                        </td>
-                        <td>{{ item.check_in }}</td>
-                        <td>{{ item.check_out }}</td>
-                        <td>
-                            {% if item.latitude and item.longitude and item.site_id %}
-                            <button
-                                onclick="viewLocation({{ item.site_id }}, {{ item.latitude }}, {{ item.longitude }})"
-                                class="btn btn-sm btn-info">View</button>
-                            {% else %}
-                            <span style="color: #ccc;">-</span>
+
+                            <li class="page-item disabled">
+                                <span class="page-link">Page {{ report_data.number }} of {{
+                                    report_data.paginator.num_pages }}</span>
+                            </li>
+
+                            {% if report_data.has_next %}
+                            <li class="page-item">
+                                <a class="page-link"
+                                    href="?page={{ report_data.next_page_number }}&date={{ selected_date }}&department={{ selected_department|default:'' }}&search={{ search_query|default:'' }}&status={{ status_filter|default:'' }}">Next</a>
+                            </li>
                             {% endif %}
-                        </td>
-                    </tr>
-                    {% empty %}
-                    <tr>
-                        <td colspan="8" style="text-align: center; padding: 2rem; color: #666;">No records found.</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-
-            <!-- Pagination -->
-            <div style="margin-top: 1rem; display: flex; justify-content: center;">
-                {% if report_data.has_other_pages %}
-                <div style="display: flex; gap: 0.5rem;">
-                    {% if report_data.has_previous %}
-                    <a href="?page={{ report_data.previous_page_number }}&date={{ selected_date }}&department={{ selected_department|default:'' }}&search={{ search_query|default:'' }}&status={{ status_filter|default:'' }}"
-                        class="btn btn-secondary">Previous</a>
-                    {% endif %}
-
-                    <span style="padding: 0.6rem 1rem; background: #f0f0f0; border-radius: 8px;">
-                        Page {{ report_data.number }} of {{ report_data.paginator.num_pages }}
-                    </span>
-
-                    {% if report_data.has_next %}
-                    <a href="?page={{ report_data.next_page_number }}&date={{ selected_date }}&department={{ selected_department|default:'' }}&search={{ search_query|default:'' }}&status={{ status_filter|default:'' }}"
-                        class="btn btn-secondary">Next</a>
+                        </ul>
+                    </nav>
                     {% endif %}
                 </div>
-                {% endif %}
             </div>
         </div>
 
         <!-- Chart -->
-        <div class="card">
-            <h3>Attendance Distribution</h3>
-            <canvas id="attendanceChart"></canvas>
+        <div class="col-lg-4">
+            <div class="card shadow-sm h-100">
+                <div class="card-header bg-white py-3">
+                    <h5 class="mb-0">Attendance Distribution</h5>
+                </div>
+                <div class="card-body d-flex align-items-center justify-content-center">
+                    <canvas id="attendanceChart" style="max-height: 300px;"></canvas>
+                </div>
+            </div>
         </div>
     </div>
 </div>
 
 <!-- Map Modal -->
-<div id="mapModal" class="modal">
-    <div class="modal-content" style="max-width: 800px; width: 90%;">
-        <span class="close" onclick="closeMapModal()">&times;</span>
-        <h2>Attendance Location</h2>
-        <div id="map" style="height: 500px; width: 100%; border-radius: 12px; margin-top: 1rem;"></div>
+<div class="modal fade" id="mapModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+        <div class="modal-content" style="height: 80vh;">
+            <div class="modal-header">
+                <h5 class="modal-title">Attendance Location</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"
+                    onclick="closeMapModal()"></button>
+            </div>
+            <div class="modal-body p-0">
+                <div id="map" class="w-100 h-100"></div>
+            </div>
+        </div>
     </div>
 </div>
-
-<style>
-    .modal {
-        display: none;
-        position: fixed;
-        z-index: 1000;
-        left: 0;
-        top: 0;
-        width: 100%;
-        height: 100%;
-        background-color: rgba(0, 0, 0, 0.5);
-    }
-
-    .modal-content {
-        background-color: white;
-        margin: 5% auto;
-        padding: 2rem;
-        border-radius: 16px;
-        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-    }
-
-    .close {
-        color: #aaa;
-        float: right;
-        font-size: 28px;
-        font-weight: bold;
-        cursor: pointer;
-    }
-
-    .close:hover {
-        color: #000;
-    }
-</style>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script
@@ -230,80 +252,81 @@
     let map;
     let marker;
     let polygon;
+    let mapModal;
+
+    document.addEventListener('DOMContentLoaded', function () {
+        mapModal = new bootstrap.Modal(document.getElementById('mapModal'));
+    });
 
     async function viewLocation(siteId, lat, lng) {
-        document.getElementById('mapModal').style.display = 'block';
+        mapModal.show();
 
-        if (!map) {
-            map = new google.maps.Map(document.getElementById("map"), {
-                center: { lat: lat, lng: lng },
-                zoom: 16
-            });
-        } else {
-            map.setCenter({ lat: lat, lng: lng });
-            map.setZoom(16);
-        }
-
-        // Clear previous markers/polygons
-        if (marker) marker.setMap(null);
-        if (polygon) polygon.setMap(null);
-
-        // Add User Marker
-        marker = new google.maps.Marker({
-            position: { lat: lat, lng: lng },
-            map: map,
-            title: "Employee Location",
-            icon: {
-                url: "http://maps.google.com/mapfiles/ms/icons/blue-dot.png"
-            }
-        });
-
-        // Fetch Site Polygon
-        try {
-            const response = await fetch(`/api/attendance/api/sites/${siteId}/coordinates/`);
-            const data = await response.json();
-
-            if (data.success && data.has_coordinates && data.coordinates.length > 0) {
-                const boundaryCoords = data.coordinates;
-
-                // Close polygon
-                const first = boundaryCoords[0];
-                const last = boundaryCoords[boundaryCoords.length - 1];
-                if (first.lat !== last.lat || first.lng !== last.lng) {
-                    boundaryCoords.push(first);
-                }
-
-                polygon = new google.maps.Polygon({
-                    paths: boundaryCoords,
-                    strokeColor: "#FF0000",
-                    strokeOpacity: 0.8,
-                    strokeWeight: 2,
-                    fillColor: "#FF0000",
-                    fillOpacity: 0.35
+        // Wait for modal to be visible before initializing map
+        setTimeout(async () => {
+            if (!map) {
+                map = new google.maps.Map(document.getElementById("map"), {
+                    center: { lat: lat, lng: lng },
+                    zoom: 16
                 });
-                polygon.setMap(map);
-
-                // Fit bounds to include both user and site
-                const bounds = new google.maps.LatLngBounds();
-                bounds.extend({ lat: lat, lng: lng });
-                boundaryCoords.forEach(coord => bounds.extend(coord));
-                map.fitBounds(bounds);
+            } else {
+                map.setCenter({ lat: lat, lng: lng });
+                map.setZoom(16);
+                google.maps.event.trigger(map, 'resize');
             }
-        } catch (error) {
-            console.error("Error fetching site coordinates:", error);
-        }
+
+            // Clear previous markers/polygons
+            if (marker) marker.setMap(null);
+            if (polygon) polygon.setMap(null);
+
+            // Add User Marker
+            marker = new google.maps.Marker({
+                position: { lat: lat, lng: lng },
+                map: map,
+                title: "Employee Location",
+                icon: {
+                    url: "http://maps.google.com/mapfiles/ms/icons/blue-dot.png"
+                }
+            });
+
+            // Fetch Site Polygon
+            try {
+                const response = await fetch(`/api/attendance/api/sites/${siteId}/coordinates/`);
+                const data = await response.json();
+
+                if (data.success && data.has_coordinates && data.coordinates.length > 0) {
+                    const boundaryCoords = data.coordinates;
+
+                    // Close polygon
+                    const first = boundaryCoords[0];
+                    const last = boundaryCoords[boundaryCoords.length - 1];
+                    if (first.lat !== last.lat || first.lng !== last.lng) {
+                        boundaryCoords.push(first);
+                    }
+
+                    polygon = new google.maps.Polygon({
+                        paths: boundaryCoords,
+                        strokeColor: "#FF0000",
+                        strokeOpacity: 0.8,
+                        strokeWeight: 2,
+                        fillColor: "#FF0000",
+                        fillOpacity: 0.35
+                    });
+                    polygon.setMap(map);
+
+                    // Fit bounds to include both user and site
+                    const bounds = new google.maps.LatLngBounds();
+                    bounds.extend({ lat: lat, lng: lng });
+                    boundaryCoords.forEach(coord => bounds.extend(coord));
+                    map.fitBounds(bounds);
+                }
+            } catch (error) {
+                console.error("Error fetching site coordinates:", error);
+            }
+        }, 200);
     }
 
     function closeMapModal() {
-        document.getElementById('mapModal').style.display = 'none';
-    }
-
-    // Close modal when clicking outside
-    window.onclick = function (event) {
-        const modal = document.getElementById('mapModal');
-        if (event.target == modal) {
-            closeMapModal();
-        }
+        mapModal.hide();
     }
 
     // Live Clock (Reused)
@@ -339,6 +362,7 @@
         },
         options: {
         responsive: true,
+        maintainAspectRatio: false,
         plugins: {
             legend: {
                 position: 'bottom'

@@ -3,250 +3,279 @@
 {% block title %}Sites Management - Admin{% endblock %}
 
 {% block content %}
-<div class="navbar">
-    <h1>🏢 Sites Management</h1>
-    <div class="user-info">
-        <span>Welcome, {{ user.username }}</span>
-        <a href="{% url 'admin-logout' %}" class="btn btn-danger">Logout</a>
+
+<!-- Navbar -->
+<nav class="navbar navbar-expand-lg navbar-custom mb-4 shadow-sm">
+    <div class="container-fluid">
+        <a class="navbar-brand d-flex align-items-center gap-2" href="#">
+            <span class="fs-4">🏢 Sites Management</span>
+        </a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarContent">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarContent">
+            <div class="ms-auto d-flex align-items-center gap-3">
+                <span class="text-white">Welcome, {{ user.username }}</span>
+                <a href="{% url 'admin-logout' %}" class="btn btn-danger btn-sm">Logout</a>
+            </div>
+        </div>
     </div>
-</div>
+</nav>
 
 <!-- Navigation Menu -->
-<div class="nav-menu">
-    <a href="{% url 'admin-dashboard' %}" class="nav-link">📊 Dashboard</a>
-    <a href="{% url 'admin-reports' %}" class="nav-link">📈 Reports</a>
-    {% if user.is_superuser %}
-    <a href="{% url 'admin-sites' %}" class="nav-link active">🏢 Sites</a>
-    <a href="{% url 'admin-site-admins' %}" class="nav-link">👤 Site Admins</a>
-    {% endif %}
+<div class="container mb-4">
+    <ul class="nav nav-pills nav-fill bg-white p-2 rounded shadow-sm">
+        <li class="nav-item">
+            <a class="nav-link" href="{% url 'admin-dashboard' %}">📊 Dashboard</a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" href="{% url 'admin-reports' %}">📈 Reports</a>
+        </li>
+        {% if user.is_superuser %}
+        <li class="nav-item">
+            <a class="nav-link active" href="{% url 'admin-sites' %}">🏢 Sites</a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" href="{% url 'admin-site-admins' %}">👤 Site Admins</a>
+        </li>
+        {% endif %}
+    </ul>
 </div>
 
 <div class="container">
     {% if error %}
-    <div class="alert alert-error">
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
         {{ error }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
     </div>
     {% endif %}
 
-    <div class="card">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-            <h2>All Sites</h2>
-            <div class="action-buttons">
-                <button onclick="showImportModal()" class="btn btn-success" style="margin-right: 0.5rem;">📥 Import
-                    Sites</button>
+    <div class="card shadow-sm">
+        <div
+            class="card-header bg-white py-3 d-flex flex-column flex-md-row justify-content-between align-items-center gap-3">
+            <h2 class="h5 mb-0">All Sites</h2>
+            <div class="d-flex gap-2">
+                <button onclick="showImportModal()" class="btn btn-success">📥 Import Sites</button>
                 <button onclick="showAddModal()" class="btn btn-primary">+ Add New Site</button>
             </div>
         </div>
 
-        <div style="margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center;">
-            <div style="display: flex; gap: 1rem; align-items: center;">
-                <button id="bulkDeleteBtn" onclick="bulkDeleteSites()" class="btn btn-danger"
-                    style="display: none;">Delete Selected</button>
-                <form method="GET" style="display: flex; gap: 0.5rem;">
-                    <input type="text" name="search" placeholder="Search sites..." value="{{ search_query }}"
-                        class="form-control" style="padding: 0.5rem; width: 250px;">
-                    <button type="submit" class="btn btn-secondary">Search</button>
-                    {% if search_query %}
-                    <a href="{% url 'admin-sites' %}" class="btn btn-outline-secondary"
-                        style="text-decoration: none; display: flex; align-items: center;">Clear</a>
-                    {% endif %}
-                </form>
+        <div class="card-body border-bottom bg-light">
+            <div class="d-flex flex-column flex-md-row justify-content-between align-items-center gap-3">
+                <div class="d-flex flex-wrap gap-2 align-items-center w-100 w-md-auto">
+                    <button id="bulkDeleteBtn" onclick="bulkDeleteSites()" class="btn btn-danger d-none">Delete
+                        Selected</button>
+                    <form method="GET" class="d-flex gap-2 flex-grow-1 flex-md-grow-0">
+                        <input type="text" name="search" placeholder="Search sites..." value="{{ search_query }}"
+                            class="form-control" style="min-width: 200px;">
+                        <button type="submit" class="btn btn-secondary">Search</button>
+                        {% if search_query %}
+                        <a href="{% url 'admin-sites' %}"
+                            class="btn btn-outline-secondary d-flex align-items-center">Clear</a>
+                        {% endif %}
+                    </form>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <label class="text-nowrap">Per page:</label>
+                    <select id="perPageSelect" onchange="changePerPage()" class="form-select w-auto">
+                        <option value="10">10</option>
+                        <option value="20">20</option>
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                    </select>
+                </div>
             </div>
-            <select id="perPageSelect" onchange="changePerPage()" class="form-control" style="width: auto;">
-                <option value="10">10 per page</option>
-                <option value="20">20 per page</option>
-                <option value="50">50 per page</option>
-                <option value="100">100 per page</option>
-            </select>
         </div>
 
         {% if sites %}
-        <table>
-            <thead>
-                <tr>
-                    <th style="width: 40px;"><input type="checkbox" id="selectAll" onclick="toggleSelectAll()"></th>
-                    <th>Site Name</th>
-                    <th>Employees</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for site in sites %}
-                <tr>
-                    <td><input type="checkbox" class="site-checkbox" value="{{ site.id }}"
-                            onclick="updateBulkDeleteBtn()"></td>
-                    <td><a href="{% url 'admin-site-detail' site.id %}"
-                            style="text-decoration: none; color: inherit;"><strong>{{ site.name }}</strong></a>
-                    </td>
-                    <td><span class="badge badge-info">{{ site.employee_count }} Employee</span></td>
-                    <td>
-                        <button onclick="showEditModal({{ site.id }}, '{{ site.name|escapejs }}')"
-                            class="btn btn-secondary" style="margin-right: 0.5rem;">Edit</button>
-                        <button onclick="confirmDelete({{ site.id }}, '{{ site.name|escapejs }}')"
-                            class="btn btn-danger">Delete</button>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+        <div class="table-responsive">
+            <table class="table table-hover mb-0 align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width: 40px;">
+                            <input type="checkbox" id="selectAll" class="form-check-input" onclick="toggleSelectAll()">
+                        </th>
+                        <th>Site Name</th>
+                        <th>Employees</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for site in sites %}
+                    <tr>
+                        <td>
+                            <input type="checkbox" class="form-check-input site-checkbox" value="{{ site.id }}"
+                                onclick="updateBulkDeleteBtn()">
+                        </td>
+                        <td>
+                            <a href="{% url 'admin-site-detail' site.id %}"
+                                class="text-decoration-none fw-bold text-dark">
+                                {{ site.name }}
+                            </a>
+                        </td>
+                        <td>
+                            <span class="badge bg-info text-dark">{{ site.employee_count }} Employee</span>
+                        </td>
+                        <td>
+                            <div class="d-flex gap-2">
+                                <button type="button" class="btn btn-sm btn-outline-secondary edit-site-btn"
+                                    data-id="{{ site.id }}" data-name="{{ site.name }}">Edit</button>
+                                <button type="button" class="btn btn-sm btn-outline-danger delete-site-btn"
+                                    data-id="{{ site.id }}" data-name="{{ site.name }}">Delete</button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
 
-
-
-        {% include "pagination.html" with page_obj=sites %}
+        <div class="card-footer bg-white">
+            {% include "pagination.html" with page_obj=sites %}
+        </div>
         {% else %}
-        <p style="text-align: center; color: #666; padding: 2rem;">No sites found. Add your first site to get started!
-        </p>
+        <div class="text-center py-5 text-muted">
+            <p class="mb-0">No sites found. Add your first site to get started!</p>
+        </div>
         {% endif %}
     </div>
 </div>
 
 <!-- Add Site Modal -->
-<div id="addModal" class="modal">
-    <div class="modal-content">
-        <span class="close" onclick="closeAddModal()">&times;</span>
-        <h2>Add New Site</h2>
-        <form method="POST" action="{% url 'admin-add-site' %}" enctype="multipart/form-data">
-            {% csrf_token %}
-            <div class="form-group">
-                <label for="add-name">Site Name</label>
-                <input type="text" id="add-name" name="name" required>
+<div class="modal fade" id="addModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add New Site</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"
+                    onclick="closeAddModal()"></button>
             </div>
-            <div class="form-group">
-                <label for="add-kml">KML File (Optional)</label>
-                <input type="file" id="add-kml" name="kml_file" accept=".kml">
+            <div class="modal-body">
+                <form method="POST" action="{% url 'admin-add-site' %}" enctype="multipart/form-data">
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <label for="add-name" class="form-label">Site Name</label>
+                        <input type="text" id="add-name" name="name" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="add-kml" class="form-label">KML File (Optional)</label>
+                        <input type="file" id="add-kml" name="kml_file" class="form-control" accept=".kml">
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">Add Site</button>
+                </form>
             </div>
-            <button type="submit" class="btn btn-primary">Add Site</button>
-        </form>
+        </div>
     </div>
 </div>
 
 <!-- Edit Site Modal -->
-<div id="editModal" class="modal">
-    <div class="modal-content">
-        <span class="close" onclick="closeEditModal()">&times;</span>
-        <h2>Edit Site</h2>
-        <form method="POST" id="editForm" enctype="multipart/form-data">
-            {% csrf_token %}
-            <div class="form-group">
-                <label for="edit-name">Site Name</label>
-                <input type="text" id="edit-name" name="name" required>
+<div class="modal fade" id="editModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Edit Site</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"
+                    onclick="closeEditModal()"></button>
             </div>
-            <div class="form-group">
-                <label for="edit-kml">Update KML File (Optional)</label>
-                <input type="file" id="edit-kml" name="kml_file" accept=".kml">
-                <small style="display: block; margin-top: 0.5rem; color: #666;">Upload a new KML file to update site
-                    coordinates.</small>
+            <div class="modal-body">
+                <form method="POST" id="editForm" enctype="multipart/form-data">
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <label for="edit-name" class="form-label">Site Name</label>
+                        <input type="text" id="edit-name" name="name" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="edit-kml" class="form-label">Update KML File (Optional)</label>
+                        <input type="file" id="edit-kml" name="kml_file" class="form-control" accept=".kml">
+                        <div class="form-text">Upload a new KML file to update site coordinates.</div>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">Save Changes</button>
+                </form>
             </div>
-            <button type="submit" class="btn btn-primary">Save Changes</button>
-        </form>
+        </div>
     </div>
 </div>
 
 <!-- Import Modal -->
-<div id="importModal" class="modal">
-    <div class="modal-content">
-        <span class="close" onclick="closeImportModal()">&times;</span>
-        <h2>Import Sites from Excel</h2>
-        <p>Upload an Excel file with a "Name" column.</p>
-        <form id="importForm" onsubmit="handleImport(event)">
-            <div class="form-group">
-                <input type="file" id="excelFile" accept=".xlsx, .xls" required class="form-control"
-                    style="padding: 0.5rem;">
+<div class="modal fade" id="importModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Import Sites from Excel</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"
+                    onclick="closeImportModal()"></button>
             </div>
-            <div id="importResult" style="margin-bottom: 1rem; display: none;"></div>
-            <button type="submit" class="btn btn-primary">Upload & Import</button>
-        </form>
+            <div class="modal-body">
+                <p class="text-muted mb-4">Upload an Excel file with a "Name" column.</p>
+                <form id="importForm" onsubmit="handleImport(event)">
+                    <div class="mb-3">
+                        <input type="file" id="excelFile" accept=".xlsx, .xls" required class="form-control">
+                    </div>
+                    <div id="importResult" class="alert d-none"></div>
+                    <button type="submit" class="btn btn-primary w-100">Upload & Import</button>
+                </form>
+            </div>
+        </div>
     </div>
 </div>
 
-<style>
-    .nav-menu {
-        background: rgba(255, 255, 255, 0.95);
-        backdrop-filter: blur(10px);
-        padding: 0.5rem 2rem;
-        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
-        display: flex;
-        gap: 1rem;
-    }
-
-    .nav-link {
-        padding: 0.8rem 1.5rem;
-        text-decoration: none;
-        color: #666;
-        font-weight: 600;
-        border-radius: 8px;
-        transition: all 0.3s ease;
-    }
-
-    .nav-link:hover {
-        background: #f0f0f0;
-        color: #667eea;
-    }
-
-    .nav-link.active {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-    }
-
-    .modal {
-        display: none;
-        position: fixed;
-        z-index: 1000;
-        left: 0;
-        top: 0;
-        width: 100%;
-        height: 100%;
-        background-color: rgba(0, 0, 0, 0.5);
-    }
-
-    .modal-content {
-        background-color: white;
-        margin: 10% auto;
-        padding: 2rem;
-        border-radius: 16px;
-        width: 90%;
-        max-width: 500px;
-        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-    }
-
-    .close {
-        color: #aaa;
-        float: right;
-        font-size: 28px;
-        font-weight: bold;
-        cursor: pointer;
-    }
-
-    .close:hover {
-        color: #000;
-    }
-</style>
-
 <script>
+    let addModal, editModal, importModal;
+
+    document.addEventListener('DOMContentLoaded', function () {
+        addModal = new bootstrap.Modal(document.getElementById('addModal'));
+        editModal = new bootstrap.Modal(document.getElementById('editModal'));
+        importModal = new bootstrap.Modal(document.getElementById('importModal'));
+
+        // Event listeners for Edit buttons
+        document.querySelectorAll('.edit-site-btn').forEach(btn => {
+            btn.addEventListener('click', function () {
+                const id = this.dataset.id;
+                const name = this.dataset.name;
+                showEditModal(id, name);
+            });
+        });
+
+        // Event listeners for Delete buttons
+        document.querySelectorAll('.delete-site-btn').forEach(btn => {
+            btn.addEventListener('click', function () {
+                const id = this.dataset.id;
+                const name = this.dataset.name;
+                confirmDelete(id, name);
+            });
+        });
+
+        // Set initial value for per page select
+        const urlParams = new URLSearchParams(window.location.search);
+        const perPage = urlParams.get('per_page') || '{{ per_page|default:"10" }}';
+        const select = document.getElementById('perPageSelect');
+        if (select) select.value = perPage;
+    });
+
     function showAddModal() {
-        document.getElementById('addModal').style.display = 'block';
+        addModal.show();
     }
 
     function closeAddModal() {
-        document.getElementById('addModal').style.display = 'none';
+        addModal.hide();
     }
 
     function showEditModal(id, name) {
         document.getElementById('edit-name').value = name;
         document.getElementById('editForm').action = `/api/attendance/dashboard/sites/edit/${id}/`;
-        document.getElementById('editModal').style.display = 'block';
+        editModal.show();
     }
 
     function closeEditModal() {
-        document.getElementById('editModal').style.display = 'none';
+        editModal.hide();
     }
 
     function showImportModal() {
-        document.getElementById('importModal').style.display = 'block';
+        importModal.show();
     }
 
     function closeImportModal() {
-        document.getElementById('importModal').style.display = 'none';
+        importModal.hide();
     }
 
     function confirmDelete(id, name) {
@@ -275,9 +304,9 @@
         formData.append('file', fileField.files[0]);
 
         const resultDiv = document.getElementById('importResult');
-        resultDiv.style.display = 'block';
+        resultDiv.classList.remove('d-none', 'alert-success', 'alert-danger');
+        resultDiv.classList.add('alert-info');
         resultDiv.innerHTML = 'Importing... Please wait.';
-        resultDiv.className = 'alert alert-info';
 
         try {
             const response = await fetch('{% url "import-sites" %}', {
@@ -291,11 +320,13 @@
             const data = await response.json();
 
             if (response.ok && data.imported_count > 0) {
-                resultDiv.className = 'alert alert-success';
+                resultDiv.classList.remove('alert-info');
+                resultDiv.classList.add('alert-success');
                 resultDiv.innerHTML = `Success! Imported ${data.imported_count} sites.`;
                 setTimeout(() => window.location.reload(), 2000);
             } else {
-                resultDiv.className = 'alert alert-danger';
+                resultDiv.classList.remove('alert-info');
+                resultDiv.classList.add('alert-danger');
                 let errorMsg = `Error: ${data.error || 'Import failed'}. Imported: ${data.imported_count || 0}.`;
                 if (data.debug) {
                     errorMsg += `<br><small>Columns found: ${data.debug.columns}</small>`;
@@ -303,7 +334,8 @@
                 resultDiv.innerHTML = errorMsg;
             }
         } catch (error) {
-            resultDiv.className = 'alert alert-danger';
+            resultDiv.classList.remove('alert-info');
+            resultDiv.classList.add('alert-danger');
             resultDiv.innerHTML = `Error: ${error.message}`;
         }
     }
@@ -315,24 +347,6 @@
         urlParams.set('per_page', perPage);
         urlParams.set('page', 1);
         window.location.search = urlParams.toString();
-    }
-
-    // Set initial value for per page select
-    document.addEventListener('DOMContentLoaded', function () {
-        const urlParams = new URLSearchParams(window.location.search);
-        const perPage = urlParams.get('per_page') || '{{ per_page|default:"10" }}';
-        const select = document.getElementById('perPageSelect');
-        if (select) select.value = perPage;
-    });
-
-    // Close modal when clicking outside
-    window.onclick = function (event) {
-        const addModal = document.getElementById('addModal');
-        const editModal = document.getElementById('editModal');
-        const importModal = document.getElementById('importModal');
-        if (event.target == addModal) closeAddModal();
-        if (event.target == editModal) closeEditModal();
-        if (event.target == importModal) closeImportModal();
     }
 
     // Bulk Delete Logic
@@ -347,10 +361,10 @@
         const checkboxes = document.querySelectorAll('.site-checkbox:checked');
         const btn = document.getElementById('bulkDeleteBtn');
         if (checkboxes.length > 0) {
-            btn.style.display = 'block';
+            btn.classList.remove('d-none');
             btn.innerText = `Delete Selected (${checkboxes.length})`;
         } else {
-            btn.style.display = 'none';
+            btn.classList.add('d-none');
         }
     }
 
