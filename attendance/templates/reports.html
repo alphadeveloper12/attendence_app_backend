@@ -55,6 +55,20 @@
                         onchange="this.form.submit()">
                 </div>
 
+                {% if is_superuser %}
+                <div class="col-md-3">
+                    <label class="form-label">Site</label>
+                    <select name="site" class="form-select" onchange="this.form.submit()">
+                        <option value="all">All Sites</option>
+                        {% for site in sites %}
+                        <option value="{{ site.id }}" {% if selected_site == site.id %}selected{% endif %}>
+                            {{ site.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                {% endif %}
+
                 <div class="col-md-3">
                     <label class="form-label">Search</label>
                     <input type="text" name="search" value="{{ search_query|default:'' }}"
@@ -67,7 +81,7 @@
                 </div>
 
                 <div class="col-12 text-end mt-3">
-                    <a href="{% url 'export-reports' %}?date={{ selected_date }}&department={{ selected_department|default:'' }}&search={{ search_query|default:'' }}&status={{ status_filter|default:'' }}"
+                    <a href="{% url 'export-reports' %}?date={{ selected_date }}&department={{ selected_department|default:'' }}&search={{ search_query|default:'' }}&status={{ status_filter|default:'' }}&site={{ selected_site|default:'all' }}"
                         class="btn btn-success" target="_blank">
                         📥 Download Excel
                     </a>

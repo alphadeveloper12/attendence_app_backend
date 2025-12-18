@@ -1188,10 +1188,11 @@ def admin_user_detail_view(request, user_id):
         slots_data = {}
         
         # Office In Data
+        # Office In Data
         slots_data["Office In"] = {
             "time_range": "9:00 AM",
             "status": "present" if (attendance_record and attendance_record.check_in_time) else None,
-            "check_in": attendance_record.check_in_time if attendance_record else None,
+            "check_in": timezone.localtime(attendance_record.check_in_time) if (attendance_record and attendance_record.check_in_time) else None,
             "late_minutes": attendance_record.late_minutes if attendance_record else 0,
             "latitude": attendance_record.latitude if attendance_record else None,
             "longitude": attendance_record.longitude if attendance_record else None,
@@ -1201,7 +1202,7 @@ def admin_user_detail_view(request, user_id):
         slots_data["Office Out"] = {
             "time_range": "6:00 PM",
             "status": "present" if (attendance_record and attendance_record.check_out_time) else None,
-            "check_in": attendance_record.check_out_time if attendance_record else None,
+            "check_in": timezone.localtime(attendance_record.check_out_time) if (attendance_record and attendance_record.check_out_time) else None,
             "early_minutes": attendance_record.early_minutes if attendance_record else 0,
             "latitude": attendance_record.latitude if attendance_record else None,
             "longitude": attendance_record.longitude if attendance_record else None,
@@ -1856,6 +1857,7 @@ def admin_reports_view(request):
     department = request.GET.get('department')
     search_query = request.GET.get('search')
     status_filter = request.GET.get('status')
+    site_id = request.GET.get('site')
     page = request.GET.get('page', 1)
 
     # Date Logic
@@ -1870,9 +1872,23 @@ def admin_reports_view(request):
     # Base Queryset
     employees = Employee.objects.all()
 
-    # Site Filter (for Site Admins)
-    if not is_superuser and site_admin_site:
+    # Fetch all sites for dropdown (only for superuser)
+    sites = []
+    selected_site = 'all'
+
+    if is_superuser:
+        sites = Site.objects.all()
+        if site_id and site_id != 'all':
+            try:
+                site_obj = Site.objects.get(id=site_id)
+                employees = employees.filter(site=site_obj)
+                selected_site = int(site_id)
+            except (Site.DoesNotExist, ValueError):
+                pass
+    elif site_admin_site:
+        # Site Admin is restricted to their site
         employees = employees.filter(site=site_admin_site)
+        selected_site = site_admin_site.id
 
     # Search Filter
     if search_query:
@@ -1909,8 +1925,8 @@ def admin_reports_view(request):
 
         if att:
             status = 'Present'
-            check_in = att.check_in_time.strftime('%H:%M') if att.check_in_time else '-'
-            check_out = att.check_out_time.strftime('%H:%M') if att.check_out_time else '-'
+            check_in = timezone.localtime(att.check_in_time).strftime('%H:%M') if att.check_in_time else '-'
+            check_out = timezone.localtime(att.check_out_time).strftime('%H:%M') if att.check_out_time else '-'
             
             # Late Logic
             if att.late_minutes > 0:
@@ -1960,6 +1976,8 @@ def admin_reports_view(request):
         'status_filter': status_filter,
         'is_superuser': is_superuser,
         'site_admin_site': site_admin_site,
+        'sites': sites,
+        'selected_site': selected_site,
     }
     return render(request, 'reports.html', context)
 
@@ -1985,6 +2003,7 @@ def export_reports_view(request):
     department = request.GET.get('department')
     search_query = request.GET.get('search')
     status_filter = request.GET.get('status')
+    site_id = request.GET.get('site')
 
     if date_str:
         try:
@@ -1996,7 +2015,14 @@ def export_reports_view(request):
 
     employees = Employee.objects.all()
 
-    if not is_superuser and site_admin_site:
+    if is_superuser:
+        if site_id and site_id != 'all':
+            try:
+                site_obj = Site.objects.get(id=site_id)
+                employees = employees.filter(site=site_obj)
+            except (Site.DoesNotExist, ValueError):
+                pass
+    elif site_admin_site:
         employees = employees.filter(site=site_admin_site)
 
     if department:
