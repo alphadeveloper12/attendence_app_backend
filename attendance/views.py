@@ -549,7 +549,7 @@ class RegisterUserView(APIView):
                 return Response({"error": "Employee not found"}, status=404)
         
         # If creating new user, check email uniqueness
-        if not emp and Employee.objects.filter(email=email).exists():
+        if not emp and email and Employee.objects.filter(email=email).exists():
             print(f"Employee with email {email} already exists")
             return Response(
                 {"error": "Employee with this email already exists."},

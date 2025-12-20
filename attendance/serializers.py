@@ -27,7 +27,12 @@ class EmployeeSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Employee
-        fields = ['id', 'name', 'email', 'phone', 'department', 'position', 'profile_picture_url', 'site', 'passport_number', 'badge_number']
+        fields = [
+            'id', 'name', 'email', 'phone', 'department', 'position', 'profile_picture_url', 'site', 
+            'job_description', 'salary_grade', 'badge_number', 'mol_id', 'labor_card_number', 'employer', 
+            'nationality', 'gender', 'marital_status', 'religion', 'date_of_birth', 'date_of_joining', 
+            'passport_number', 'passport_expiry', 'visa_details', 'status'
+        ]
 
     def get_profile_picture_url(self, obj):
         # This will return the absolute URL for the profile picture
@@ -39,7 +44,7 @@ class EmployeeSerializer(serializers.ModelSerializer):
 class EnrollSerializer(serializers.Serializer):
     id = serializers.IntegerField(required=False)
     name = serializers.CharField(max_length=100)
-    email = serializers.EmailField()
+    email = serializers.EmailField(required=False, allow_blank=True, allow_null=True)
     phone = serializers.CharField(max_length=20)
     department = serializers.CharField(max_length=100, required=False, allow_blank=True)  # Changed to CharField
     position = serializers.CharField(max_length=100, required=False, allow_blank=True)
