@@ -31,7 +31,7 @@ class EmployeeSerializer(serializers.ModelSerializer):
             'id', 'name', 'email', 'phone', 'department', 'position', 'profile_picture_url', 'site', 
             'job_description', 'salary_grade', 'badge_number', 'mol_id', 'labor_card_number', 'employer', 
             'nationality', 'gender', 'marital_status', 'religion', 'date_of_birth', 'date_of_joining', 
-            'passport_number', 'passport_expiry', 'visa_details', 'status'
+            'passport_number', 'passport_expiry', 'visa_details', 'status', 'gross_salary', 'camp', 'transportation'
         ]
 
     def get_profile_picture_url(self, obj):
@@ -65,6 +65,9 @@ class EnrollSerializer(serializers.Serializer):
     passport_expiry = serializers.DateField(required=False, allow_null=True)
     visa_details = serializers.CharField(required=False, allow_blank=True)
     status = serializers.CharField(required=False, allow_blank=True)
+    gross_salary = serializers.DecimalField(max_digits=10, decimal_places=2, required=False, allow_null=True)
+    camp = serializers.CharField(required=False, allow_blank=True)
+    transportation = serializers.CharField(required=False, allow_blank=True)
     # images = serializers.ListField(
     #     child=serializers.FileField(), allow_empty=False, write_only=True
     # )

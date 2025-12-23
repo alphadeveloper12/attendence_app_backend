@@ -1,10 +1,16 @@
 # attendance/views.py
+import calendar
+from fpdf import FPDF
+from django.http import HttpResponse, FileResponse
+from django.template.loader import render_to_string
+import io
 import logging
 import base64
 import re
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta
 from collections import defaultdict
+from decimal import Decimal
 
 from django.conf import settings
 from django.db import transaction
@@ -129,8 +135,18 @@ class ImportEmployeesView(APIView):
             # Locate header rows
             # Scan first 20 rows to find the header
             header_row_index = -1
+            employer_name = None
+            
             for i in range(20):
                 row_values = df.iloc[i].astype(str).str.strip().tolist()
+                
+                # Try to find employer name in the first few rows
+                if i < 5 and not employer_name:
+                    for val in row_values:
+                        if val and val.lower() != 'nan' and len(val) > 5:
+                            employer_name = val
+                            break
+
                 # Check for key columns
                 if any('Sr. Nr.' in val or 'Name' in val or 'Status' in val for val in row_values):
                     header_row_index = i
@@ -163,20 +179,41 @@ class ImportEmployeesView(APIView):
             
             col_map['position'] = find_col_index(['Designation'], header_row_1)
             
-            col_map['badge_number'] = find_col_index(['KFD & KAMI', 'Emp. ID'], header_row_1)
+            col_map['job_description'] = find_col_index(['Present Designation'], header_row_1)
+
+            # Refined badge number mapping to avoid 'Previous Emp. ID'
+            col_map['badge_number'] = find_col_index(['KFD & KAMI'], header_row_1)
+            if col_map['badge_number'] == -1:
+                # If not found by KFD & KAMI, look for Emp. ID but exclude columns with 'Previous'
+                for idx, val in enumerate(header_row_1):
+                    if 'emp. id' in val.lower() and 'previous' not in val.lower():
+                        col_map['badge_number'] = idx
+                        break
             
             col_map['salary_grade'] = find_col_index(['Category'], header_row_1)
             
+            col_map['gross_salary'] = find_col_index(['Gross Salary'], header_row_2)
+            if col_map['gross_salary'] == -1: col_map['gross_salary'] = find_col_index(['Gross Salary'], header_row_1)
+
             col_map['nationality'] = find_col_index(['Nationality'], header_row_1)
+            if col_map['nationality'] == -1: col_map['nationality'] = find_col_index(['Nationality'], header_row_2)
+
             col_map['gender'] = find_col_index(['Gender'], header_row_1)
+            if col_map['gender'] == -1: col_map['gender'] = find_col_index(['Gender'], header_row_2)
+
             col_map['marital_status'] = find_col_index(['Marital'], header_row_1)
+            if col_map['marital_status'] == -1: col_map['marital_status'] = find_col_index(['Marital'], header_row_2)
+
             col_map['religion'] = find_col_index(['Religion'], header_row_1)
+            if col_map['religion'] == -1: col_map['religion'] = find_col_index(['Religion'], header_row_2)
+
             col_map['visa_details'] = find_col_index(['Visa Details'], header_row_1)
+            if col_map['visa_details'] == -1: col_map['visa_details'] = find_col_index(['Visa Details'], header_row_2)
             
             # Nested columns (Row 2) - usually under the main header
             # If header_row_2 is empty or useless, we might need to look at header_row_1 too or just rely on 2
-            col_map['labor_card_number'] = find_col_index(['L.Card', 'CEC Nr'], header_row_2)
-            if col_map['labor_card_number'] == -1: col_map['labor_card_number'] = find_col_index(['L.Card', 'CEC Nr'], header_row_1)
+            col_map['labor_card_number'] = find_col_index(['L.Card/CEC Nr', 'L.Card', 'CEC Nr'], header_row_2)
+            if col_map['labor_card_number'] == -1: col_map['labor_card_number'] = find_col_index(['L.Card/CEC Nr', 'L.Card', 'CEC Nr'], header_row_1)
 
             col_map['mol_id'] = find_col_index(['Personal Nr'], header_row_2)
             if col_map['mol_id'] == -1: col_map['mol_id'] = find_col_index(['Personal Nr'], header_row_1)
@@ -185,9 +222,12 @@ class ImportEmployeesView(APIView):
             if col_map['passport_number'] == -1: col_map['passport_number'] = find_col_index(['New Passport Nr', 'PP No'], header_row_1)
 
             col_map['passport_expiry'] = find_col_index(['Expiry Date'], header_row_2)
+            if col_map['passport_expiry'] == -1: col_map['passport_expiry'] = find_col_index(['Expiry Date'], header_row_1)
             
             # Dates
             col_map['dob'] = find_col_index(['Date of Birth'], header_row_1)
+            if col_map['dob'] == -1: col_map['dob'] = find_col_index(['Date of Birth'], header_row_2)
+
             col_map['doj'] = find_col_index(['D.O.J'], header_row_2)
             if col_map['doj'] == -1: col_map['doj'] = find_col_index(['D.O.J'], header_row_1)
 
@@ -244,6 +284,19 @@ class ImportEmployeesView(APIView):
                     emp.position = get_val('position')
                     emp.badge_number = badge
                     emp.salary_grade = get_val('salary_grade')
+                    emp.job_description = get_val('job_description')
+                    emp.employer = employer_name # Set employer from sheet top
+                    
+                    # Gross Salary
+                    gross_salary_val = get_val('gross_salary')
+                    if gross_salary_val:
+                        try:
+                            # Remove commas if any
+                            gross_salary_val = gross_salary_val.replace(',', '')
+                            emp.gross_salary = float(gross_salary_val)
+                        except:
+                            pass
+
                     emp.nationality = get_val('nationality')
                     emp.gender = get_val('gender')
                     emp.marital_status = get_val('marital_status')
@@ -257,6 +310,10 @@ class ImportEmployeesView(APIView):
                     # Handle Site
                     site_name = get_val('site')
                     if site_name:
+                        # Map HO or Head Office to Head Office
+                        if site_name.strip().upper() in ['HO', 'HEAD OFFICE']:
+                            site_name = 'Head Office'
+                        
                         site_obj = Site.objects.filter(name__iexact=site_name).first()
                         if not site_obj:
                             site_obj = Site.objects.create(name=site_name)
@@ -304,6 +361,71 @@ class ImportEmployeesView(APIView):
             return Response({'error': str(e)}, status=500)
 
 
+class DownloadEmployeeTemplateView(APIView):
+    authentication_classes = [SessionAuthentication]
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        import pandas as pd
+        import io
+        from django.http import HttpResponse
+
+        # Create the multi-row header structure
+        # Row 1: Employer Name (Placeholder)
+        # Row 2: Empty
+        # Row 3: Date (Placeholder)
+        # Row 4: Main Headers
+        # Row 5: Sub Headers (for merged columns)
+
+        employer_placeholder = "KATILINK PARKWAY METALS AND JOINERY INDUSTRIES L.L.C"
+        date_placeholder = timezone.now().strftime('%d/%m/%y')
+
+        # Define headers based on the sample provided by the user
+        header_row_1 = ["Sr. Nr.", "Status", "Status Date", "Category", "Division", "Project / Site", "Previous Emp. ID of PIC", "KFD & KAMI Emp.    ID", "Summary Code", "Name", "Present  Designation", "Nationality", "Gender", "Marital Status", "Religion", "Visa Details", "Labour Card Details", "", "Passport Details", "", "", "Current Salary Details", "", "", "", "", "", "", "Leave Entitlement Details", "Date of Birth (dd/mm/yyyy)"]
+        header_row_2 = ["", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "Status", "L.Card/CEC Nr.", "Personal Nr.", "PP No. on Visa", "New Passport Nr.", "Expiry Date (dd/mm/yyyy)", "Basic Salary", "Accmn/CCA", "Transport/Special Allow", "Food Allowance", "Fixed OT allowance", " Others ", " Salary Reduction", " Gross Salary ", "D.O.J. (dd/mm/yyyy)"]
+
+        # Create a DataFrame with empty data
+        # We'll use a list of lists to represent the rows
+        data = [
+            [employer_placeholder] + [""] * (len(header_row_1) - 1),
+            [""] * len(header_row_1),
+            ["", "", date_placeholder] + [""] * (len(header_row_1) - 3),
+            header_row_1,
+            header_row_2,
+            # Add a sample row
+            [1, "Active", "04/04/2024", "Worker", "Joinery", "Factory", "", "16227", "0002", "Sample Employee", "Carpenter Finishing", "Pakistan", "Male", "Married", "Muslim", "PICDUB", "", "20001019369957", "ML4125622", "ML4125622", "02/04/2033", "800.00", "", "200.00", "", "450.00", "", "", "1450.00", "05/01/2022", "01/01/1993"]
+        ]
+
+        df = pd.DataFrame(data)
+
+        # Create Excel file in memory
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            df.to_excel(writer, index=False, header=False, sheet_name='Employees')
+            
+            # Get the xlsxwriter workbook and worksheet objects
+            workbook = writer.book
+            worksheet = writer.sheets['Employees']
+
+            # Add some formatting
+            header_format = workbook.add_format({'bold': True, 'bg_color': '#D7E4BC', 'border': 1})
+            
+            # Apply formatting to header rows (rows 4 and 5, 0-indexed: 3 and 4)
+            for col_num, value in enumerate(header_row_1):
+                worksheet.write(3, col_num, value, header_format)
+            for col_num, value in enumerate(header_row_2):
+                worksheet.write(4, col_num, value, header_format)
+
+        output.seek(0)
+
+        response = HttpResponse(
+            output.read(),
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        response['Content-Disposition'] = 'attachment; filename=employee_import_template.xlsx'
+        return response
+
+
 class AdminAddEmployeeView(APIView):
     authentication_classes = [SessionAuthentication]
     permission_classes = [IsAdminUser]
@@ -331,6 +453,13 @@ class AdminAddEmployeeView(APIView):
                     pass
 
             def parse_date(d): return d if d else None
+            def parse_decimal(d):
+                if not d or str(d).strip() == '':
+                    return None
+                try:
+                    return Decimal(str(d).replace(',', ''))
+                except:
+                    return None
 
             Employee.objects.create(
                 name=name,
@@ -354,7 +483,10 @@ class AdminAddEmployeeView(APIView):
                 mol_id=data.get('mol_id'),
                 job_description=data.get('job_description'),
                 employer=data.get('employer'),
-                site=site
+                site=site,
+                gross_salary=parse_decimal(data.get('gross_salary')),
+                camp=data.get('camp'),
+                transportation=data.get('transportation')
             )
             return Response({'success': True, 'message': 'Employee added successfully'})
             
@@ -393,6 +525,9 @@ class AdminEditEmployeeView(APIView):
                 'job_description': emp.job_description,
                 'employer': emp.employer,
                 'site': emp.site.id if emp.site else '',
+                'gross_salary': str(emp.gross_salary) if emp.gross_salary else '',
+                'camp': emp.camp,
+                'transportation': emp.transportation,
             }
             return Response(data)
         except Employee.DoesNotExist:
@@ -418,6 +553,9 @@ class AdminEditEmployeeView(APIView):
             emp.passport_number = data.get('passport_number')
             emp.visa_details = data.get('visa_details')
             emp.labor_card_number = data.get('labor_card_number')
+            # gross_salary handled below with parse_decimal
+            emp.camp = data.get('camp')
+            emp.transportation = data.get('transportation')
             emp.mol_id = data.get('mol_id')
             emp.job_description = data.get('job_description')
             emp.employer = data.get('employer')
@@ -432,9 +570,18 @@ class AdminEditEmployeeView(APIView):
                 emp.site = None
             
             def parse_date(d): return d if d else None
+            def parse_decimal(d):
+                if not d or str(d).strip() == '':
+                    return None
+                try:
+                    return Decimal(str(d).replace(',', ''))
+                except:
+                    return None
+
             emp.date_of_birth = parse_date(data.get('date_of_birth'))
             emp.date_of_joining = parse_date(data.get('date_of_joining'))
             emp.passport_expiry = parse_date(data.get('passport_expiry'))
+            emp.gross_salary = parse_decimal(data.get('gross_salary'))
             
             emp.save()
             return Response({'success': True, 'message': 'Employee updated successfully'})
@@ -516,6 +663,9 @@ class RegisterUserView(APIView):
         passport_expiry = data.get("passport_expiry")
         visa_details = data.get("visa_details") or ""
         status = data.get("status") or ""
+        gross_salary = data.get("gross_salary")
+        camp = data.get("camp") or ""
+        transportation = data.get("transportation") or ""
         
         # Files MUST come from request.FILES
         files = request.FILES.getlist("images") or request.FILES.getlist("images[]")
@@ -592,6 +742,9 @@ class RegisterUserView(APIView):
             emp.passport_expiry = passport_expiry
             emp.visa_details = visa_details
             emp.status = status
+            emp.gross_salary = gross_salary
+            emp.camp = camp
+            emp.transportation = transportation
             emp.save()
         else:
             # Create new employee
@@ -618,6 +771,9 @@ class RegisterUserView(APIView):
                 passport_expiry=passport_expiry,
                 visa_details=visa_details,
                 status=status,
+                gross_salary=gross_salary,
+                camp=camp,
+                transportation=transportation,
             )
 
         # Process images if provided
@@ -1084,7 +1240,7 @@ def admin_dashboard_view(request):
     
     total_employees = Employee.objects.count()
     total_sites = Site.objects.count()
-    today = timezone.now().date()
+    today = timezone.localdate()
     today_attendance = Attendance.objects.filter(date=today).count()
     
     # Get all sites for the filter dropdown
@@ -1164,7 +1320,7 @@ def admin_user_detail_view(request, user_id):
             pass
 
     filter_type = request.GET.get("filter", "daily")
-    today = timezone.now().date()
+    today = timezone.localdate()
     
     # Date Navigation Logic
     date_str = request.GET.get("date")
@@ -1813,8 +1969,8 @@ class ExportAttendanceView(APIView):
 
         # Data
         for record in queryset:
-            check_in = record.check_in_time.strftime("%H:%M:%S") if record.check_in_time else "-"
-            check_out = record.check_out_time.strftime("%H:%M:%S") if record.check_out_time else "-"
+            check_in = timezone.localtime(record.check_in_time).strftime("%I:%M %p") if record.check_in_time else "-"
+            check_out = timezone.localtime(record.check_out_time).strftime("%I:%M %p") if record.check_out_time else "-"
             location = f"{record.latitude}, {record.longitude}" if record.latitude else "-"
             
             ws.append([
@@ -1925,14 +2081,19 @@ def admin_reports_view(request):
 
         if att:
             status = 'Present'
-            check_in = timezone.localtime(att.check_in_time).strftime('%H:%M') if att.check_in_time else '-'
-            check_out = timezone.localtime(att.check_out_time).strftime('%H:%M') if att.check_out_time else '-'
+            check_in = timezone.localtime(att.check_in_time).strftime('%I:%M %p') if att.check_in_time else '-'
+            check_out = timezone.localtime(att.check_out_time).strftime('%I:%M %p') if att.check_out_time else '-'
             
             # Late Logic
             if att.late_minutes > 0:
-                 # You might want to count this as Present AND Late, or just Late.
-                 # For stats, let's increment Late count but keep status as Present for the table unless you want a specific 'Late' badge.
                  stats['late'] += 1
+
+        # Update stats BEFORE filtering
+        stats['total'] += 1
+        if status == 'Present':
+            stats['present'] += 1
+        else:
+            stats['absent'] += 1
 
         # Apply Status Filter
         if status_filter:
@@ -1940,13 +2101,6 @@ def admin_reports_view(request):
                 continue
             if status_filter.lower() == 'absent' and status != 'Absent':
                 continue
-            # Add 'late' filter logic if needed
-
-        stats['total'] += 1
-        if status == 'Present':
-            stats['present'] += 1
-        else:
-            stats['absent'] += 1
 
         report_data.append({
             'employee': emp,
@@ -1959,8 +2113,17 @@ def admin_reports_view(request):
             'longitude': att.longitude if att else None
         })
 
+    # Sort report_data: Present first
+    report_data.sort(key=lambda x: x['status'] != 'Present')
+
     # Pagination
-    paginator = Paginator(report_data, 20)
+    per_page = request.GET.get('per_page', 20)
+    try:
+        per_page = int(per_page)
+    except ValueError:
+        per_page = 20
+
+    paginator = Paginator(report_data, per_page)
     try:
         report_page = paginator.page(page)
     except PageNotAnInteger:
@@ -1978,6 +2141,7 @@ def admin_reports_view(request):
         'site_admin_site': site_admin_site,
         'sites': sites,
         'selected_site': selected_site,
+        'per_page': per_page,
     }
     return render(request, 'reports.html', context)
 
@@ -2057,8 +2221,8 @@ def export_reports_view(request):
 
         if att:
             status = 'Present'
-            check_in = att.check_in_time.strftime('%H:%M') if att.check_in_time else '-'
-            check_out = att.check_out_time.strftime('%H:%M') if att.check_out_time else '-'
+            check_in = timezone.localtime(att.check_in_time).strftime('%I:%M %p') if att.check_in_time else '-'
+            check_out = timezone.localtime(att.check_out_time).strftime('%I:%M %p') if att.check_out_time else '-'
 
         if status_filter:
             if status_filter.lower() == 'present' and status != 'Present':
@@ -2078,3 +2242,161 @@ def export_reports_view(request):
         ])
 
     return response
+
+
+class AdminSalaryReportView(APIView):
+    permission_classes = [IsAdminUser]
+    authentication_classes = [SessionAuthentication]
+
+    def get(self, request):
+        month = int(request.GET.get('month', timezone.localdate().month))
+        year = int(request.GET.get('year', timezone.localdate().year))
+        site_id = request.GET.get('site', 'all')
+        search_query = request.GET.get('search', '')
+        per_page = request.GET.get('per_page', 20)
+        
+        try:
+            per_page = int(per_page)
+        except ValueError:
+            per_page = 20
+            
+        employees = Employee.objects.all()
+        
+        # Apply Filters
+        if site_id != 'all':
+            employees = employees.filter(site_id=site_id)
+            
+        if search_query:
+            employees = employees.filter(
+                Q(name__icontains=search_query) | 
+                Q(badge_number__icontains=search_query)
+            )
+            
+        # Get number of days in month
+        num_days = calendar.monthrange(year, month)[1]
+        
+        # Calculate working days (excluding Sundays)
+        working_days_count = 0
+        for day in range(1, num_days + 1):
+            if calendar.weekday(year, month, day) != 6:  # 6 is Sunday
+                working_days_count += 1
+        
+        salary_data = []
+        for emp in employees:
+            if not emp.gross_salary:
+                continue
+                
+            # Get attendance for this month
+            attendance = Attendance.objects.filter(
+                user=emp,
+                date__year=year,
+                date__month=month,
+                status='present'
+            ).count()
+            
+            daily_rate = float(emp.gross_salary) / 30.0
+            absent_days = working_days_count - attendance
+            deduction = daily_rate * max(0, absent_days)
+            net_salary = float(emp.gross_salary) - deduction
+            
+            salary_data.append({
+                'employee': emp,
+                'gross_salary': emp.gross_salary,
+                'working_days': working_days_count,
+                'present_days': attendance,
+                'absent_days': max(0, absent_days),
+                'deduction': round(deduction, 2),
+                'net_salary': round(net_salary, 2),
+            })
+            
+        # Pagination
+        paginator = Paginator(salary_data, per_page)
+        page_number = request.GET.get('page', 1)
+        salary_page = paginator.get_page(page_number)
+        
+        context = {
+            'salary_data': salary_page,
+            'selected_month': month,
+            'selected_year': year,
+            'selected_site': site_id,
+            'search_query': search_query,
+            'per_page': per_page,
+            'months': range(1, 13),
+            'years': range(2024, 2031),
+            'sites': Site.objects.all(),
+        }
+        return render(request, 'salary_report.html', context)
+
+class DownloadSalarySlipView(APIView):
+    permission_classes = [IsAdminUser]
+    authentication_classes = [SessionAuthentication]
+
+    def get(self, request, employee_id, month, year):
+        try:
+            emp = Employee.objects.get(id=employee_id)
+        except Employee.DoesNotExist:
+            return HttpResponse("Employee not found", status=404)
+            
+        # Recalculate for the slip
+        num_days = calendar.monthrange(year, month)[1]
+        working_days_count = 0
+        for day in range(1, num_days + 1):
+            if calendar.weekday(year, month, day) != 6:
+                working_days_count += 1
+                
+        attendance = Attendance.objects.filter(
+            user=emp,
+            date__year=year,
+            date__month=month,
+            status='present'
+        ).count()
+        
+        daily_rate = float(emp.gross_salary or 0) / 30.0
+        absent_days = working_days_count - attendance
+        deduction = daily_rate * max(0, absent_days)
+        net_salary = float(emp.gross_salary or 0) - deduction
+        
+        # Generate PDF using fpdf2
+        pdf = FPDF()
+        pdf.add_page()
+        pdf.set_font("helvetica", "B", 16)
+        
+        # Header
+        pdf.cell(190, 10, "SALARY SLIP", ln=True, align="C")
+        pdf.ln(10)
+        
+        pdf.set_font("helvetica", "", 12)
+        pdf.cell(95, 10, f"Employee Name: {emp.name}")
+        pdf.cell(95, 10, f"Month/Year: {calendar.month_name[month]} {year}", ln=True)
+        pdf.cell(95, 10, f"Badge ID: {emp.badge_number or '-'}")
+        pdf.cell(95, 10, f"Department: {emp.department or '-'}", ln=True)
+        pdf.ln(10)
+        
+        # Table Header
+        pdf.set_fill_color(200, 200, 200)
+        pdf.set_font("helvetica", "B", 12)
+        pdf.cell(100, 10, "Description", 1, 0, "C", True)
+        pdf.cell(90, 10, "Amount (AED)", 1, 1, "C", True)
+        
+        # Table Body
+        pdf.set_font("helvetica", "", 12)
+        pdf.cell(100, 10, "Gross Salary", 1)
+        pdf.cell(90, 10, f"{float(emp.gross_salary or 0):.2f}", 1, 1, "R")
+        
+        pdf.cell(100, 10, f"Absence Deduction ({max(0, absent_days)} days)", 1)
+        pdf.cell(90, 10, f"-{deduction:.2f}", 1, 1, "R")
+        
+        pdf.set_font("helvetica", "B", 12)
+        pdf.cell(100, 10, "Net Salary", 1)
+        pdf.cell(90, 10, f"{net_salary:.2f}", 1, 1, "R")
+        
+        pdf.ln(20)
+        pdf.set_font("helvetica", "I", 10)
+        pdf.cell(190, 10, "This is a computer generated document and does not require a signature.", ln=True, align="C")
+        
+        # Output PDF
+        pdf_output = pdf.output()
+        buffer = io.BytesIO(pdf_output)
+        
+        filename = f"Salary_Slip_{emp.name}_{calendar.month_name[month]}_{year}.pdf"
+        return FileResponse(buffer, as_attachment=True, filename=filename)

@@ -33,6 +33,9 @@
         <li class="nav-item">
             <a class="nav-link active" href="{% url 'admin-reports' %}">📈 Reports</a>
         </li>
+        <li class="nav-item">
+            <a class="nav-link" href="{% url 'admin-salary-report' %}">💰 Salary</a>
+        </li>
         {% if is_superuser %}
         <li class="nav-item">
             <a class="nav-link" href="{% url 'admin-sites' %}">🏢 Sites</a>
@@ -69,13 +72,19 @@
                 </div>
                 {% endif %}
 
-                <div class="col-md-3">
-                    <label class="form-label">Search</label>
-                    <input type="text" name="search" value="{{ search_query|default:'' }}"
-                        placeholder="Name, Badge ID..." class="form-control">
+                <div class="col-md-2">
+                    <label class="form-label">Per Page</label>
+                    <select name="per_page" class="form-select" onchange="this.form.submit()">
+                        <option value="20" {% if per_page == 20 %}selected{% endif %}>20</option>
+                        <option value="50" {% if per_page == 50 %}selected{% endif %}>50</option>
+                        <option value="100" {% if per_page == 100 %}selected{% endif %}>100</option>
+                        <option value="500" {% if per_page == 500 %}selected{% endif %}>500</option>
+                        <option value="1000" {% if per_page == 1000 %}selected{% endif %}>1000</option>
+                        <option value="2000" {% if per_page == 2000 %}selected{% endif %}>2000</option>
+                    </select>
                 </div>
 
-                <div class="col-md-3 d-flex gap-2">
+                <div class="col-md-2 d-flex gap-2">
                     <button type="submit" class="btn btn-primary flex-grow-1">Filter</button>
                     <a href="{% url 'admin-reports' %}" class="btn btn-secondary">Reset</a>
                 </div>
@@ -93,7 +102,7 @@
     <!-- Stats Grid -->
     <div class="row g-4 mb-4">
         <div class="col-12 col-md-6 col-xl-3">
-            <a href="?date={{ selected_date }}&department={{ selected_department|default:'' }}&search={{ search_query|default:'' }}"
+            <a href="?date={{ selected_date }}&department={{ selected_department|default:'' }}&search={{ search_query|default:'' }}&per_page={{ per_page }}"
                 class="text-decoration-none">
                 <div class="card text-white h-100"
                     style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
@@ -105,7 +114,7 @@
             </a>
         </div>
         <div class="col-12 col-md-6 col-xl-3">
-            <a href="?date={{ selected_date }}&department={{ selected_department|default:'' }}&search={{ search_query|default:'' }}&status=Present"
+            <a href="?date={{ selected_date }}&department={{ selected_department|default:'' }}&search={{ search_query|default:'' }}&status=Present&per_page={{ per_page }}"
                 class="text-decoration-none">
                 <div class="card text-white h-100"
                     style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);">
@@ -117,7 +126,7 @@
             </a>
         </div>
         <div class="col-12 col-md-6 col-xl-3">
-            <a href="?date={{ selected_date }}&department={{ selected_department|default:'' }}&search={{ search_query|default:'' }}&status=Absent"
+            <a href="?date={{ selected_date }}&department={{ selected_department|default:'' }}&search={{ search_query|default:'' }}&status=Absent&per_page={{ per_page }}"
                 class="text-decoration-none">
                 <div class="card text-white h-100"
                     style="background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);">
@@ -140,7 +149,7 @@
 
     <div class="row g-4">
         <!-- Table -->
-        <div class="col-lg-8">
+        <div class="col-lg-12">
             <div class="card shadow-sm h-100">
                 <div class="card-header bg-white py-3">
                     <h5 class="mb-0">Employee Attendance List {% if status_filter %}- <span class="text-primary">{{
@@ -206,7 +215,7 @@
                             {% if report_data.has_previous %}
                             <li class="page-item">
                                 <a class="page-link"
-                                    href="?page={{ report_data.previous_page_number }}&date={{ selected_date }}&department={{ selected_department|default:'' }}&search={{ search_query|default:'' }}&status={{ status_filter|default:'' }}">Previous</a>
+                                    href="?page={{ report_data.previous_page_number }}&date={{ selected_date }}&department={{ selected_department|default:'' }}&search={{ search_query|default:'' }}&status={{ status_filter|default:'' }}&per_page={{ per_page }}">Previous</a>
                             </li>
                             {% endif %}
 
@@ -218,7 +227,7 @@
                             {% if report_data.has_next %}
                             <li class="page-item">
                                 <a class="page-link"
-                                    href="?page={{ report_data.next_page_number }}&date={{ selected_date }}&department={{ selected_department|default:'' }}&search={{ search_query|default:'' }}&status={{ status_filter|default:'' }}">Next</a>
+                                    href="?page={{ report_data.next_page_number }}&date={{ selected_date }}&department={{ selected_department|default:'' }}&search={{ search_query|default:'' }}&status={{ status_filter|default:'' }}&per_page={{ per_page }}">Next</a>
                             </li>
                             {% endif %}
                         </ul>
@@ -228,17 +237,6 @@
             </div>
         </div>
 
-        <!-- Chart -->
-        <div class="col-lg-4">
-            <div class="card shadow-sm h-100">
-                <div class="card-header bg-white py-3">
-                    <h5 class="mb-0">Attendance Distribution</h5>
-                </div>
-                <div class="card-body d-flex align-items-center justify-content-center">
-                    <canvas id="attendanceChart" style="max-height: 300px;"></canvas>
-                </div>
-            </div>
-        </div>
     </div>
 </div>
 
@@ -258,7 +256,7 @@
     </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
 <script
     src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCYAsBPyik1DZcOH3jcR-awecFjyYXr5Qw&libraries=geometry"></script>
 <script>
@@ -362,27 +360,6 @@
     setInterval(updateClock, 1000);
     updateClock();
 
-    // Chart
-    const ctx = document.getElementById('attendanceChart').getContext('2d');
-    new Chart(ctx, {
-        type: 'doughnut',
-        data: {
-            labels: ['Present', 'Absent'],
-            datasets: [{
-                data: [{{ stats.present }}, {{ stats.absent }}],
-        backgroundColor: ['#10b981', '#ef4444'],
-        borderWidth: 0
-    }]
-        },
-        options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-            legend: {
-                position: 'bottom'
-            }
-        }
-    }
-    });
+
 </script>
 {% endblock %}

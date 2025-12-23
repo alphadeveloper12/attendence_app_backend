@@ -56,6 +56,14 @@ class Employee(models.Model):
     visa_details = models.CharField(max_length=100, null=True, blank=True)
     status = models.CharField(max_length=50, null=True, blank=True)  # Active, Leave, etc.
     
+    # Additional fields
+    gross_salary = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    camp = models.CharField(max_length=100, null=True, blank=True)
+    transportation = models.CharField(max_length=50, null=True, blank=True, choices=[
+        ('Company Bus', 'Company Bus'),
+        ('personal', 'Personal'),
+    ])
+    
     def __str__(self):
         return self.name
     
@@ -68,7 +76,7 @@ class Attendance(models.Model):
     late_minutes = models.IntegerField(default=0)  # Store late minutes
     early_minutes = models.IntegerField(default=0)  # Store early going minutes
     status = models.CharField(max_length=10, choices=[('present', 'Present'), ('absent', 'Absent'), ('late', 'Late')])
-    date = models.DateField(auto_now_add=True)  # Track date for attendance
+    date = models.DateField(default=timezone.localdate)  # Track date for attendance, using localdate
     latitude = models.FloatField(null=True, blank=True)  # Store latitude
     longitude = models.FloatField(null=True, blank=True)  # Store longitude
     slot = models.CharField(max_length=20, null=True, blank=True, choices=[

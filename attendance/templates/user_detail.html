@@ -164,7 +164,7 @@
                                 <span class="badge bg-secondary">No Record</span>
                                 {% endif %}
                             </h5>
-                            <h6 class="card-subtitle mb-2 text-muted">{{ slot_data.time_range }}</h6>
+                            <!-- <h6 class="card-subtitle mb-2 text-muted">{{ slot_data.time_range }}</h6> -->
 
                             {% if slot_data.check_in %}
                             <p class="card-text mb-1"><strong>Check In:</strong> {{ slot_data.check_in|time:"h:i A" }}
@@ -211,7 +211,7 @@
                     <!-- Days -->
                     {% for day in calendar_days %}
                     <div class="border rounded p-2 {% if not day.date %}bg-light{% else %}bg-white{% endif %} calendar-day-cell"
-                        style="min-height: 100px; {% if day.date %}cursor: pointer;{% endif %}" {% if day.date  %}data-date="{{ day.date|date:'Y-m-d' }}" {% endif %}>
+                        style="min-height: 100px; {% if day.date %}cursor: pointer;{% endif %}" {% if day.date %}data-date="{{ day.date|date:'Y-m-d' }}" {% endif %}>
                         {% if day.date %}
                         <div class="d-flex justify-content-between align-items-start mb-2">
                             <span class="fw-bold">{{ day.date|date:"d" }}</span>

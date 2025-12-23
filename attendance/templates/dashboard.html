@@ -18,6 +18,9 @@
                 <li class="nav-item">
                     <a class="nav-link" href="{% url 'admin-reports' %}">📈 Reports</a>
                 </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="{% url 'admin-salary-report' %}">💰 Salary</a>
+                </li>
                 {% if is_superuser %}
                 <li class="nav-item">
                     <a class="nav-link" href="{% url 'admin-sites' %}">🏢 Sites</a>
@@ -46,6 +49,8 @@
                     <button onclick="openBuildModal()" class="btn btn-warning">📱 Update Build</button>
                     {% endif %}
                     <button onclick="openImportModal()" class="btn btn-success">📥 Import Employees</button>
+                    <a href="{% url 'download-employee-template' %}" class="btn btn-outline-success">📄 Download
+                        Template</a>
                     <button onclick="openAddModal()" class="btn btn-primary">➕ Add Employee</button>
                 </div>
             </div>
@@ -321,6 +326,22 @@
                             <label class="form-label">MOL ID (Personal Nr.)</label>
                             <input type="text" name="mol_id" class="form-control">
                         </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Gross Salary</label>
+                            <input type="number" step="0.01" name="gross_salary" class="form-control">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Camp</label>
+                            <input type="text" name="camp" class="form-control">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Transportation</label>
+                            <select name="transportation" class="form-select">
+                                <option value="">Select</option>
+                                <option value="Company Bus">Company Bus</option>
+                                <option value="personal">Personal</option>
+                            </select>
+                        </div>
 
                         <div class="col-12 mt-4">
                             <button type="submit" class="btn btn-primary w-100">Add Employee</button>
@@ -414,10 +435,12 @@
                         </td>
                         <td>
                             <div class="d-flex gap-2">
+                                <button onclick="openDetailsModal('{{ employee.id }}')"
+                                    class="btn btn-sm btn-outline-info" title="View Details">🔍</button>
                                 <button onclick="openEditModal('{{ employee.id }}')"
-                                    class="btn btn-sm btn-outline-primary">✏️</button>
+                                    class="btn btn-sm btn-outline-primary" title="Edit">✏️</button>
                                 <button onclick="deleteEmployee('{{ employee.id }}')"
-                                    class="btn btn-sm btn-outline-danger">🗑️</button>
+                                    class="btn btn-sm btn-outline-danger" title="Delete">🗑️</button>
                             </div>
                         </td>
                     </tr>
@@ -438,13 +461,14 @@
 
 <script>
     // Modal Logic using Bootstrap 5
-    let importModal, buildModal, addModal, mapModal;
+    let importModal, buildModal, addModal, mapModal, detailsModal;
 
     document.addEventListener('DOMContentLoaded', function () {
         importModal = new bootstrap.Modal(document.getElementById('importModal'));
         buildModal = new bootstrap.Modal(document.getElementById('buildModal'));
         addModal = new bootstrap.Modal(document.getElementById('addModal'));
         mapModal = new bootstrap.Modal(document.getElementById('mapModal'));
+        detailsModal = new bootstrap.Modal(document.getElementById('detailsModal'));
 
         fetchSites();
 
@@ -648,6 +672,83 @@
         }
     }
 
+    // Details Modal Logic
+    async function openDetailsModal(empId) {
+        try {
+            const response = await fetch(`/api/attendance/employees/edit/${empId}/`);
+            if (!response.ok) throw new Error('Failed to fetch employee data');
+
+            const data = await response.json();
+
+            // Populate details
+            const detailsBody = document.getElementById('detailsBody');
+            let html = '<div class="row g-3">';
+
+            const fieldLabels = {
+                'name': 'Name',
+                'email': 'Email',
+                'phone': 'Phone',
+                'department': 'Department',
+                'position': 'Position',
+                'badge_number': 'Badge Number',
+                'salary_grade': 'Salary Grade',
+                'job_description': 'Job Description',
+                'employer': 'Employer',
+                'site_name': 'Site',
+                'status': 'Status',
+                'nationality': 'Nationality',
+                'gender': 'Gender',
+                'marital_status': 'Marital Status',
+                'religion': 'Religion',
+                'date_of_birth': 'Date of Birth',
+                'date_of_joining': 'Date of Joining',
+                'passport_number': 'Passport Number',
+                'passport_expiry': 'Passport Expiry',
+                'visa_details': 'Visa Details',
+                'labor_card_number': 'Labor Card Number',
+                'mol_id': 'MOL ID',
+                'gross_salary': 'Gross Salary',
+                'camp': 'Camp',
+                'transportation': 'Transportation'
+            };
+
+            // Handle site name specifically if it's an ID in the edit response
+            // We might need to fetch the site name or use the one from the table
+            // But the edit API usually returns site ID.
+            // Let's check if we can get site name.
+
+            for (const [key, label] of Object.entries(fieldLabels)) {
+                let value = data[key] || '-';
+                if (key === 'site_name' && !data[key]) {
+                    // Try to find site name from the select or just use the ID
+                    const siteSelect = document.getElementById('employeeSiteSelect');
+                    if (siteSelect && data['site']) {
+                        const option = Array.from(siteSelect.options).find(opt => opt.value == data['site']);
+                        if (option) value = option.text;
+                    }
+                }
+
+                html += `
+                    <div class="col-md-6">
+                        <label class="fw-bold text-secondary small text-uppercase">${label}</label>
+                        <div class="p-2 bg-light rounded border">${value}</div>
+                    </div>
+                `;
+            }
+
+            html += '</div>';
+            detailsBody.innerHTML = html;
+            detailsModal.show();
+
+        } catch (error) {
+            alert('Error: ' + error.message);
+        }
+    }
+
+    function closeDetailsModal() {
+        detailsModal.hide();
+    }
+
     // Enhanced openAddModal function
     function openAddModal() {
         if (!isEditMode) {
@@ -804,6 +905,26 @@
     setInterval(updateClock, 1000);
     updateClock();
 </script>
+
+<!-- Details Modal -->
+<div class="modal fade" id="detailsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title">Employee Details</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"
+                    onclick="closeDetailsModal()"></button>
+            </div>
+            <div class="modal-body" id="detailsBody">
+                <!-- Content populated by JS -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"
+                    onclick="closeDetailsModal()">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
 
 <!-- Map Modal -->
 <div class="modal fade" id="mapModal" tabindex="-1" aria-hidden="true">

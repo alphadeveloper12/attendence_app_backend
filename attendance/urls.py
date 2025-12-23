@@ -9,6 +9,7 @@ urlpatterns = [
     path('stats/', AttendanceStatsView.as_view(), name='attendance-stats'),
     path('employees/', EmployeeListView.as_view(), name='employee-list'),
     path('employees/import/', ImportEmployeesView.as_view(), name='import-employees'),
+    path('employees/template/', DownloadEmployeeTemplateView.as_view(), name='download-employee-template'),
     path('employees/add/', AdminAddEmployeeView.as_view(), name='admin-add-employee'),
     path('employees/edit/<int:employee_id>/', AdminEditEmployeeView.as_view(), name='admin-edit-employee'),
     path('employees/delete/<int:employee_id>/', AdminDeleteEmployeeView.as_view(), name='admin-delete-employee'),
@@ -47,6 +48,8 @@ urlpatterns = [
 
     # Reports
     path('dashboard/reports/', admin_reports_view, name='admin-reports'),
+    path('dashboard/salary-report/', AdminSalaryReportView.as_view(), name='admin-salary-report'),
+    path('dashboard/download-salary-slip/<int:employee_id>/<int:month>/<int:year>/', DownloadSalarySlipView.as_view(), name='download-salary-slip'),
     path('dashboard/reports/export/', export_reports_view, name='export-reports'),
 ]
 
