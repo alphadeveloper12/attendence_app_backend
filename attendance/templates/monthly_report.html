@@ -1,0 +1,226 @@
+{% extends 'base.html' %}
+
+{% block title %}Monthly Report - Admin Dashboard{% endblock %}
+
+{% block content %}
+
+<!-- Navbar -->
+<nav class="navbar navbar-expand-lg navbar-custom mb-4 shadow-sm">
+    <div class="container-fluid">
+        <a class="navbar-brand d-flex align-items-center gap-2" href="#">
+            <span class="fs-4">📅 Monthly Attendance Report</span>
+        </a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarContent">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarContent">
+            <div class="ms-auto d-flex align-items-center gap-3 flex-wrap">
+                <div id="liveClock" class="badge bg-light text-dark border p-2 fs-6 fw-normal"></div>
+                <span class="text-white">Welcome, {{ user.username }}</span>
+                <a href="{% url 'admin-dashboard' %}" class="btn btn-secondary btn-sm">Back to Dashboard</a>
+                <a href="{% url 'admin-logout' %}" class="btn btn-danger btn-sm">Logout</a>
+            </div>
+        </div>
+    </div>
+</nav>
+
+<!-- Navigation Menu -->
+<div class="container mb-4">
+    <ul class="nav nav-pills nav-fill bg-white p-2 rounded shadow-sm">
+        <li class="nav-item">
+            <a class="nav-link" href="{% url 'admin-dashboard' %}">📊 Dashboard</a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" href="{% url 'admin-reports' %}">📈 Reports</a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link active" href="{% url 'monthly-report' %}">📅 Monthly Report</a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" href="{% url 'admin-salary-report' %}">💰 Salary</a>
+        </li>
+        {% if is_superuser %}
+        <li class="nav-item">
+            <a class="nav-link" href="{% url 'admin-sites' %}">🏢 Sites</a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" href="{% url 'admin-site-admins' %}">👤 Site Admins</a>
+        </li>
+        {% endif %}
+    </ul>
+</div>
+
+<div class="container">
+    <!-- Filters -->
+    <div class="card mb-4 shadow-sm">
+        <div class="card-body">
+            <form method="GET" class="row g-3 align-items-end">
+                <div class="col-md-3">
+                    <label class="form-label">Month</label>
+                    <select name="month" class="form-select" onchange="this.form.submit()">
+                        {% for m_num, m_name in months %}
+                        <option value="{{ m_num }}" {% if selected_month == m_num %}selected{% endif %}>
+                            {{ m_name }}
+                        </option>
+                        {% endfor %}
+
+                    </select>
+                </div>
+
+                <div class="col-md-3">
+                    <label class="form-label">Year</label>
+                    <select name="year" class="form-select" onchange="this.form.submit()">
+                        {% for y in years %}
+                        <option value="{{ y }}" {% if selected_year == y %}selected{% endif %}>
+                            {{ y }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                {% if is_superuser %}
+                <div class="col-md-3">
+                    <label class="form-label">Site</label>
+                    <select name="site" class="form-select" onchange="this.form.submit()">
+                        <option value="all">All Sites</option>
+                        {% for site in sites %}
+                            <option value="{{ site.id }}" {% if selected_site and selected_site.id == site.id %}selected{% endif %}>
+                                {{ site.name }}
+                            </option>
+                        {% endfor %}
+
+                    </select>
+                </div>
+                {% endif %}
+
+                <div class="col-md-3 d-flex gap-2">
+                    <button type="submit" class="btn btn-primary flex-grow-1">Filter</button>
+                    <a href="{% url 'monthly-report' %}" class="btn btn-secondary">Reset</a>
+                </div>
+
+                <div class="col-12 text-end mt-3">
+                    <a href="{% url 'export-monthly-report' %}?month={{ selected_month }}&year={{ selected_year }}{% if selected_site %}&site={{ selected_site.id }}{% endif %}"
+                        class="btn btn-success" target="_blank">
+                        📥 Download Excel
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Summary Stats -->
+    <div class="row g-4 mb-4">
+        <div class="col-12">
+            <h4 class="mb-3">Summary for {{ month_name }} {{ selected_year }}{% if selected_site %} - {{
+                selected_site.name }}{% endif %}</h4>
+        </div>
+        <div class="col-12 col-md-6 col-xl-3">
+            <div class="card text-white h-100" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                <div class="card-body text-center">
+                    <h5 class="card-title">Total Working Days</h5>
+                    <p class="card-text display-4 fw-bold">{{ summary.total_days }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-md-6 col-xl-3">
+            <div class="card text-white h-100" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);">
+                <div class="card-body text-center">
+                    <h5 class="card-title">Total Employees</h5>
+                    <p class="card-text display-4 fw-bold">{{ summary.total_employees }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-md-6 col-xl-3">
+            <div class="card text-white h-100" style="background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);">
+                <div class="card-body text-center">
+                    <h5 class="card-title">Avg Attendance</h5>
+                    <p class="card-text display-4 fw-bold">{{ summary.avg_attendance }}%</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-md-6 col-xl-3">
+            <div class="card text-white h-100" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);">
+                <div class="card-body text-center">
+                    <h5 class="card-title">Total Late Arrivals</h5>
+                    <p class="card-text display-4 fw-bold">{{ summary.total_late }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Employee Data Table -->
+    <div class="card shadow-sm">
+        <div class="card-header bg-white py-3">
+            <h5 class="mb-0">Employee Attendance Details</h5>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover mb-0 align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th>Employee</th>
+                        <th>Badge ID</th>
+                        <th>Department</th>
+                        <th>Site</th>
+                        <th>Days Present</th>
+                        <th>Days Absent</th>
+                        <th>Late Arrivals</th>
+                        <th>Attendance %</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for data in employee_data %}
+                    <tr>
+                        <td>
+                            <div class="fw-bold">{{ data.employee.name }}</div>
+                            <div class="small text-muted">{{ data.employee.email|default:"" }}</div>
+                        </td>
+                        <td>{{ data.employee.badge_number|default:"-" }}</td>
+                        <td>{{ data.employee.department|default:"-" }}</td>
+                        <td>{{ data.employee.site.name|default:"-" }}</td>
+                        <td><span class="badge bg-success">{{ data.days_present }}</span></td>
+                        <td><span class="badge bg-danger">{{ data.days_absent }}</span></td>
+                        <td><span class="badge bg-warning text-dark">{{ data.late_count }}</span></td>
+                        <td>
+                            <div class="progress" style="height: 25px;">
+                                <div class="progress-bar {% if data.attendance_percentage >= 90 %}bg-success{% elif data.attendance_percentage >= 75 %}bg-warning{% else %}bg-danger{% endif %}"
+                                    role="progressbar" style="width: {{ data.attendance_percentage }}%"
+                                    aria-valuenow="{{ data.attendance_percentage }}" aria-valuemin="0"
+                                    aria-valuemax="100">
+                                    {{ data.attendance_percentage }}%
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="8" class="text-center py-5 text-muted">No employees found for the selected
+                            criteria.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Live Clock
+    function updateClock() {
+        const now = new Date();
+        const options = {
+            timeZone: 'Asia/Dubai',
+            weekday: 'short',
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: true
+        };
+        document.getElementById('liveClock').innerText = '🇦🇪 ' + now.toLocaleString('en-US', options);
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+</script>
+{% endblock %}

@@ -1,5 +1,6 @@
 # attendance/views.py
 import calendar
+import pandas as pd
 from fpdf import FPDF
 from django.http import HttpResponse, FileResponse
 from django.template.loader import render_to_string
@@ -121,16 +122,16 @@ class ImportEmployeesView(APIView):
     authentication_classes = [SessionAuthentication]
     permission_classes = [IsAdminUser]
 
+    @transaction.atomic
     def post(self, request):
         file = request.FILES.get('file')
         if not file:
             return Response({'error': 'No file uploaded'}, status=400)
 
         try:
-            import pandas as pd
             # Read the excel file
             # We'll read the first few rows to understand the structure
-            df = pd.read_excel(file, header=None)
+            df = pd.read_excel(file, header=None, engine='openpyxl')
             
             # Locate header rows
             # Scan first 20 rows to find the header
@@ -182,9 +183,9 @@ class ImportEmployeesView(APIView):
             col_map['job_description'] = find_col_index(['Present Designation'], header_row_1)
 
             # Refined badge number mapping to avoid 'Previous Emp. ID'
-            col_map['badge_number'] = find_col_index(['KFD & KAMI'], header_row_1)
+            col_map['badge_number'] = find_col_index(['Badge ID'], header_row_1)
             if col_map['badge_number'] == -1:
-                # If not found by KFD & KAMI, look for Emp. ID but exclude columns with 'Previous'
+                # If not found by Badge ID, look for Emp. ID but exclude columns with 'Previous'
                 for idx, val in enumerate(header_row_1):
                     if 'emp. id' in val.lower() and 'previous' not in val.lower():
                         col_map['badge_number'] = idx
@@ -242,6 +243,9 @@ class ImportEmployeesView(APIView):
             errors = []
             debug_info = []
             
+            # Cache sites to avoid redundant lookups
+            site_cache = {}
+            
             for index, row in df.iloc[start_data_index:].iterrows():
                 try:
                     # Extract data using the map
@@ -264,17 +268,26 @@ class ImportEmployeesView(APIView):
                         continue
 
                     badge = get_val('badge_number')
+                    nationality = get_val('nationality')
                     # No auto-email generation
                     email = None
                     
-                    # Check if exists based on badge or name
+                    # Check if exists based on multiple criteria
                     emp = None
+                    
+                    # First, try to find by badge ID if provided
                     if badge:
                         emp = Employee.objects.filter(badge_number=badge).first()
                     
-                    if not emp:
-                        emp = Employee.objects.filter(name=name).first()
-                        
+                    # If not found by badge, try to find by name + employer + nationality
+                    if not emp and name and employer_name and nationality:
+                        emp = Employee.objects.filter(
+                            name=name,
+                            employer=employer_name,
+                            nationality=nationality
+                        ).first()
+                    
+                    # If still not found, create new employee
                     if not emp:
                         emp = Employee()
 
@@ -314,9 +327,14 @@ class ImportEmployeesView(APIView):
                         if site_name.strip().upper() in ['HO', 'HEAD OFFICE']:
                             site_name = 'Head Office'
                         
-                        site_obj = Site.objects.filter(name__iexact=site_name).first()
-                        if not site_obj:
-                            site_obj = Site.objects.create(name=site_name)
+                        site_name_lower = site_name.lower()
+                        if site_name_lower in site_cache:
+                            site_obj = site_cache[site_name_lower]
+                        else:
+                            site_obj = Site.objects.filter(name__iexact=site_name).first()
+                            if not site_obj:
+                                site_obj = Site.objects.create(name=site_name)
+                            site_cache[site_name_lower] = site_obj
                         emp.site = site_obj
                     
                     # Handle Dates
@@ -377,23 +395,23 @@ class DownloadEmployeeTemplateView(APIView):
         # Row 4: Main Headers
         # Row 5: Sub Headers (for merged columns)
 
-        employer_placeholder = "KATILINK PARKWAY METALS AND JOINERY INDUSTRIES L.L.C"
-        date_placeholder = timezone.now().strftime('%d/%m/%y')
-
         # Define headers based on the sample provided by the user
-        header_row_1 = ["Sr. Nr.", "Status", "Status Date", "Category", "Division", "Project / Site", "Previous Emp. ID of PIC", "KFD & KAMI Emp.    ID", "Summary Code", "Name", "Present  Designation", "Nationality", "Gender", "Marital Status", "Religion", "Visa Details", "Labour Card Details", "", "Passport Details", "", "", "Current Salary Details", "", "", "", "", "", "", "Leave Entitlement Details", "Date of Birth (dd/mm/yyyy)"]
-        header_row_2 = ["", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "Status", "L.Card/CEC Nr.", "Personal Nr.", "PP No. on Visa", "New Passport Nr.", "Expiry Date (dd/mm/yyyy)", "Basic Salary", "Accmn/CCA", "Transport/Special Allow", "Food Allowance", "Fixed OT allowance", " Others ", " Salary Reduction", " Gross Salary ", "D.O.J. (dd/mm/yyyy)"]
+        header_row_1 = ["Sr. Nr.", "Status", "Status Date", "Category", "Division", "Project / Site", "Previous Emp. ID of PIC", "Badge ID", "Summary Code", "Name", "Present  Designation", "Nationality", "Gender", "Marital Status", "Religion", "Visa Details", "Labour Card Details", "", "Passport Details", "", "", "", "Current Salary Details", "", "", "", "", "", "", "", "Leave Entitlement Details", "Date of Birth (dd/mm/yyyy)"]
+        header_row_2 = ["", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "Status", "L.Card/CEC Nr.", "Personal Nr.", "PP No. on Visa", "New Passport Nr.", "Expiry Date (dd/mm/yyyy)", "Basic Salary", "Accmn/CCA", "Transport/Special Allow", "Food Allowance", "Fixed OT allowance", " Others ", " Salary Reduction", " Gross Salary ", "D.O.J. (dd/mm/yyyy)", ""]
 
-        # Create a DataFrame with empty data
-        # We'll use a list of lists to represent the rows
+        # Sample data rows
+        sample_row_1 = [1, "Active", "04/04/2024", "Worker", "Joinery", "Factory", "", "16227", "0002", "Hidayat Ullah Khan Rast Ali Khan", "Carpenter Finishing", "Pakistan", "Male", "Married", "Muslim", "PICDUB", "", "20001019369957", "ML4125622", "ML4125622", "", "02/04/2033", "800.00", "", "", "200.00", "", "450.00", "", "1,450.00", "05/01/2022", "01/01/1993"]
+        sample_row_2 = [2, "Active", "15/08/2025", "Worker", "Joinery", "Lillia", "", "16620", "0002", "Lalchand Ram Keshav Ram", "Carpenter Finishing", "Indian", "Male", "Married", "Non Muslim", "PICDUB", "", "10001078361045", "M1264483", "X4403081", "", "30/07/2034", "1,000.00", "", "", "200.00", "", "200.00", "", "1,400.00", "08/04/2023", "01/07/1983"]
+        sample_row_3 = [3, "leave", "14/02/2024", "Staff", "Joinery", "Park Horizon", "", "9249", "0002", "Mohammad Ahmad Mohammad Aaqil", "Foreman Painter", "Indian", "Male", "Married", "Muslim", "KPIC", "78888568", "10012076761949", "R7686385", "", "", "12/07/2027", "1,900.00", "", "", "", "", "1,400.00", "", "3,300.00", "05/08/2018", "12/07/1967"]
+
+        # Create a DataFrame with the structure
         data = [
-            [employer_placeholder] + [""] * (len(header_row_1) - 1),
-            [""] * len(header_row_1),
-            ["", "", date_placeholder] + [""] * (len(header_row_1) - 3),
             header_row_1,
             header_row_2,
-            # Add a sample row
-            [1, "Active", "04/04/2024", "Worker", "Joinery", "Factory", "", "16227", "0002", "Sample Employee", "Carpenter Finishing", "Pakistan", "Male", "Married", "Muslim", "PICDUB", "", "20001019369957", "ML4125622", "ML4125622", "02/04/2033", "800.00", "", "200.00", "", "450.00", "", "", "1450.00", "05/01/2022", "01/01/1993"]
+            [""] * len(header_row_1), # Empty row between headers and data
+            sample_row_1,
+            sample_row_2,
+            sample_row_3
         ]
 
         df = pd.DataFrame(data)
@@ -410,11 +428,11 @@ class DownloadEmployeeTemplateView(APIView):
             # Add some formatting
             header_format = workbook.add_format({'bold': True, 'bg_color': '#D7E4BC', 'border': 1})
             
-            # Apply formatting to header rows (rows 4 and 5, 0-indexed: 3 and 4)
+            # Apply formatting to header rows (rows 1 and 2, 0-indexed: 0 and 1)
             for col_num, value in enumerate(header_row_1):
-                worksheet.write(3, col_num, value, header_format)
+                worksheet.write(0, col_num, value, header_format)
             for col_num, value in enumerate(header_row_2):
-                worksheet.write(4, col_num, value, header_format)
+                worksheet.write(1, col_num, value, header_format)
 
         output.seek(0)
 
@@ -2249,6 +2267,9 @@ class AdminSalaryReportView(APIView):
     authentication_classes = [SessionAuthentication]
 
     def get(self, request):
+        if not request.user.is_superuser:
+            return redirect("admin-dashboard")
+            
         month = int(request.GET.get('month', timezone.localdate().month))
         year = int(request.GET.get('year', timezone.localdate().year))
         site_id = request.GET.get('site', 'all')
@@ -2332,10 +2353,10 @@ class DownloadSalarySlipView(APIView):
     authentication_classes = [SessionAuthentication]
 
     def get(self, request, employee_id, month, year):
-        try:
-            emp = Employee.objects.get(id=employee_id)
-        except Employee.DoesNotExist:
-            return HttpResponse("Employee not found", status=404)
+        if not request.user.is_superuser:
+            return Response({'error': 'Unauthorized'}, status=403)
+            
+        employee = get_object_or_404(Employee, id=employee_id)
             
         # Recalculate for the slip
         num_days = calendar.monthrange(year, month)[1]
@@ -2400,3 +2421,241 @@ class DownloadSalarySlipView(APIView):
         
         filename = f"Salary_Slip_{emp.name}_{calendar.month_name[month]}_{year}.pdf"
         return FileResponse(buffer, as_attachment=True, filename=filename)
+# Monthly Report Views
+from datetime import datetime, timedelta
+from django.shortcuts import render
+from django.contrib.auth.decorators import login_required
+from django.http import HttpResponse
+from django.db.models import Q, Count
+import pandas as pd
+import calendar
+from .models import Employee, Attendance, Site, AdminProfile
+
+@login_required
+def monthly_report_view(request):
+    """Display monthly attendance report for selected site"""
+    # Permission Check
+    is_superuser = request.user.is_superuser
+    try:
+        admin_profile = request.user.admin_profile
+        site_admin_site = admin_profile.site
+    except AdminProfile.DoesNotExist:
+        admin_profile = None
+        site_admin_site = None
+
+    if not is_superuser and not admin_profile:
+        return render(request, 'dashboard.html', {'error': 'Permission Denied'})
+
+    # Get parameters
+    month = request.GET.get('month')
+    year = request.GET.get('year')
+    site_id = request.GET.get('site')
+    
+    # Default to current month/year
+    now = datetime.now()
+    if not month:
+        month = now.month
+    else:
+        month = int(month)
+    
+    if not year:
+        year = now.year
+    else:
+        year = int(year)
+    
+    # Get all sites for dropdown (only for superuser)
+    sites = []
+    selected_site = None
+    
+    if is_superuser:
+        sites = Site.objects.all()
+        if site_id and site_id != 'all':
+            try:
+                selected_site = Site.objects.get(id=site_id)
+            except Site.DoesNotExist:
+                pass
+    elif site_admin_site:
+        selected_site = site_admin_site
+    
+    # Get employees for selected site
+    employees = Employee.objects.all()
+    if selected_site:
+        employees = employees.filter(site=selected_site)
+    
+    # Calculate date range for the month
+    num_days = calendar.monthrange(year, month)[1]
+    start_date = datetime(year, month, 1).date()
+    end_date = datetime(year, month, num_days).date()
+    
+    # Get all attendance records for the month
+    attendance_records = Attendance.objects.filter(
+        date__gte=start_date,
+        date__lte=end_date,
+        user__in=employees
+    ).select_related('user')
+    
+    # Process employee-wise data
+    employee_data = []
+    total_present = 0
+    total_absent = 0
+    total_late = 0
+    
+    for emp in employees:
+        emp_attendance = attendance_records.filter(user=emp)
+        days_present = emp_attendance.filter(check_in_time__isnull=False).count()
+        days_absent = num_days - days_present
+        late_count = emp_attendance.filter(is_late=True).count() if hasattr(Attendance, 'is_late') else 0
+        
+        attendance_percentage = (days_present / num_days * 100) if num_days > 0 else 0
+        
+        employee_data.append({
+            'employee': emp,
+            'days_present': days_present,
+            'days_absent': days_absent,
+            'late_count': late_count,
+            'attendance_percentage': round(attendance_percentage, 2)
+        })
+        
+        total_present += days_present
+        total_absent += days_absent
+        total_late += late_count
+    
+    # Calculate summary statistics
+    total_employees = employees.count()
+    avg_attendance = (total_present / (total_employees * num_days) * 100) if (total_employees * num_days) > 0 else 0
+    
+    summary = {
+        'total_days': num_days,
+        'total_employees': total_employees,
+        'avg_attendance': round(avg_attendance, 2),
+        'total_present': total_present,
+        'total_absent': total_absent,
+        'total_late': total_late
+    }
+    
+    # Generate month/year options
+    months = [(i, calendar.month_name[i]) for i in range(1, 13)]
+    years = list(range(now.year - 2, now.year + 1))
+    
+    context = {
+        'employee_data': employee_data,
+        'summary': summary,
+        'selected_month': month,
+        'selected_year': year,
+        'selected_site': selected_site,
+        'sites': sites,
+        'months': months,
+        'years': years,
+        'is_superuser': is_superuser,
+        'site_admin_site': site_admin_site,
+        'month_name': calendar.month_name[month]
+    }
+    
+    return render(request, 'monthly_report.html', context)
+
+
+@login_required
+def export_monthly_report(request):
+    """Export monthly attendance report to Excel"""
+    # Permission Check
+    is_superuser = request.user.is_superuser
+    try:
+        admin_profile = request.user.admin_profile
+        site_admin_site = admin_profile.site
+    except AdminProfile.DoesNotExist:
+        admin_profile = None
+        site_admin_site = None
+
+    if not is_superuser and not admin_profile:
+        return HttpResponse("Permission Denied", status=403)
+
+    # Get parameters
+    month = int(request.GET.get('month', datetime.now().month))
+    year = int(request.GET.get('year', datetime.now().year))
+    site_id = request.GET.get('site')
+    
+    # Get selected site
+    selected_site = None
+    if is_superuser and site_id and site_id != 'all':
+        try:
+            selected_site = Site.objects.get(id=site_id)
+        except Site.DoesNotExist:
+            pass
+    elif site_admin_site:
+        selected_site = site_admin_site
+    
+    # Get employees
+    employees = Employee.objects.all()
+    if selected_site:
+        employees = employees.filter(site=selected_site)
+    
+    # Calculate date range
+    num_days = calendar.monthrange(year, month)[1]
+    start_date = datetime(year, month, 1).date()
+    end_date = datetime(year, month, num_days).date()
+    
+    # Get attendance records
+    attendance_records = Attendance.objects.filter(
+        date__gte=start_date,
+        date__lte=end_date,
+        user__in=employees
+    ).select_related('user')
+    
+    # Prepare data for Excel
+    data = []
+    for emp in employees:
+        emp_attendance = attendance_records.filter(user=emp)
+        days_present = emp_attendance.filter(check_in_time__isnull=False).count()
+        days_absent = num_days - days_present
+        late_count = emp_attendance.filter(is_late=True).count() if hasattr(Attendance, 'is_late') else 0
+        attendance_percentage = (days_present / num_days * 100) if num_days > 0 else 0
+        
+        data.append({
+            'Employee Name': emp.name,
+            'Badge ID': emp.badge_number or '-',
+            'Department': emp.department or '-',
+            'Site': emp.site.name if emp.site else '-',
+            'Total Days': num_days,
+            'Days Present': days_present,
+            'Days Absent': days_absent,
+            'Late Arrivals': late_count,
+            'Attendance %': round(attendance_percentage, 2)
+        })
+    
+    # Create DataFrame
+    df = pd.DataFrame(data)
+    
+    # Create Excel file
+    output = pd.ExcelWriter(f'monthly_report_{month}_{year}.xlsx', engine='xlsxwriter')
+    df.to_excel(output, sheet_name='Monthly Report', index=False)
+    
+    # Get workbook and worksheet
+    workbook = output.book
+    worksheet = output.sheets['Monthly Report']
+    
+    # Format header
+    header_format = workbook.add_format({
+        'bold': True,
+        'bg_color': '#4472C4',
+        'font_color': 'white',
+        'border': 1
+    })
+    
+    for col_num, value in enumerate(df.columns.values):
+        worksheet.write(0, col_num, value, header_format)
+        worksheet.set_column(col_num, col_num, 15)
+    
+    output.close()
+    
+    # Read file and return response
+    with open(f'monthly_report_{month}_{year}.xlsx', 'rb') as f:
+        response = HttpResponse(f.read(), content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        site_name = selected_site.name if selected_site else 'All_Sites'
+        filename = f'Monthly_Report_{site_name}_{calendar.month_name[month]}_{year}.xlsx'
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    
+    # Clean up temp file
+    import os
+    os.remove(f'monthly_report_{month}_{year}.xlsx')
+    
+    return response

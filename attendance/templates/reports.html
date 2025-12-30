@@ -34,8 +34,13 @@
             <a class="nav-link active" href="{% url 'admin-reports' %}">📈 Reports</a>
         </li>
         <li class="nav-item">
+            <a class="nav-link" href="{% url 'monthly-report' %}">📅 Monthly Report</a>
+        </li>
+        {% if is_superuser %}
+        <li class="nav-item">
             <a class="nav-link" href="{% url 'admin-salary-report' %}">💰 Salary</a>
         </li>
+        {% endif %}
         {% if is_superuser %}
         <li class="nav-item">
             <a class="nav-link" href="{% url 'admin-sites' %}">🏢 Sites</a>
@@ -75,7 +80,7 @@
                 <div class="col-md-2">
                     <label class="form-label">Per Page</label>
                     <select name="per_page" class="form-select" onchange="this.form.submit()">
-                        <option value="20" {% if per_page == 20 %}selected{% endif %}>20</option>
+                        <option value="20" {% if per_page == 20  %}selected{% endif %}>20</option>
                         <option value="50" {% if per_page == 50 %}selected{% endif %}>50</option>
                         <option value="100" {% if per_page == 100 %}selected{% endif %}>100</option>
                         <option value="500" {% if per_page == 500 %}selected{% endif %}>500</option>

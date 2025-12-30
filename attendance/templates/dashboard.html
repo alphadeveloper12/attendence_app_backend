@@ -19,8 +19,13 @@
                     <a class="nav-link" href="{% url 'admin-reports' %}">📈 Reports</a>
                 </li>
                 <li class="nav-item">
+                    <a class="nav-link" href="{% url 'monthly-report' %}">📅 Monthly Report</a>
+                </li>
+                {% if is_superuser %}
+                <li class="nav-item">
                     <a class="nav-link" href="{% url 'admin-salary-report' %}">💰 Salary</a>
                 </li>
+                {% endif %}
                 {% if is_superuser %}
                 <li class="nav-item">
                     <a class="nav-link" href="{% url 'admin-sites' %}">🏢 Sites</a>
@@ -167,8 +172,19 @@
                         <div class="mb-3">
                             <input type="file" id="excelFile" accept=".xlsx, .xls" required class="form-control">
                         </div>
+                        <div id="importProgress" class="d-none mb-3">
+                            <div class="d-flex justify-content-between mb-2">
+                                <span id="progressStatus" class="text-muted">Uploading...</span>
+                                <span id="progressPercent" class="fw-bold">0%</span>
+                            </div>
+                            <div class="progress" style="height: 25px;">
+                                <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated"
+                                    role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0"
+                                    aria-valuemax="100"></div>
+                            </div>
+                        </div>
                         <div id="importResult" class="alert d-none"></div>
-                        <button type="submit" class="btn btn-primary w-100">Upload & Import</button>
+                        <button type="submit" id="importBtn" class="btn btn-primary w-100">Upload & Import</button>
                     </form>
                 </div>
             </div>
@@ -244,7 +260,7 @@
                             <input type="text" name="position" class="form-control">
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label">Badge Number (KFD & KAMI Emp. ID)</label>
+                            <label class="form-label">Badge ID</label>
                             <input type="text" name="badge_number" class="form-control">
                         </div>
                         <div class="col-md-6">
@@ -540,55 +556,101 @@
         }
     }
 
-    // Handle Excel Import
-    async function handleImport(e) {
+    // Handle Excel Import with Progress
+    function handleImport(e) {
         e.preventDefault();
         const formData = new FormData();
         const fileField = document.getElementById('excelFile');
         formData.append('file', fileField.files[0]);
 
         const resultDiv = document.getElementById('importResult');
-        resultDiv.classList.remove('d-none', 'alert-success', 'alert-danger');
-        resultDiv.classList.add('alert-info');
-        resultDiv.innerHTML = 'Importing... Please wait.';
+        const progressDiv = document.getElementById('importProgress');
+        const progressBar = document.getElementById('progressBar');
+        const progressPercent = document.getElementById('progressPercent');
+        const progressStatus = document.getElementById('progressStatus');
+        const importBtn = document.getElementById('importBtn');
 
-        try {
-            const response = await fetch('{% url "import-employees" %}', {
-                method: 'POST',
-                headers: {
-                    'X-CSRFToken': '{{ csrf_token }}'
-                },
-                body: formData
-            });
+        // Hide result, show progress
+        resultDiv.classList.add('d-none');
+        progressDiv.classList.remove('d-none');
+        importBtn.disabled = true;
 
-            const data = await response.json();
+        // Create XMLHttpRequest for progress tracking
+        const xhr = new XMLHttpRequest();
 
-            if (response.ok && data.imported_count > 0) {
-                resultDiv.classList.remove('alert-info');
-                resultDiv.classList.add('alert-success');
-                resultDiv.innerHTML = `Success! Imported ${data.imported_count} employees.`;
-                setTimeout(() => window.location.reload(), 2000);
-            } else {
-                resultDiv.classList.remove('alert-info');
-                resultDiv.classList.add('alert-danger');
-                let errorMsg = `Error: ${data.error || 'Import failed'}. Imported: ${data.imported_count || 0}.`;
+        // Track upload progress
+        xhr.upload.addEventListener('progress', (e) => {
+            if (e.lengthComputable) {
+                const percentComplete = Math.round((e.loaded / e.total) * 100);
+                progressBar.style.width = percentComplete + '%';
+                progressBar.setAttribute('aria-valuenow', percentComplete);
+                progressPercent.textContent = percentComplete + '%';
 
-                if (data.debug) {
-                    errorMsg += '<br><br><strong>Debug Info:</strong><br>';
-                    errorMsg += `<small>
-                        <strong>Columns Found:</strong> ${JSON.stringify(data.debug.col_map)}<br>
-                        <strong>Header 1:</strong> ${JSON.stringify(data.debug.header_row_1)}<br>
-                        <strong>Header 2:</strong> ${JSON.stringify(data.debug.header_row_2)}<br>
-                        <strong>Logs:</strong><br>${data.debug.row_logs.join('<br>')}
-                    </small>`;
+                // Change status to Processing when upload is complete
+                if (percentComplete === 100) {
+                    progressStatus.textContent = 'Processing...';
                 }
-                resultDiv.innerHTML = errorMsg;
             }
-        } catch (error) {
-            resultDiv.classList.remove('alert-info');
+        });
+
+        // Handle completion
+        xhr.addEventListener('load', () => {
+            if (xhr.status === 200) {
+                try {
+                    const data = JSON.parse(xhr.responseText);
+
+                    progressDiv.classList.add('d-none');
+                    resultDiv.classList.remove('d-none', 'alert-info', 'alert-danger');
+
+                    if (data.imported_count > 0) {
+                        resultDiv.classList.add('alert-success');
+                        resultDiv.innerHTML = `Success! Imported ${data.imported_count} employees.`;
+                        setTimeout(() => window.location.reload(), 2000);
+                    } else {
+                        resultDiv.classList.add('alert-danger');
+                        let errorMsg = `Error: ${data.error || 'Import failed'}. Imported: ${data.imported_count || 0}.`;
+
+                        if (data.debug) {
+                            errorMsg += '<br><br><strong>Debug Info:</strong><br>';
+                            errorMsg += `<small>
+                                <strong>Columns Found:</strong> ${JSON.stringify(data.debug.col_map)}<br>
+                                <strong>Header 1:</strong> ${JSON.stringify(data.debug.header_row_1)}<br>
+                                <strong>Header 2:</strong> ${JSON.stringify(data.debug.header_row_2)}<br>
+                                <strong>Logs:</strong><br>${data.debug.row_logs.join('<br>')}
+                            </small>`;
+                        }
+                        resultDiv.innerHTML = errorMsg;
+                        importBtn.disabled = false;
+                    }
+                } catch (error) {
+                    progressDiv.classList.add('d-none');
+                    resultDiv.classList.remove('d-none', 'alert-info');
+                    resultDiv.classList.add('alert-danger');
+                    resultDiv.innerHTML = `Error: ${error.message}`;
+                    importBtn.disabled = false;
+                }
+            } else {
+                progressDiv.classList.add('d-none');
+                resultDiv.classList.remove('d-none', 'alert-info');
+                resultDiv.classList.add('alert-danger');
+                resultDiv.innerHTML = `Error: Server returned status ${xhr.status}`;
+                importBtn.disabled = false;
+            }
+        });
+
+        // Handle errors
+        xhr.addEventListener('error', () => {
+            progressDiv.classList.add('d-none');
+            resultDiv.classList.remove('d-none', 'alert-info');
             resultDiv.classList.add('alert-danger');
-            resultDiv.innerHTML = `Error: ${error.message}`;
-        }
+            resultDiv.innerHTML = 'Error: Network error occurred';
+            importBtn.disabled = false;
+        });
+
+        // Send request
+        xhr.open('POST', '{% url "import-employees" %}');
+        xhr.setRequestHeader('X-CSRFToken', '{{ csrf_token }}');
+        xhr.send(formData);
     }
 
     // Fetch and Populate Sites
