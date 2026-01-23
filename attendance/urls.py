@@ -20,6 +20,7 @@ urlpatterns = [
     # Admin Dashboard Template Views
     path('dashboard/login/', admin_login_view, name='admin-login'),
     path('dashboard/', admin_dashboard_view, name='admin-dashboard'),
+    path('dashboard/user-face/', admin_user_face_view, name='admin-user-face'),
     path('dashboard/user/<int:user_id>/', admin_user_detail_view, name='admin-user-detail'),
     path('dashboard/logout/', admin_logout_view, name='admin-logout'),
     

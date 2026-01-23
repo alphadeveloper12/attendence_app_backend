@@ -2,7 +2,7 @@
 import calendar
 import pandas as pd
 from fpdf import FPDF
-from django.http import HttpResponse, FileResponse
+from django.http import HttpResponse, FileResponse, JsonResponse
 from django.template.loader import render_to_string
 import io
 import logging
@@ -18,8 +18,9 @@ from django.db import transaction
 from django.db.models import Count, Q
 from django.utils import timezone
 from django.core.files.base import ContentFile
+from django.urls import reverse
 from django.shortcuts import render, redirect, get_object_or_404
-from django.http import JsonResponse
+
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_http_methods
@@ -1319,6 +1320,111 @@ def admin_dashboard_view(request):
         context["today_attendance"] = Attendance.objects.filter(date=today, user__site=site_admin_profile.site).count()
         
     return render(request, "dashboard.html", context)
+
+
+@login_required(login_url="admin-login")
+def admin_user_face_view(request):
+    if not request.user.is_staff:
+        return redirect("admin-login")
+    
+    is_superuser = request.user.is_superuser
+    site_admin_profile = None
+    if not is_superuser:
+        try:
+            site_admin_profile = AdminProfile.objects.get(user=request.user)
+        except AdminProfile.DoesNotExist:
+            pass
+
+    # Get filters
+    site_filter = request.GET.get('site', 'all')
+    status_filter = request.GET.get('status', 'all') # 'enrolled', 'not_enrolled', 'all'
+    search_query = request.GET.get('search', '')
+
+    employees = Employee.objects.select_related("site").order_by('name')
+
+    # Status filtering (face enrollment)
+    if status_filter == 'enrolled':
+        employees = employees.filter(face_embedding__isnull=False)
+    elif status_filter == 'not_enrolled':
+        employees = employees.filter(face_embedding__isnull=True)
+
+    # Site filtering
+    selected_site = site_filter
+    if not is_superuser and site_admin_profile and site_admin_profile.site:
+        employees = employees.filter(site=site_admin_profile.site)
+        selected_site = str(site_admin_profile.site.id)
+        site_filter = selected_site
+    elif site_filter != 'all':
+        try:
+            employees = employees.filter(site_id=int(site_filter))
+        except (ValueError, TypeError):
+            pass
+
+    # Search Filtering
+    if search_query:
+        employees = employees.filter(
+            Q(name__icontains=search_query) | 
+            Q(badge_number__icontains=search_query)
+        )
+
+    # Pagination
+    per_page = request.GET.get('per_page', 20)
+    try:
+        per_page = int(per_page)
+        if per_page not in [20, 100, 500, 1000, 2000]:
+            per_page = 20
+    except ValueError:
+        per_page = 20
+
+    paginator = Paginator(employees, per_page)
+    page_number = request.GET.get('page')
+    try:
+        page_obj = paginator.page(page_number)
+    except PageNotAnInteger:
+        page_obj = paginator.page(1)
+    except EmptyPage:
+        page_obj = paginator.page(paginator.num_pages)
+
+    all_sites = Site.objects.all()
+    
+    context = {
+        "employees": page_obj,
+        "all_sites": all_sites,
+        "selected_site": site_filter,
+        "status_filter": status_filter,
+        "search_query": search_query,
+        "is_superuser": is_superuser,
+        "site_admin_site": site_admin_profile.site if site_admin_profile else None,
+        "per_page": per_page,
+    }
+    
+    if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+        employee_data = []
+        for emp in page_obj:
+            employee_data.append({
+                'id': emp.id,
+                'name': emp.name,
+                'badge_number': emp.badge_number or '-',
+                'position': emp.position or '-',
+                'site_name': emp.site.name if emp.site else '-',
+                'profile_picture': emp.profile_picture.url if emp.profile_picture else None,
+                'face_enrolled': bool(emp.face_embedding),
+                'detail_url': reverse('admin-user-detail', args=[emp.id])
+            })
+        
+        return JsonResponse({
+            'employees': employee_data,
+            'pagination': {
+                'has_next': page_obj.has_next(),
+                'has_previous': page_obj.has_previous(),
+                'current_page': page_obj.number,
+                'total_pages': paginator.num_pages,
+                'page_range': list(paginator.get_elided_page_range(page_obj.number)),
+            },
+            'total_count': paginator.count
+        })
+
+    return render(request, "user_face.html", context)
 
 
 @login_required(login_url="admin-login")

@@ -30,6 +30,9 @@
             <a class="nav-link" href="{% url 'admin-reports' %}">📈 Reports</a>
         </li>
         <li class="nav-item">
+            <a class="nav-link" href="{% url 'monthly-report' %}">📅 Monthly Report</a>
+        </li>
+        <li class="nav-item">
             <a class="nav-link active" href="{% url 'admin-salary-report' %}">💰 Salary</a>
         </li>
         {% if is_superuser %}
@@ -77,7 +80,7 @@
                     <select name="site" class="form-select border-0 shadow-sm" onchange="this.form.submit()">
                         <option value="all">All Sites</option>
                         {% for site in sites %}
-                        <option value="{{ site.id }}" {% if selected_site == site.id|stringformat:"i" %}selected{% endif%}>
+                        <option value="{{ site.id }}" {% if selected_site == site.id|stringformat:"i" %}selected{% endif %}>
                             {{ site.name }}
                         </option>
                         {% endfor %}

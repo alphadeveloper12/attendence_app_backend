@@ -3,6 +3,28 @@
 {% block title %}Dashboard - Admin{% endblock %}
 
 {% block content %}
+<style>
+    .avatar-sm {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        object-fit: cover;
+    }
+
+    .avatar-placeholder {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background-color: #e9ecef;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: bold;
+        color: #6c757d;
+        font-size: 14px;
+        flex-shrink: 0;
+    }
+</style>
 <nav class="navbar navbar-expand-lg navbar-custom mb-4">
     <div class="container-fluid">
         <a class="navbar-brand" href="#">📊 Attendance Dashboard</a>
@@ -20,6 +42,9 @@
                 </li>
                 <li class="nav-item">
                     <a class="nav-link" href="{% url 'monthly-report' %}">📅 Monthly Report</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="{% url 'admin-user-face' %}">👤 User Face</a>
                 </li>
                 {% if is_superuser %}
                 <li class="nav-item">
@@ -102,10 +127,18 @@
                             {% for alert in geofence_alerts %}
                             <tr>
                                 <td>
-                                    <a href="{% url 'admin-user-detail' alert.user.id %}"
-                                        class="text-decoration-none fw-bold text-dark">
-                                        {{ alert.user.name }}
-                                    </a>
+                                    <div class="d-flex align-items-center gap-2">
+                                        {% if alert.user.profile_picture %}
+                                        <img src="{{ alert.user.profile_picture.url }}" alt="{{ alert.user.name }}"
+                                            class="avatar-sm">
+                                        {% else %}
+                                        <div class="avatar-placeholder">{{ alert.user.name|slice:":1"|upper }}</div>
+                                        {% endif %}
+                                        <a href="{% url 'admin-user-detail' alert.user.id %}"
+                                            class="text-decoration-none fw-bold text-dark">
+                                            {{ alert.user.name }}
+                                        </a>
+                                    </div>
                                 </td>
                                 <td>{{ alert.user.site.name|default:"-" }}</td>
                                 <td>
@@ -428,13 +461,23 @@
                                 onclick="updateBulkDeleteBtn()">
                         </td>
                         <td>
-                            <div class="fw-bold">
-                                <a href="{% url 'admin-user-detail' employee.id %}"
-                                    class="text-decoration-none text-dark">
-                                    {{ employee.name }}
-                                </a>
+                            <div class="d-flex align-items-center gap-2">
+                                {% if employee.profile_picture %}
+                                <img src="{{ employee.profile_picture.url }}" alt="{{ employee.name }}"
+                                    class="avatar-sm">
+                                {% else %}
+                                <div class="avatar-placeholder">{{ employee.name|slice:":1"|upper }}</div>
+                                {% endif %}
+                                <div>
+                                    <div class="fw-bold">
+                                        <a href="{% url 'admin-user-detail' employee.id %}"
+                                            class="text-decoration-none text-dark">
+                                            {{ employee.name }}
+                                        </a>
+                                    </div>
+                                    <div class="small text-muted">{{ employee.email|default:"" }}</div>
+                                </div>
                             </div>
-                            <div class="small text-muted">{{ employee.email|default:"" }}</div>
                         </td>
                         <td>{{ employee.badge_number|default:"-" }}</td>
                         <td>{{ employee.department|default:"-" }}</td>
