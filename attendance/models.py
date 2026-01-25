@@ -113,7 +113,7 @@ class Attendance(models.Model):
             diff = (expected_check_out - self.check_out_time).total_seconds() / 60
             self.early_minutes = max(0, int(diff))
 
-        self.save()
+        # self.save()  <-- Removed to prevent double-save in view
 
 class FaceTemplate(models.Model):
     """Stores multiple embeddings for one employee."""
