@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Define paths
-PROJECT_DIR="/var/www/attendance_backend"
+PROJECT_DIR="/home/ubuntu/attendence_app_backend"
 SYSTEMD_DIR="/etc/systemd/system"
 NGINX_DIR="/etc/nginx/sites-available"
 

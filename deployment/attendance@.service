@@ -3,10 +3,10 @@ Description=Attendance Gunicorn daemon on port %i
 After=network.target
 
 [Service]
-User=root
-Group=root
-WorkingDirectory=/var/www/attendance_backend
-ExecStart=/var/www/attendance_backend/venv/bin/gunicorn --workers 3 --bind 127.0.0.1:%i attendance_system.wsgi:application
+User=ubuntu
+Group=www-data
+WorkingDirectory=/home/ubuntu/attendence_app_backend
+ExecStart=/home/ubuntu/attendence_app_backend/venv/bin/gunicorn --workers 3 --bind 127.0.0.1:%i attendance_system.wsgi:application
 Restart=always
 
 [Install]
