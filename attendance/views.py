@@ -898,6 +898,43 @@ class RegisterUserView(APIView):
 # ------------------ Mark Attendance (DeepFace -> InsightFace + FAISS) ------------------
 
 
+import threading
+
+def process_background_tasks(attendance_id, site_id, latitude, longitude):
+    """
+    Perform heavy calculations in background:
+    - Geofence check
+    - Late/Early minutes calculation
+    - Final save
+    """
+    try:
+        # Re-fetch fresh object
+        att = Attendance.objects.get(id=attendance_id)
+        
+        # 1. Geofence Check
+        site = None
+        if site_id:
+            try:
+                site = Site.objects.get(id=site_id)
+            except Site.DoesNotExist:
+                pass
+        
+        # Fallback to employee site
+        if not site and att.user.site:
+            site = att.user.site
+
+        is_within = check_geofence(site, latitude, longitude)
+        att.is_within_geofence = is_within
+
+        # 2. Calculate Late/Early (Pure math now, no save)
+        att.calculate_late_and_early()
+        
+        # 3. Final Save
+        att.save()
+        
+    except Exception as e:
+        print(f"Background task failed for attendance {attendance_id}: {e}")
+
 class MarkAttendanceView(APIView):
     permission_classes = [AllowAny]
 
@@ -1035,38 +1072,26 @@ class MarkAttendanceView(APIView):
             date=today,
             defaults={"status": "present"},
         )
+        # Update basic fields IMMEDIATELY
         attendance.latitude = latitude
         attendance.longitude = longitude
         attendance.slot = slot
         
-        # Geofence Check
-        site = None
-        if site_id:
-            try:
-                site = Site.objects.get(id=site_id)
-            except Site.DoesNotExist:
-                pass
-        
-        # If site_id was not provided, maybe use employee's site?
-        if not site and emp.site:
-            site = emp.site
-
-        is_within = check_geofence(site, latitude, longitude)
-        attendance.is_within_geofence = is_within
-
         # Update slot timestamps
         if slot == "office_in":
-            # Only set check_in_time if not already set, or update it?
-            # Existing logic seemed to update it. Let's stick to updating it for now to match 833.
-            # But wait, if I check in at 9:00 and then at 9:05, do I want 9:05?
-            # Usually strict attendance systems take the first check-in.
-            # But let's stick to what was there: `attendance.check_in_time = now`
             attendance.check_in_time = now
         elif slot == "office_out":
             attendance.check_out_time = now
         
-        attendance.calculate_late_and_early()
+        # Basic Save (Fast)
         attendance.save()
+        
+        # Offload Heavy Logic (Geofence + Late/Early Calc) to Background Thread
+        t = threading.Thread(
+            target=process_background_tasks,
+            args=(attendance.id, site_id, latitude, longitude)
+        )
+        t.start()
 
         return Response(
             {
