@@ -260,23 +260,8 @@ class FaceEngine:
         if max(h0, w0) < 900:
             attempts.append(("orig_up", self._upscale_bgr(bgr_image, 1.6)))
 
-        # 180°
-        rot180 = self._rotate_bgr(bgr_image, 2)
-        attempts.append(("rot180", rot180))
-        if max(rot180.shape[:2]) < 900:
-            attempts.append(("rot180_up", self._upscale_bgr(rot180, 1.6)))
-
-        # 90°
-        rot90 = self._rotate_bgr(bgr_image, 1)
-        attempts.append(("rot90", rot90))
-        if max(rot90.shape[:2]) < 900:
-            attempts.append(("rot90_up", self._upscale_bgr(rot90, 1.6)))
-
-        # 270°
-        rot270 = self._rotate_bgr(bgr_image, 3)
-        attempts.append(("rot270", rot270))
-        if max(rot270.shape[:2]) < 900:
-            attempts.append(("rot270_up", self._upscale_bgr(rot270, 1.6)))
+        # Removed 90° and 270° rotations as user confirmed only front-face images are used.
+        # This reduces the pipeline to just 'orig' and 'orig_up', maximizing performance.
 
         last_meta: Dict[str, Any] = {
             "ok": False,

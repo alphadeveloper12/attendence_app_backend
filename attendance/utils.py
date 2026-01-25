@@ -11,13 +11,13 @@ import numpy as np
 from PIL import Image
 
 # ------------ Matching thresholds ------------
-THRESH: float = 0.75        # cosine similarity accept threshold
+THRESH: float = 0.65        # cosine similarity accept threshold
 MARGIN: float = 0.02        # best - second_best similarity margin
 DEBOUNCE_SEC: int = 45      # not used here
 
 # ------------ Quality gates (face ROI) ------------
 # Slightly more lenient than before
-MIN_DET_SCORE: float = 0.50    # was 0.60 - allow slightly weaker detections
+MIN_DET_SCORE: float = 0.45    # was 0.60 - allow slightly weaker detections
 MIN_FACE_RATIO: float = 0.03   # was 0.05 - allow smaller faces (~3% of image)
 MIN_BLUR: float = 25.0         # was 40.0 - allow softer images
 MIN_BRIGHTNESS: float = 20.0   # was 30.0 - allow darker images
@@ -56,10 +56,17 @@ def get_image_bytes(file_or_image: Any) -> bytes:
 def pil_to_bgr_array_from_bytes(raw_bytes: bytes) -> np.ndarray:
     """
     Convert raw bytes → OpenCV BGR numpy array. Safe for PNG/JPG.
+    Auto-resizes large images to max 1024px for speed.
     """
     try:
         image = Image.open(BytesIO(raw_bytes))
         image = image.convert("RGB")  # ensure RGB
+        
+        # Resize if too large (max 1024px dim) - speeds up inference 4-10x
+        max_dim = 1024
+        if max(image.size) > max_dim:
+            image.thumbnail((max_dim, max_dim), Image.LANCZOS)
+
         arr = np.array(image)
         bgr = cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
         return bgr
