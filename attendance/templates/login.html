@@ -1,39 +1,165 @@
 {% extends 'base.html' %}
-{% block title %}Login - Admin Dashboard{% endblock %}
+{% block title %}Admin Access - RocketAttendance{% endblock %}
 
 {% block content %}
-<div class="container d-flex justify-content-center align-items-center min-vh-100">
-    <div class="card shadow-lg p-4 p-md-5" style="max-width: 450px; width: 100%;">
-        <h2 class="text-center mb-4" style="color: #667eea; font-weight: 700;">Admin Login</h2>
+<style>
+    body {
+        background-color: #f8fafc;
+    }
 
-        {% if error %}
-        <div class="alert alert-danger" role="alert">
-            {{ error }}
-        </div>
-        {% endif %}
+    .login-container {
+        min-height: 85vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 1.5rem;
+    }
 
-        <form method="POST">
+    .login-card {
+        background: white !important;
+        border: 1px solid black !important;
+        border-radius: 1.5rem;
+        padding: 3.5rem;
+        width: 100%;
+        max-width: 480px;
+        text-align: center;
+        box-shadow: none !important;
+    }
+
+    .brand-logo {
+        width: 64px;
+        height: 64px;
+        background: black;
+        color: white;
+        border-radius: 1.25rem;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 2.25rem;
+        font-weight: 800;
+        margin-bottom: 1.5rem;
+    }
+
+    .form-label-pro {
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        font-weight: 700;
+        color: black;
+        letter-spacing: 0.05em;
+        margin-bottom: 0.75rem;
+        display: block;
+        text-align: left;
+    }
+
+    .form-control-pro {
+        border: 1px solid black !important;
+        border-radius: 0.875rem;
+        padding: 0.875rem 1.25rem;
+        font-weight: 600;
+        transition: all 0.2s;
+    }
+
+    .form-control-pro:focus {
+        background: #fbfbfb;
+        box-shadow: none !important;
+    }
+
+    #error-box {
+        display: none;
+        background: white;
+        color: #e11d48;
+        padding: 1rem;
+        border: 1px solid #e11d48;
+        border-radius: 0.75rem;
+        font-size: 0.875rem;
+        font-weight: 700;
+        margin-bottom: 2rem;
+    }
+</style>
+
+<div class="login-container">
+    <div class="login-card">
+        <div class="brand-logo">R</div>
+        <h2 class="fw-bold text-dark mb-1">Administrative Login</h2>
+        <p class="text-secondary small mb-5">Professional Site Management Portal</p>
+
+        <div id="error-box"></div>
+
+        <form id="proLoginForm" onsubmit="handleLogin(event)">
             {% csrf_token %}
-            <div class="mb-3">
-                <label for="username" class="form-label fw-bold text-secondary">Username</label>
-                <input type="text" id="username" name="username" class="form-control form-control-lg" required
-                    autofocus>
-            </div>
-
             <div class="mb-4">
-                <label for="password" class="form-label fw-bold text-secondary">Password</label>
-                <input type="password" id="password" name="password" class="form-control form-control-lg" required>
+                <label class="form-label-pro">System Username</label>
+                <input type="text" name="username" class="form-control-pro form-control" placeholder="Enter username"
+                    required autofocus>
             </div>
 
-            <button type="submit" class="btn btn-primary w-100 py-2 fw-bold text-uppercase">Login</button>
+            <div class="mb-5">
+                <label class="form-label-pro">Security Key</label>
+                <input type="password" name="password" class="form-control-pro form-control"
+                    placeholder="Enter password" required>
+            </div>
+
+            <button type="submit" id="submitBtn" class="btn btn-pro w-100 py-3"
+                style="background: black !important; color: white !important;">
+                <span id="btnText">Secure Access</span>
+                <span id="btnLoader" class="spinner-border spinner-border-sm d-none"></span>
+            </button>
         </form>
 
-        <div class="mt-4 pt-3 border-top text-center">
-            <a href="{% url 'download-build' 'attendance' %}"
-                class="btn btn-outline-primary w-100 text-decoration-none">
-                📱 Download Application
+        <div class="mt-5 pt-4 border-top">
+            <a href="{% url 'admin-downloads' %}" class="btn btn-pro w-100">
+                <i class="ri-smartphone-line me-2"></i> Download Mobile App
             </a>
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    async function handleLogin(e) {
+        e.preventDefault();
+        const form = e.target;
+        const btn = document.getElementById('submitBtn');
+        const btnText = document.getElementById('btnText');
+        const btnLoader = document.getElementById('btnLoader');
+        const errorDiv = document.getElementById('error-box');
+
+        errorDiv.style.display = 'none';
+        btn.disabled = true;
+        btnText.classList.add('d-none');
+        btnLoader.classList.remove('d-none');
+
+        const formData = new FormData(form);
+
+        try {
+            const response = await fetch(window.location.href, {
+                method: 'POST',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRFToken': formData.get('csrfmiddlewaretoken')
+                },
+                body: formData
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                window.location.href = data.redirect_url;
+            } else {
+                errorDiv.textContent = data.error;
+                errorDiv.style.display = 'block';
+                btn.disabled = false;
+                btnText.classList.remove('d-none');
+                btnLoader.classList.add('d-none');
+            }
+        } catch (error) {
+            errorDiv.textContent = "Security pipeline connection failure.";
+            errorDiv.style.display = 'block';
+            btn.disabled = false;
+            btnText.classList.remove('d-none');
+            btnLoader.classList.add('d-none');
+        }
+    }
+</script>
 {% endblock %}
