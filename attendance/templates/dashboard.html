@@ -704,13 +704,59 @@
             const emp = data.employee;
             modalLink.href = `/api/attendance/dashboard/user/${empId}/`;
             const sections = [
-                { title: "Basic Information", fields: [{ label: 'Full Name', value: emp.name }, { label: 'Email', value: emp.email }, { label: 'Phone', value: emp.phone }, { label: 'Badge ID', value: emp.badge_number }] },
-                { title: "Employment Details", fields: [{ label: 'Department', value: emp.department }, { label: 'Position', value: emp.position }, { label: 'Site', value: emp.site }, { label: 'Status', value: emp.status }] }
+                {
+                    title: "Status & Core",
+                    fields: [
+                        { label: 'Full Name', value: emp.name },
+                        { label: 'Badge ID', value: emp.badge_number },
+                        { label: 'Site', value: emp.site },
+                        { label: 'Status', value: emp.status }
+                    ]
+                },
+                {
+                    title: "Personal Details",
+                    fields: [
+                        { label: 'Gender', value: emp.gender },
+                        { label: 'Nationality', value: emp.nationality },
+                        { label: 'DOB', value: emp.date_of_birth },
+                        { label: 'Religion', value: emp.religion },
+                        { label: 'Marital Status', value: emp.marital_status }
+                    ]
+                },
+                {
+                    title: "Employment Info",
+                    fields: [
+                        { label: 'Department', value: emp.department },
+                        { label: 'Position', value: emp.position },
+                        { label: 'Employer', value: emp.employer },
+                        { label: 'Joining Date', value: emp.date_of_joining },
+                        { label: 'Salary', value: emp.gross_salary ? `AED ${parseFloat(emp.gross_salary).toLocaleString()}` : '-' }
+                    ]
+                },
+                {
+                    title: "Identity & Documents",
+                    fields: [
+                        { label: 'Passport No.', value: emp.passport_number },
+                        { label: 'Passport Expiry', value: emp.passport_expiry },
+                        { label: 'Labor Card', value: emp.labor_card_number },
+                        { label: 'MOL ID', value: emp.mol_id },
+                        { label: 'Visa Details', value: emp.visa_details }
+                    ]
+                },
+                {
+                    title: "Contact & Logistics",
+                    fields: [
+                        { label: 'Phone', value: emp.phone },
+                        { label: 'Email', value: emp.email },
+                        { label: 'Camp', value: emp.camp },
+                        { label: 'Transportation', value: emp.transportation }
+                    ]
+                }
             ];
             modalBody.innerHTML = sections.map(s => `
-                <h6 class="fw-bold text-primary mb-3 border-bottom pb-2">${s.title}</h6>
-                <div class="row g-3 mb-4">${s.fields.map(f => `
-                    <div class="col-md-6"><div class="bg-light p-2 rounded"><div class="text-secondary small fw-bold">${f.label}</div><div>${f.value || '-'}</div></div></div>`).join('')}
+                <h6 class="fw-bold text-dark mb-3 border-bottom pb-2" style="font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em;">${s.title}</h6>
+                <div class="row g-2 mb-4">${s.fields.map(f => `
+                    <div class="col-md-4 col-6"><div class="p-2 rounded bg-light border border-white h-100"><div class="text-secondary" style="font-size: 0.65rem; font-weight: 700; text-transform: uppercase;">${f.label}</div><div class="text-dark small fw-semibold overflow-hidden text-nowrap text-truncate">${f.value || '-'}</div></div></div>`).join('')}
                 </div>`).join('');
         } catch (e) { modalBody.innerHTML = '<div class="text-center text-danger py-4">Error loading details.</div>'; }
     }
