@@ -1,228 +1,525 @@
 {% extends 'base.html' %}
 
+{% block title %}Salary Management - Admin Dashboard{% endblock %}
+
 {% block content %}
-<nav class="navbar navbar-expand-lg navbar-custom mb-4 shadow-sm">
-    <div class="container-fluid">
-        <a class="navbar-brand d-flex align-items-center gap-2" href="#">
-            <span class="fs-4">💰 Salary Management</span>
-        </a>
-        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarContent">
-            <span class="navbar-toggler-icon"></span>
+<!-- Remix Icons & Google Fonts -->
+<link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+    :root {
+        --font-family: 'Outfit', sans-serif;
+        --card-bg: #ffffff;
+        --text-primary: #1e293b;
+        --text-secondary: #64748b;
+
+        --grad-primary: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+        --grad-success: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        --grad-warning: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+        --grad-danger: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);
+        --grad-info: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+    }
+
+    body {
+        font-family: var(--font-family) !important;
+        background-color: #f8fafc;
+    }
+
+    /* Page Setup */
+    .page-header {
+        margin-bottom: 2.5rem;
+    }
+
+    /* Premium Cards - Monochrome Professional */
+    .premium-card {
+        background: white !important;
+        border: 1px solid black !important;
+        border-radius: 1.5rem;
+        padding: 1.75rem;
+        box-shadow: none !important;
+        margin-bottom: 2rem;
+    }
+
+    .form-label-premium {
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        font-weight: 700;
+        color: #94a3b8;
+        letter-spacing: 0.05em;
+        margin-bottom: 0.75rem;
+        display: block;
+    }
+
+    .form-select-premium,
+    .form-control-premium {
+        border: 1px solid #e2e8f0;
+        border-radius: 0.875rem;
+        padding: 0.75rem 1rem;
+        font-weight: 500;
+        transition: all 0.2s;
+        cursor: pointer;
+    }
+
+    .form-select-premium:focus,
+    .form-control-premium:focus {
+        border-color: #6366f1;
+        box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
+    }
+
+    /* Table & Badges */
+    .modern-table-container {
+        background: white;
+        border-radius: 1.5rem;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+        border: 1px solid #f1f5f9;
+        overflow: hidden;
+    }
+
+    .table thead th {
+        background: #f8fafc;
+        padding: 1.25rem 1rem;
+        font-weight: 700;
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        color: #64748b;
+        border-bottom: 2px solid #f1f5f9;
+    }
+
+    .table tbody td {
+        padding: 1.125rem 1rem;
+        vertical-align: middle;
+        border-bottom: 1px solid #f1f5f9;
+    }
+
+    .salary-badge {
+        font-size: 0.9rem;
+        font-weight: 700;
+        padding: 0.5rem 1rem;
+        border-radius: 0.75rem;
+        background: #f1f5f9;
+        color: #1e293b;
+        display: inline-block;
+        min-width: 100px;
+        text-align: right;
+    }
+
+    .net-salary-badge {
+        background: black !important;
+        color: white !important;
+        border: 1px solid black !important;
+        box-shadow: none !important;
+    }
+
+    /* Slip Modal Styles */
+    .slip-container {
+        padding: 2.5rem;
+        max-width: 800px;
+        margin: auto;
+        background: white;
+        color: #1e293b;
+    }
+
+    .slip-header {
+        border-bottom: 3px solid black !important;
+        padding-bottom: 1.5rem;
+        margin-bottom: 2rem;
+    }
+
+    .slip-table th {
+        background: #f8fafc;
+        font-weight: 700;
+        color: #64748b;
+        border-bottom: 1px solid #e2e8f0;
+    }
+
+    .slip-table td {
+        padding: 0.75rem 0.5rem;
+        border-bottom: 1px solid #f1f5f9;
+    }
+
+    .slip-total-row {
+        background: #f1f5f9;
+        font-weight: 700;
+        font-size: 1.1rem;
+    }
+
+    @media print {
+
+        .modal-footer,
+        .btn-close,
+        .navbar,
+        .page-header,
+        .premium-card,
+        .modern-table-container,
+        .d-flex {
+            display: none !important;
+        }
+
+        .modal-dialog {
+            max-width: 100%;
+            margin: 0;
+        }
+
+        .modal-content {
+            border: none;
+            box-shadow: none;
+        }
+
+        .slip-container {
+            padding: 0;
+        }
+    }
+</style>
+
+<!-- Top Navigation & Header -->
+<div class="page-header d-flex justify-content-between align-items-center">
+    <div>
+        <h1 class="h3 fw-bold text-dark mb-1">Salary Management</h1>
+        <div class="d-flex align-items-center gap-2 text-secondary font-monospace small">
+            <i class="ri-money-dollar-circle-line text-primary"></i>
+            <span id="period-display">Loading...</span>
+            <span class="mx-1">•</span>
+            <i class="ri-time-line"></i>
+            <span id="live-clock">--:--:--</span>
+        </div>
+    </div>
+    <div class="d-flex gap-3">
+        <button onclick="window.location.href='/api/attendance/dashboard/'" class="btn btn-pro">
+            <i class="ri-arrow-left-line me-2"></i>Dashboard
         </button>
-        <div class="collapse navbar-collapse" id="navbarContent">
-            <div class="ms-auto d-flex align-items-center gap-3 flex-wrap">
-                <div id="liveClock" class="badge bg-light text-dark border p-2 fs-6 fw-normal"></div>
-                <span class="text-white">Welcome, {{ user.username }}</span>
-                <a href="{% url 'admin-dashboard' %}" class="btn btn-secondary btn-sm">Back to Dashboard</a>
-                <a href="{% url 'admin-logout' %}" class="btn btn-danger btn-sm">Logout</a>
+    </div>
+</div>
+
+<!-- Filters Card -->
+<div class="premium-card">
+    <div class="row g-4 align-items-end">
+        <div class="col-md-2">
+            <label class="form-label-premium">Month</label>
+            <select id="filterMonth" class="form-select form-select-premium" onchange="loadData(1)"></select>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label-premium">Year</label>
+            <select id="filterYear" class="form-select form-select-premium" onchange="loadData(1)"></select>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label-premium">Site</label>
+            <select id="filterSite" class="form-select form-select-premium" onchange="loadData(1)">
+                <option value="all">All Sites</option>
+            </select>
+        </div>
+        <div class="col-md-4">
+            <label class="form-label-premium">Search Employee</label>
+            <div class="input-group shadow-sm rounded-3 overflow-hidden">
+                <span class="input-group-text border-0 bg-white ps-3"><i
+                        class="ri-search-line text-secondary"></i></span>
+                <input type="text" id="searchInput" class="form-control-premium form-control border-0 py-2"
+                    placeholder="Search name, ID, email..." oninput="debounceSearch()">
+            </div>
+        </div>
+        <div class="col-md-2">
+            <button onclick="loadData(1)" class="btn btn-pro w-100">
+                <i class="ri-refresh-line me-1"></i> Refresh
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Table Container -->
+<div class="modern-table-container">
+    <div class="card-header bg-white p-4 border-bottom d-flex justify-content-between align-items-center">
+        <h5 class="fw-bold mb-0 d-flex align-items-center gap-2">
+            <i class="ri-calculator-line text-primary"></i> Salary Calculations
+        </h5>
+        <div class="d-flex align-items-center gap-3">
+            <label class="small fw-bold text-secondary text-uppercase mb-0">Rows:</label>
+            <select id="perPageFilter" class="form-select form-select-sm border-0 shadow-sm rounded-2 fw-bold"
+                style="width: 75px;" onchange="loadData(1)">
+                <option value="20" selected>20</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+                <option value="500">500</option>
+            </select>
+        </div>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead>
+                <tr>
+                    <th class="ps-4">Employee</th>
+                    <th>Site</th>
+                    <th class="text-center">Gross Salary</th>
+                    <th class="text-center">Days (W/P/A)</th>
+                    <th class="text-center">Deduction</th>
+                    <th class="text-center">Net Salary</th>
+                    <th class="text-end pe-4">Actions</th>
+                </tr>
+            </thead>
+            <tbody id="salaryTableBody">
+                <!-- Loaded via JS -->
+            </tbody>
+        </table>
+    </div>
+    <div id="paginationContainer" class="p-4 border-top">
+        <!-- Pagination Hydrated via JS -->
+    </div>
+</div>
+
+<!-- Salary Slip Modal -->
+<div class="modal fade" id="slipModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content rounded-4 border-0 shadow-lg" style="overflow: hidden;">
+            <div class="modal-body p-0" id="slipModalBody">
+                <!-- Slip Content Hydrated via JS -->
+            </div>
+            <div class="modal-footer bg-light border-0">
+                <button type="button" class="btn btn-pro" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-pro d-flex align-items-center gap-2" onclick="printSlip()">
+                    <i class="ri-printer-line"></i> Print Slip
+                </button>
+                <a id="downloadPdfBtn" href="#" class="btn btn-pro d-flex align-items-center gap-2"
+                    style="background: black !important; color: white !important;">
+                    <i class="ri-file-pdf-line"></i> Download PDF
+                </a>
             </div>
         </div>
     </div>
-</nav>
-
-<!-- Navigation Menu -->
-<div class="container mb-4">
-    <ul class="nav nav-pills nav-fill bg-white p-2 rounded shadow-sm">
-        <li class="nav-item">
-            <a class="nav-link" href="{% url 'admin-dashboard' %}">📊 Dashboard</a>
-        </li>
-        <li class="nav-item">
-            <a class="nav-link" href="{% url 'admin-reports' %}">📈 Reports</a>
-        </li>
-        <li class="nav-item">
-            <a class="nav-link" href="{% url 'monthly-report' %}">📅 Monthly Report</a>
-        </li>
-        <li class="nav-item">
-            <a class="nav-link active" href="{% url 'admin-salary-report' %}">💰 Salary</a>
-        </li>
-        {% if is_superuser %}
-        <li class="nav-item">
-            <a class="nav-link" href="{% url 'admin-sites' %}">🏢 Sites</a>
-        </li>
-        <li class="nav-item">
-            <a class="nav-link" href="{% url 'admin-site-admins' %}">👤 Site Admins</a>
-        </li>
-        {% endif %}
-    </ul>
 </div>
 
-<div class="container-fluid py-4">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2 class="h3 mb-0 text-white">Monthly Salary Report</h2>
-    </div>
+{% endblock %}
 
-    <!-- Filters -->
-    <div class="card shadow-sm mb-4 border-0">
-        <div class="card-body bg-light rounded">
-            <form method="get" class="row g-3 align-items-end">
-                <div class="col-md-2">
-                    <label class="form-label fw-bold">Month</label>
-                    <select name="month" class="form-select border-0 shadow-sm" onchange="this.form.submit()">
-                        {% for m in months %}
-                        <option value="{{ m }}" {% if selected_month == m %}selected{% endif %}>
-                            {{ m|date:"F"|default:m }}
-                        </option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-md-2">
-                    <label class="form-label fw-bold">Year</label>
-                    <select name="year" class="form-select border-0 shadow-sm" onchange="this.form.submit()">
-                        {% for y in years %}
-                        <option value="{{ y }}" {% if selected_year == y %}selected{% endif %}>
-                            {{ y }}
-                        </option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-md-2">
-                    <label class="form-label fw-bold">Site</label>
-                    <select name="site" class="form-select border-0 shadow-sm" onchange="this.form.submit()">
-                        <option value="all">All Sites</option>
-                        {% for site in sites %}
-                        <option value="{{ site.id }}" {% if selected_site == site.id|stringformat:"i" %}selected{% endif %}>
-                            {{ site.name }}
-                        </option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-md-3">
-                    <label class="form-label fw-bold">Search</label>
-                    <input type="text" name="search" class="form-control border-0 shadow-sm"
-                        placeholder="Name or Badge ID..." value="{{ search_query }}">
-                </div>
-                <div class="col-md-1">
-                    <label class="form-label fw-bold">Per Page</label>
-                    <select name="per_page" class="form-select border-0 shadow-sm" onchange="this.form.submit()">
-                        <option value="20" {% if per_page == 20 %}selected{% endif %}>20</option>
-                        <option value="50" {% if per_page == 50 %}selected{% endif %}>50</option>
-                        <option value="100" {% if per_page == 100 %}selected{% endif %}>100</option>
-                        <option value="500" {% if per_page == 500 %}selected{% endif %}>500</option>
-                    </select>
-                </div>
-                <div class="col-md-2">
-                    <button type="submit" class="btn btn-primary w-100 shadow-sm">
-                        <i class="fas fa-search me-1"></i> Filter
+{% block scripts %}
+<script>
+    let filterInitialized = false;
+    let searchTimer;
+    let lastData = [];
+
+    document.addEventListener('DOMContentLoaded', () => {
+        setupFilterDropdowns();
+        startTime();
+        loadData(1);
+    });
+
+    function setupFilterDropdowns() {
+        const monthSelect = document.getElementById('filterMonth');
+        const yearSelect = document.getElementById('filterYear');
+        const now = new Date();
+
+        const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+        monthNames.forEach((name, i) => {
+            const opt = document.createElement('option');
+            opt.value = i + 1;
+            opt.textContent = name;
+            if (i === now.getMonth()) opt.selected = true;
+            monthSelect.appendChild(opt);
+        });
+
+        const currentYear = now.getFullYear();
+        for (let y = currentYear - 2; y <= currentYear + 1; y++) {
+            const opt = document.createElement('option');
+            opt.value = y;
+            opt.textContent = y;
+            if (y === currentYear) opt.selected = true;
+            yearSelect.appendChild(opt);
+        }
+    }
+
+    function debounceSearch() {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(() => loadData(1), 500);
+    }
+
+    async function loadData(page = 1) {
+        const tbody = document.getElementById('salaryTableBody');
+        tbody.innerHTML = `<tr><td colspan="7" class="text-center py-5">
+            <div class="spinner-border text-primary spinner-border-sm"></div>
+            <p class="mt-2 mb-0 text-secondary small">Calculating monthly salaries...</p>
+        </td></tr>`;
+
+        const month = document.getElementById('filterMonth').value;
+        const year = document.getElementById('filterYear').value;
+        const site = document.getElementById('filterSite').value;
+        const search = document.getElementById('searchInput').value;
+        const perPage = document.getElementById('perPageFilter').value;
+
+        const params = new URLSearchParams({ month, year, site, search, page, per_page: perPage });
+
+        try {
+            const res = await fetch(`?${params.toString()}`, {
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            });
+            const data = await res.json();
+            lastData = data.results;
+
+            if (!filterInitialized) {
+                const siteSelect = document.getElementById('filterSite');
+                data.sites.forEach(s => {
+                    const opt = document.createElement('option');
+                    opt.value = s.id;
+                    opt.textContent = s.name;
+                    siteSelect.appendChild(opt);
+                });
+                filterInitialized = true;
+            }
+
+            renderTable(data.results);
+            renderPagination(data.pagination);
+            document.getElementById('period-display').textContent = `${data.summary.month_name} ${data.summary.year} (${data.summary.total_employees} Employees)`;
+
+        } catch (e) {
+            tbody.innerHTML = `<tr><td colspan="7" class="text-center py-5 text-danger">Failed to connect to salary server.</td></tr>`;
+        }
+    }
+
+    function renderTable(rows) {
+        const tbody = document.getElementById('salaryTableBody');
+        if (rows.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="7" class="text-center py-5 text-muted">No salary records found for this criteria.</td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = rows.map(r => `
+            <tr>
+                <td class="ps-4">
+                    <div class="d-flex align-items-center gap-3">
+                        <div style="width: 38px; height: 38px; border-radius: 12px; background: #f1f5f9; display: flex; align-items: center; justify-content: center; font-weight: 700; color: #4f46e5; border: 2px solid white; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
+                            ${r.name.charAt(0)}
+                        </div>
+                        <div>
+                            <div class="fw-bold text-dark">${r.name}</div>
+                            <div class="small text-secondary font-monospace" style="font-size: 0.7rem;">ID: ${r.badge_number}</div>
+                        </div>
+                    </div>
+                </td>
+                <td><div class="small fw-medium text-secondary"><i class="ri-map-pin-line"></i> ${r.site}</div></td>
+                <td class="text-center"><span class="salary-badge">${parseFloat(r.gross_salary).toLocaleString()}</span></td>
+                <td class="text-center">
+                    <div class="d-flex justify-content-center gap-1">
+                        <span class="badge bg-light text-dark border rounded-pill px-2" title="Working Days">${r.working_days}W</span>
+                        <span class="badge bg-success bg-opacity-10 text-success rounded-pill px-2" title="Present">${r.present_days}P</span>
+                        <span class="badge bg-danger bg-opacity-10 text-danger rounded-pill px-2" title="Absent">${r.absent_days}A</span>
+                    </div>
+                </td>
+                <td class="text-center text-danger fw-bold">-${r.deduction.toLocaleString()}</td>
+                <td class="text-center"><span class="salary-badge net-salary-badge">${r.net_salary.toLocaleString()}</span></td>
+                <td class="text-end pe-4">
+                    <div class="d-flex gap-2 justify-content-end">
+                        <button onclick="viewSlip(${r.id})" class="btn btn-sm btn-pro">
+                            <i class="ri-eye-line"></i> View
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    function renderPagination(p) {
+        const container = document.getElementById('paginationContainer');
+        if (p.num_pages <= 1) {
+            container.innerHTML = `<span class="small text-secondary fw-medium">Showing ${p.start_index}-${p.total_items} of ${p.total_items} entries</span>`;
+            return;
+        }
+
+        container.innerHTML = `
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+                <span class="small text-secondary fw-bold">Showing <span class="text-dark">${p.start_index}-${p.end_index}</span> of <span class="text-dark">${p.total_items}</span> records</span>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-light border btn-sm px-3 rounded-3" onclick="loadData(${p.current_page - 1})" ${!p.has_previous ? 'disabled style="opacity:0.5"' : ''}>
+                        <i class="ri-arrow-left-s-line"></i>
+                    </button>
+                    <div class="btn btn-primary btn-sm px-3 rounded-3 shadow-sm">${p.current_page}</div>
+                    <button class="btn btn-light border btn-sm px-3 rounded-3" onclick="loadData(${p.current_page + 1})" ${!p.has_next ? 'disabled style="opacity:0.5"' : ''}>
+                        <i class="ri-arrow-right-s-line"></i>
                     </button>
                 </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- Salary Table -->
-    <div class="card shadow-sm border-0">
-        <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
-            <h5 class="mb-0 fw-bold text-primary">Calculations for {{ selected_month }}/{{ selected_year }}</h5>
-            <span class="badge bg-primary">Total: {{ salary_data.paginator.count }} Employees</span>
-        </div>
-        <div class="table-responsive">
-            <table class="table table-hover align-middle mb-0">
-                <thead class="table-light">
-                    <tr>
-                        <th>Employee</th>
-                        <th>Badge ID</th>
-                        <th>Site</th>
-                        <th class="text-center">Gross Salary</th>
-                        <th class="text-center">Working Days</th>
-                        <th class="text-center">Present</th>
-                        <th class="text-center">Absent</th>
-                        <th class="text-center">Deduction</th>
-                        <th class="text-center">Net Salary</th>
-                        <th class="text-end">Action</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for item in salary_data %}
-                    <tr>
-                        <td>
-                            <div class="fw-bold text-dark">{{ item.employee.name }}</div>
-                            <div class="small text-muted">{{ item.employee.department|default:"-" }}</div>
-                        </td>
-                        <td><span class="badge bg-secondary">{{ item.employee.badge_number|default:"-" }}</span></td>
-                        <td><span class="text-muted small">{{ item.employee.site.name|default:"-" }}</span></td>
-                        <td class="text-center fw-bold text-dark">{{ item.gross_salary|floatformat:2 }}</td>
-                        <td class="text-center">{{ item.working_days }}</td>
-                        <td class="text-center"><span class="text-success fw-bold">{{ item.present_days }}</span></td>
-                        <td class="text-center"><span class="text-danger fw-bold">{{ item.absent_days }}</span></td>
-                        <td class="text-center text-danger">-{{ item.deduction|floatformat:2 }}</td>
-                        <td class="text-center">
-                            <span class="badge bg-success fs-6">
-                                {{ item.net_salary|floatformat:2 }}
-                            </span>
-                        </td>
-                        <td class="text-end">
-                            <a href="{% url 'download-salary-slip' item.employee.id selected_month selected_year %}"
-                                class="btn btn-sm btn-outline-danger shadow-sm">
-                                <i class="fas fa-file-pdf me-1"></i> Slip
-                            </a>
-                        </td>
-                    </tr>
-                    {% empty %}
-                    <tr>
-                        <td colspan="9" class="text-center py-5 text-muted">
-                            <i class="fas fa-info-circle me-1"></i> No salary data found for this period.
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-
-        <!-- Pagination -->
-        {% if salary_data.has_other_pages %}
-        <div class="card-footer bg-white py-3">
-            <nav aria-label="Page navigation">
-                <ul class="pagination justify-content-center mb-0">
-                    {% if salary_data.has_previous %}
-                    <li class="page-item">
-                        <a class="page-link"
-                            href="?page=1&month={{ selected_month }}&year={{ selected_year }}&site={{ selected_site }}&search={{ search_query }}&per_page={{ per_page }}">First</a>
-                    </li>
-                    <li class="page-item">
-                        <a class="page-link"
-                            href="?page={{ salary_data.previous_page_number }}&month={{ selected_month }}&year={{ selected_year }}&site={{ selected_site }}&search={{ search_query }}&per_page={{ per_page }}">Previous</a>
-                    </li>
-                    {% endif %}
-
-                    <li class="page-item active">
-                        <span class="page-link">Page {{ salary_data.number }} of {{ salary_data.paginator.num_pages
-                            }}</span>
-                    </li>
-
-                    {% if salary_data.has_next %}
-                    <li class="page-item">
-                        <a class="page-link"
-                            href="?page={{ salary_data.next_page_number }}&month={{ selected_month }}&year={{ selected_year }}&site={{ selected_site }}&search={{ search_query }}&per_page={{ per_page }}">Next</a>
-                    </li>
-                    <li class="page-item">
-                        <a class="page-link"
-                            href="?page={{ salary_data.paginator.num_pages }}&month={{ selected_month }}&year={{ selected_year }}&site={{ selected_site }}&search={{ search_query }}&per_page={{ per_page }}">Last</a>
-                    </li>
-                    {% endif %}
-                </ul>
-            </nav>
-        </div>
-        {% endif %}
-    </div>
-</div>
-
-<script>
-    function updateClock() {
-        const now = new Date();
-        const options = {
-            timeZone: 'Asia/Dubai',
-            weekday: 'short',
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
-            hour12: true
-        };
-        document.getElementById('liveClock').innerText = '🇦🇪 ' + now.toLocaleString('en-US', options);
+            </div>
+        `;
     }
-    setInterval(updateClock, 1000);
-    updateClock();
+
+    function viewSlip(empId) {
+        const emp = lastData.find(e => e.id === empId);
+        if (!emp) return;
+
+        const monthSelect = document.getElementById('filterMonth');
+        const yearSelect = document.getElementById('filterYear');
+        const monthName = monthSelect.options[monthSelect.selectedIndex].text;
+        const year = yearSelect.value;
+
+        const body = document.getElementById('slipModalBody');
+        body.innerHTML = `
+            <div class="slip-container">
+                <div class="slip-header d-flex justify-content-between align-items-start">
+                    <div>
+                        <h2 class="fw-bold mb-1 text-dark">ROCKET ATTENDANCE</h2>
+                        <div class="text-secondary small fw-bold">SALARY SLIP - ${monthName.toUpperCase()} ${year}</div>
+                    </div>
+                    <div class="text-end">
+                        <div class="small text-secondary mb-1">Generated On</div>
+                        <div class="fw-bold">${new Date().toLocaleDateString()}</div>
+                    </div>
+                </div>
+                
+                <div class="row g-4 mb-5">
+                    <div class="col-6">
+                        <div class="small text-secondary text-uppercase fw-bold mb-2">Employee Details</div>
+                        <div class="h5 fw-bold mb-1">${emp.name}</div>
+                        <div class="text-secondary small mb-1">Badge ID: <span class="text-dark fw-semibold">${emp.badge_number}</span></div>
+                        <div class="text-secondary small">Dept: <span class="text-dark fw-semibold">${emp.department}</span></div>
+                    </div>
+                    <div class="col-6 text-end">
+                        <div class="small text-secondary text-uppercase fw-bold mb-2">Period Info</div>
+                        <div class="text-secondary small mb-1">Working Days: <span class="fw-bold text-dark">${emp.working_days}</span></div>
+                        <div class="text-secondary small mb-1">Present: <span class="fw-bold text-success">${emp.present_days}</span></div>
+                        <div class="text-secondary small">Absent: <span class="fw-bold text-danger">${emp.absent_days}</span></div>
+                    </div>
+                </div>
+                
+                <table class="w-100 slip-table mb-5">
+                    <thead>
+                        <tr>
+                            <th class="ps-2">DESCRIPTION</th>
+                            <th class="text-end pe-2">AMOUNT (AED)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="ps-2">Gross Salary (Basic)</td>
+                            <td class="text-end pe-2 fw-bold">${parseFloat(emp.gross_salary).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                        </tr>
+                        <tr>
+                            <td class="ps-2 text-danger">Absence Deduction (${emp.absent_days} days)</td>
+                            <td class="text-end pe-2 text-danger fw-bold">-${emp.deduction.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                        </tr>
+                        <tr class="slip-total-row">
+                            <td class="ps-2 py-3 rounded-start">NET PAYABLE</td>
+                            <td class="text-end pe-2 py-3 rounded-end text-success">${emp.net_salary.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <div class="mt-5 pt-5 border-top text-center text-secondary small">
+                    <i>This is a computer-generated salary slip and does not require a manual signature.</i>
+                </div>
+            </div>
+        `;
+
+        document.getElementById('downloadPdfBtn').href = `/api/attendance/dashboard/download-salary-slip/${emp.id}/${monthSelect.value}/${year}/`;
+
+        const modal = new bootstrap.Modal(document.getElementById('slipModal'));
+        modal.show();
+    }
+
+    function printSlip() {
+        window.print();
+    }
+
+    function startTime() {
+        const update = () => {
+            const now = new Date();
+            document.getElementById('live-clock').innerText = `🇦🇪 ` + now.toLocaleString('en-US', { timeZone: 'Asia/Dubai', weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        };
+        setInterval(update, 1000);
+        update();
+    }
 </script>
 {% endblock %}

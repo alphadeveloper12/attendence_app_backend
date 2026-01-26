@@ -28,6 +28,7 @@ from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
+from rest_framework.pagination import PageNumberPagination
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAdminUser
 from rest_framework.authentication import SessionAuthentication
@@ -1153,23 +1154,49 @@ class AttendanceStatsView(APIView):
         try:
             employees = Employee.objects.all()
             attendance = Attendance.objects.filter(date=timezone.localdate())
+            all_sites = Site.objects.all()
 
+            # Filter by Site (Query Param or Admin Profile)
+            site_id = request.GET.get('site')
             if not request.user.is_superuser:
                 try:
                     profile = AdminProfile.objects.get(user=request.user)
                     if profile.site:
-                        employees = employees.filter(site=profile.site)
-                        attendance = attendance.filter(user__site=profile.site)
-                    else:
-                        employees = employees.none()
-                        attendance = attendance.none()
+                        site_id = profile.site.id
+                        # Only show assigned site in filter list
+                        all_sites = all_sites.filter(id=profile.site.id)
                 except AdminProfile.DoesNotExist:
                     pass
+            
+            if site_id and site_id != 'all':
+                employees = employees.filter(site_id=site_id)
+                attendance = attendance.filter(user__site_id=site_id)
+
+            # Chart Data (Last 7 Days)
+            today = timezone.localdate()
+            dates = [(today - timedelta(days=i)) for i in range(6, -1, -1)]
+            chart_labels = [d.strftime("%a") for d in dates]
+            chart_data = []
+            
+            # Base query for chart (depends on site filter)
+            base_qs = Attendance.objects.all()
+            if site_id and site_id != 'all':
+                base_qs = base_qs.filter(user__site_id=site_id)
+            
+            for d in dates:
+                count = base_qs.filter(date=d).count()
+                chart_data.append(count)
 
             return Response(
                 {
                     "total_employees": employees.count(),
                     "today_attendance_count": attendance.count(),
+                    "total_sites": all_sites.count(),
+                    "sites": [{"id": s.id, "name": s.name} for s in all_sites],
+                    "chart": {
+                        "labels": chart_labels,
+                        "data": chart_data
+                    }
                 },
                 status=200,
             )
@@ -1178,47 +1205,124 @@ class AttendanceStatsView(APIView):
 
 
 @permission_classes([IsAdminUser | IsSiteAdmin])
-class EmployeeListView(APIView):
+class AttendanceAlertsView(APIView):
     def get(self, request):
-        employees = Employee.objects.all()
-        
-        # Filter by site if user is a site admin
+        today = timezone.localdate()
+        alerts = Attendance.objects.filter(
+            date=today, 
+            is_within_geofence=False
+        ).select_related('user', 'user__site')
+
+        # Filter
+        site_id = request.GET.get('site')
         if not request.user.is_superuser:
             try:
                 profile = AdminProfile.objects.get(user=request.user)
                 if profile.site:
-                    employees = employees.filter(site=profile.site)
+                    site_id = profile.site.id
+            except AdminProfile.DoesNotExist:
+                pass
+        
+        if site_id and site_id != 'all':
+            alerts = alerts.filter(user__site_id=site_id)
+
+        data = []
+        for a in alerts:
+            data.append({
+                "id": a.id,
+                "user_name": a.user.name,
+                "user_id": a.user.id,
+                "user_pic": a.user.profile_picture.url if a.user.profile_picture else None,
+                "site": a.user.site.name if a.user.site else "-",
+                "time": a.check_in_time.strftime("%H:%M") if a.check_in_time else (a.check_out_time.strftime("%H:%M") if a.check_out_time else "-"),
+                "lat": a.latitude,
+                "long": a.longitude,
+                "status": "Out of Bounds"
+            })
+        return Response(data)
+
+
+@permission_classes([IsAdminUser | IsSiteAdmin])
+class EmployeeListView(APIView):
+    def get(self, request):
+        employees = Employee.objects.select_related('site').all().order_by('name')
+        
+        # Filter by site
+        site_id = request.GET.get('site')
+        if not request.user.is_superuser:
+            try:
+                profile = AdminProfile.objects.get(user=request.user)
+                if profile.site:
+                    site_id = profile.site.id
                 else:
-                    # Site Admin but no site assigned -> see nothing
-                    employees = employees.none()
+                    return Response({"results": [], "count": 0})
             except AdminProfile.DoesNotExist:
                 pass
 
+        if site_id and site_id != 'all':
+            employees = employees.filter(site_id=site_id)
+
+        # Search
+        search = request.GET.get('search')
+        if search:
+            employees = employees.filter(
+                Q(name__icontains=search) | 
+                Q(email__icontains=search) | 
+                Q(badge_number__icontains=search)
+            )
+
+        # Pagination
+        paginator = PageNumberPagination()
+        paginator.page_size = int(request.GET.get('per_page', 20))
+        result_page = paginator.paginate_queryset(employees, request)
+        
         serializer = EmployeeSerializer(
-            employees,
+            result_page,
             many=True,
             context={"request": request},
         )
-        return Response(serializer.data)
+        return paginator.get_paginated_response(serializer.data)
 
 
 # @login_required(login_url='admin-login')
 def admin_login_view(request):
     if request.user.is_authenticated:
+        if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+            return JsonResponse({'success': True, 'redirect_url': reverse('admin-dashboard')})
         return redirect("admin-dashboard")
+        
     if request.method == "POST":
         username = request.POST.get("username")
         password = request.POST.get("password")
         user = authenticate(request, username=username, password=password)
+        
         if user is not None and user.is_staff:
             login(request, user)
+            if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+                return JsonResponse({'success': True, 'redirect_url': reverse('admin-dashboard')})
             return redirect("admin-dashboard")
+        
+        if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+            return JsonResponse({'success': False, 'error': 'Invalid credentials or not an admin user'})
+            
         return render(
             request,
             "login.html",
-            {"error": "Invalid credentials or not an admin user"},
+            {
+                "error": "Invalid credentials or not an admin user",
+                "hide_sidebar": True
+            },
         )
-    return render(request, "login.html")
+    return render(request, "login.html", {"hide_sidebar": True})
+
+
+def admin_downloads_view(request):
+    """Publicly accessible downloads page for app builds"""
+    builds = AppBuild.objects.all().order_by('-uploaded_at')
+    return render(request, "downloads.html", {
+        "builds": builds,
+        "hide_sidebar": True
+    })
 
 
 @login_required(login_url="admin-login")
@@ -1444,170 +1548,231 @@ def admin_user_face_view(request):
                 'has_previous': page_obj.has_previous(),
                 'current_page': page_obj.number,
                 'total_pages': paginator.num_pages,
-                'page_range': list(paginator.get_elided_page_range(page_obj.number)),
+                'total_items': paginator.count,
+                'start_index': page_obj.start_index(),
+                'end_index': page_obj.end_index(),
+            },
+            'filters': {
+                'site': site_filter,
+                'status': status_filter,
+                'search': search_query,
+                'per_page': per_page
+            },
+            'sites': list(Site.objects.values('id', 'name')) if is_superuser else [],
+            'permissions': {
+                'is_superuser': is_superuser
             },
             'total_count': paginator.count
         })
 
-    return render(request, "user_face.html", context)
+    # Initial Page Load (Skeleton)
+    return render(request, "user_face.html", {
+        "is_superuser": is_superuser,
+    })
 
 
 @login_required(login_url="admin-login")
 def admin_user_detail_view(request, user_id):
     if not request.user.is_staff:
+        # If AJAX, return 403 JSON, else redirect
+        if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+            return JsonResponse({'error': 'Unauthorized'}, status=403)
         return redirect("admin-login")
     
-    employee = get_object_or_404(Employee, id=user_id)
-    
-    # Check if site admin has access to this employee
+    # We check permission but don't error out on GET for redirect simplicity,
+    # but for JSON we must be strict.
     if not request.user.is_superuser:
         try:
             profile = AdminProfile.objects.get(user=request.user)
-            if profile.site and employee.site != profile.site:
-                return redirect("admin-dashboard")
+            # We'll re-check this inside the logic to ensure we don't leak info
+            site_admin_site_id = profile.site.id if profile.site else None
         except AdminProfile.DoesNotExist:
-            pass
+            site_admin_site_id = None
+    else:
+        site_admin_site_id = None
 
-    filter_type = request.GET.get("filter", "daily")
-    today = timezone.localdate()
-    
-    # Date Navigation Logic
-    date_str = request.GET.get("date")
-    current_date = today
-    if date_str:
+    # Handle AJAX Request for Data
+    if request.headers.get('x-requested-with') == 'XMLHttpRequest':
         try:
-            current_date = datetime.strptime(date_str, "%Y-%m-%d").date()
-        except ValueError:
-            pass
+            employee = Employee.objects.get(id=user_id)
             
-    context = {
-        "employee": employee, 
-        "filter": filter_type, 
-        "today": today,
-        "current_date": current_date
-    }
+            # Site Admin Permission Check
+            if not request.user.is_superuser and site_admin_site_id:
+                if not employee.site or employee.site.id != site_admin_site_id:
+                    return JsonResponse({'error': 'Permission Denied'}, status=403)
 
-    if filter_type == "daily":
-        # Fetch the single record for selected date
-        attendance_record = Attendance.objects.filter(user=employee, date=current_date).first()
-        slots_data = {}
-        
-        # Office In Data
-        # Office In Data
-        slots_data["Office In"] = {
-            "time_range": "9:00 AM",
-            "status": "present" if (attendance_record and attendance_record.check_in_time) else None,
-            "check_in": timezone.localtime(attendance_record.check_in_time) if (attendance_record and attendance_record.check_in_time) else None,
-            "late_minutes": attendance_record.late_minutes if attendance_record else 0,
-            "latitude": attendance_record.latitude if attendance_record else None,
-            "longitude": attendance_record.longitude if attendance_record else None,
-        }
-        
-        # Office Out Data
-        slots_data["Office Out"] = {
-            "time_range": "6:00 PM",
-            "status": "present" if (attendance_record and attendance_record.check_out_time) else None,
-            "check_in": timezone.localtime(attendance_record.check_out_time) if (attendance_record and attendance_record.check_out_time) else None,
-            "early_minutes": attendance_record.early_minutes if attendance_record else 0,
-            "latitude": attendance_record.latitude if attendance_record else None,
-            "longitude": attendance_record.longitude if attendance_record else None,
-        }
-        
-        context["slots"] = slots_data
-        context["total_records"] = 1 if attendance_record else 0
-        context["present_count"] = 1 if (attendance_record and attendance_record.status == 'present') else 0
-        context["late_count"] = 1 if (attendance_record and attendance_record.status == 'late') else 0
-        context["absent_count"] = 1 if (attendance_record and attendance_record.status == 'absent') else 0
-        
-    elif filter_type in ["weekly", "monthly", "custom"]:
-        start_date = None
-        end_date = None
-        
-        if filter_type == "weekly":
-            # Week containing current_date
-            start_date = current_date - timedelta(days=current_date.weekday())
-            end_date = start_date + timedelta(days=6)
-        elif filter_type == "monthly":
-            # Month containing current_date
-            start_date = current_date.replace(day=1)
-            # Last day of month
-            next_month = start_date.replace(day=28) + timedelta(days=4)
-            end_date = next_month - timedelta(days=next_month.day)
-        elif filter_type == "custom":
-            start_str = request.GET.get("start_date")
-            end_str = request.GET.get("end_date")
-            if start_str and end_str:
+            filter_type = request.GET.get("filter", "daily")
+            today = timezone.localdate()
+            
+            # Date Parsing
+            date_str = request.GET.get("date")
+            current_date = today
+            if date_str:
                 try:
-                    start_date = datetime.strptime(start_str, "%Y-%m-%d").date()
-                    end_date = datetime.strptime(end_str, "%Y-%m-%d").date()
+                    current_date = datetime.strptime(date_str, "%Y-%m-%d").date()
                 except ValueError:
-                    start_date = current_date
-                    end_date = current_date
+                    pass
+            
+            start_date = current_date
+            end_date = current_date
+            
+            # Calculate Range
+            if filter_type == "weekly":
+                start_date = current_date - timedelta(days=current_date.weekday())
+                end_date = start_date + timedelta(days=6)
+            elif filter_type == "monthly":
+                start_date = current_date.replace(day=1)
+                # Last day of month
+                next_month = start_date.replace(day=28) + timedelta(days=4)
+                end_date = next_month - timedelta(days=next_month.day)
+            elif filter_type == "custom":
+                start_str = request.GET.get("start_date")
+                end_str = request.GET.get("end_date")
+                if start_str and end_str:
+                    try:
+                        start_date = datetime.strptime(start_str, "%Y-%m-%d").date()
+                        end_date = datetime.strptime(end_str, "%Y-%m-%d").date()
+                    except ValueError:
+                        pass
+
+            # Fetch Records
+            attendance_records = Attendance.objects.filter(
+                user=employee,
+                date__range=[start_date, end_date]
+            ).order_by('date')
+            
+            # Calculate Stats
+            total_records = len(attendance_records)
+            present_count = sum(1 for r in attendance_records if r.status == 'present')
+            late_count = sum(1 for r in attendance_records if r.status == 'late')
+            absent_count = sum(1 for r in attendance_records if r.status == 'absent')
+            total_late_minutes = sum(r.late_minutes for r in attendance_records)
+            total_early_minutes = sum(r.early_minutes for r in attendance_records)
+
+            # Build Response Data
+            data = {
+                'employee': {
+                    'id': employee.id,
+                    'name': employee.name,
+                    'email': employee.email,
+                    'phone': employee.phone,
+                    'badge_number': employee.badge_number,
+                    'department': employee.department,
+                    'position': employee.position,
+                    'site': employee.site.name if employee.site else None,
+                    'site_id': employee.site.id if employee.site else None,
+                    'status': employee.status,
+                    'profile_picture': employee.profile_picture.url if employee.profile_picture else None,
+                    'gross_salary': str(employee.gross_salary) if employee.gross_salary else None,
+                    # Expanded Fields
+                    'job_description': employee.job_description,
+                    'salary_grade': employee.salary_grade,
+                    'mol_id': employee.mol_id,
+                    'labor_card_number': employee.labor_card_number,
+                    'employer': employee.employer,
+                    'nationality': employee.nationality,
+                    'gender': employee.gender,
+                    'marital_status': employee.marital_status,
+                    'religion': employee.religion,
+                    'date_of_birth': str(employee.date_of_birth) if employee.date_of_birth else None,
+                    'date_of_joining': str(employee.date_of_joining) if employee.date_of_joining else None,
+                    'passport_number': employee.passport_number,
+                    'passport_expiry': str(employee.passport_expiry) if employee.passport_expiry else None,
+                    'visa_details': employee.visa_details,
+                    'camp': employee.camp,
+                    'transportation': employee.transportation,
+                },
+                'stats': {
+                    'total_records': total_records,
+                    'present': present_count,
+                    'late': late_count,
+                    'absent': absent_count,
+                    'late_minutes': total_late_minutes,
+                    'early_minutes': total_early_minutes,
+                },
+                'filter': {
+                    'type': filter_type,
+                    'start_date': start_date,
+                    'end_date': end_date,
+                    'current_date': current_date,
+                    'today': today
+                }
+            }
+
+            if filter_type == 'daily':
+                # Detailed Daily Slots
+                record = attendance_records.first() if attendance_records else None
+                slots = {}
+                # Office In
+                slots["Office In"] = {
+                    "time_range": "9:00 AM",
+                    "status": "present" if (record and record.check_in_time) else None,
+                    "check_in": timezone.localtime(record.check_in_time).strftime("%I:%M %p") if (record and record.check_in_time) else None,
+                    "late_minutes": record.late_minutes if record else 0,
+                    "latitude": record.latitude if record else None,
+                    "longitude": record.longitude if record else None,
+                }
+                # Office Out
+                slots["Office Out"] = {
+                    "time_range": "6:00 PM",
+                    "status": "present" if (record and record.check_out_time) else None,
+                    "check_in": timezone.localtime(record.check_out_time).strftime("%I:%M %p") if (record and record.check_out_time) else None,
+                    "early_minutes": record.early_minutes if record else 0,
+                    "latitude": record.latitude if record else None,
+                    "longitude": record.longitude if record else None,
+                }
+                data['slots'] = slots
             else:
-                start_date = current_date
-                end_date = current_date
-
-        attendance_records = Attendance.objects.filter(
-            user=employee,
-            date__range=[start_date, end_date]
-        ).order_by('date')
-        
-        # Calculate Totals
-        total_late = sum(r.late_minutes for r in attendance_records)
-        total_early = sum(r.early_minutes for r in attendance_records)
-        present_count = attendance_records.filter(status='present').count()
-        late_count = attendance_records.filter(status='late').count()
-        absent_count = attendance_records.filter(status='absent').count()
-        
-        context.update({
-            "start_date": start_date,
-            "end_date": end_date,
-            "attendance_records": attendance_records,
-            "total_late_minutes": total_late,
-            "total_early_minutes": total_early,
-            "present_count": present_count,
-            "late_count": late_count,
-            "absent_count": absent_count,
-            "total_records": attendance_records.count()
-        })
-        
-        # Calendar Grid Logic (for monthly/weekly view)
-        # Generate list of days from start to end
-        calendar_days = []
-        curr = start_date
-        
-        # Pad start if monthly view to start on Monday
-        if filter_type == "monthly":
-            pad_start = start_date - timedelta(days=start_date.weekday())
-            while pad_start < start_date:
-                calendar_days.append({"date": None, "slots": []})
-                pad_start += timedelta(days=1)
+                # Calendar/List View Data
+                # Map records by date string
+                records_by_date = {r.date.isoformat(): r for r in attendance_records}
                 
-        while curr <= end_date:
-            record = next((r for r in attendance_records if r.date == curr), None)
-            slots = []
-            if record:
-                if record.check_in_time:
-                    slots.append({"name": "In", "status": "present", "time": record.check_in_time})
-                if record.check_out_time:
-                    slots.append({"name": "Out", "status": "present", "time": record.check_out_time})
-                if record.status == 'absent':
-                     slots.append({"name": "Absent", "status": "absent"})
-                elif not record.check_in_time and not record.check_out_time:
-                     # Maybe late but no check in? Or just marked late manually?
-                     if record.status == 'late':
-                         slots.append({"name": "Late", "status": "late"})
-            
-            calendar_days.append({
-                "date": curr,
-                "record": record,
-                "slots": slots
-            })
-            curr += timedelta(days=1)
-            
-        context["calendar_days"] = calendar_days
+                # Generate calendar grid if needed, or just list
+                # For simplicity, we return the list of days in the range
+                calendar_days = []
+                curr = start_date
+                while curr <= end_date:
+                    record = records_by_date.get(curr.isoformat())
+                    day_data = {
+                        'date': curr,
+                        'record': {
+                            'status': record.status if record else None,
+                            'late_minutes': record.late_minutes if record else 0,
+                            'early_minutes': record.early_minutes if record else 0,
+                        } if record else None,
+                        'slots': []
+                    }
+                    
+                    if record:
+                        if record.check_in_time:
+                            day_data['slots'].append({
+                                'name': 'IN',
+                                'time': timezone.localtime(record.check_in_time).strftime("%H:%M"),
+                                'status': 'present' if record.late_minutes == 0 else 'late'
+                            })
+                        if record.check_out_time:
+                            day_data['slots'].append({
+                                'name': 'OUT',
+                                'time': timezone.localtime(record.check_out_time).strftime("%H:%M"),
+                                'status': 'present' if record.early_minutes == 0 else 'absent' # Logic simplification
+                            })
+                    
+                    calendar_days.append(day_data)
+                    curr += timedelta(days=1)
+                    
+                data['calendar_days'] = calendar_days
 
-    return render(request, "user_detail.html", context)
+            return JsonResponse(data)
+            
+        except Employee.DoesNotExist:
+            return JsonResponse({'error': 'Employee not found'}, status=404)
+
+    # Normal GET - Return Skeleton Page
+    # Pass user_id mainly for the initial JS fetch URL construction if needed, 
+    # but we can also extract it from URL path in JS.
+    return render(request, "user_detail.html", {'user_id': user_id})
+
+
 
 
 @login_required(login_url="admin-login")
@@ -1620,41 +1785,60 @@ def admin_logout_view(request):
 
 @login_required(login_url="admin-login")
 def admin_sites_view(request):
-    """List all sites with employee counts"""
+    """List all sites with employee counts via AJAX/Skeleton"""
     if not request.user.is_staff:
         return redirect("admin-login")
     
-    sites = Site.objects.annotate(employee_count=Count('employee')).order_by('name')
+    is_superuser = request.user.is_superuser
     
-    # Search Filtering
-    search_query = request.GET.get('search', '')
-    if search_query:
-        sites = sites.filter(name__icontains=search_query)
+    if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+        sites_qs = Site.objects.annotate(employee_count=Count('employee')).order_by('name')
         
-    # Pagination
-    per_page = request.GET.get('per_page', 10)
-    try:
-        per_page = int(per_page)
-    except ValueError:
-        per_page = 10
-        
-    paginator = Paginator(sites, per_page)
-    page = request.GET.get('page', 1)
-    
-    try:
-        page_obj = paginator.page(page)
-    except PageNotAnInteger:
-        page_obj = paginator.page(1)
-    except EmptyPage:
-        page_obj = paginator.page(paginator.num_pages)
-    
-    context = {
-        "sites": page_obj,
-        "search_query": search_query,
-        "paginator": paginator,
-        "per_page": per_page
-    }
-    return render(request, "sites.html", context)
+        # Search Filtering
+        search_query = request.GET.get('search', '').strip()
+        if search_query:
+            sites_qs = sites_qs.filter(name__icontains=search_query)
+            
+        # Pagination
+        per_page = int(request.GET.get('per_page', 10))
+        page_num = request.GET.get('page', 1)
+            
+        paginator = Paginator(sites_qs, per_page)
+        try:
+            page_obj = paginator.page(page_num)
+        except (PageNotAnInteger, EmptyPage):
+            page_obj = paginator.page(1)
+            
+        sites_list = []
+        for site in page_obj:
+            sites_list.append({
+                'id': site.id,
+                'name': site.name,
+                'employee_count': site.employee_count,
+                'detail_url': reverse('admin-site-detail', args=[site.id])
+            })
+            
+        return JsonResponse({
+            'results': sites_list,
+            'pagination': {
+                'current_page': page_obj.number,
+                'num_pages': paginator.num_pages,
+                'total_items': paginator.count,
+                'has_next': page_obj.has_next(),
+                'has_previous': page_obj.has_previous(),
+                'start_index': page_obj.start_index(),
+                'end_index': page_obj.end_index(),
+            },
+            'permissions': {
+                'is_superuser': is_superuser
+            },
+            'search_query': search_query
+        })
+
+    # Initial Page Load (Skeleton)
+    return render(request, "sites.html", {
+        "is_superuser": is_superuser
+    })
 
 class ImportSitesView(APIView):
     permission_classes = [IsAdminUser]
@@ -1844,23 +2028,32 @@ def admin_delete_site(request, site_id):
     
     site = get_object_or_404(Site, id=site_id)
     site.delete()
+
     return redirect("admin-sites")
 
 
 @login_required(login_url="admin-login")
 def admin_site_detail_view(request, site_id):
-    """View site details and map"""
+    """View site details and map via AJAX/Skeleton"""
     if not request.user.is_staff:
         return redirect("admin-login")
     
     site = get_object_or_404(Site, id=site_id)
-    employee_count = Employee.objects.filter(site=site).count()
     
-    context = {
-        'site': site,
-        'employee_count': employee_count,
-    }
-    return render(request, "site_detail.html", context)
+    if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+        employee_count = Employee.objects.filter(site=site).count()
+        return JsonResponse({
+            'site': {
+                'id': site.id,
+                'name': site.name,
+                'employee_count': employee_count,
+            }
+        })
+
+    # Initial Page Load (Skeleton)
+    return render(request, "site_detail.html", {
+        'site_id': site_id  # Pass ID for initial JS fetch
+    })
 
 
 class SiteCoordinatesView(APIView):
@@ -1946,27 +2139,42 @@ class AdminBulkDeleteSiteView(APIView):
 
 @login_required(login_url="admin-login")
 def admin_site_admins_view(request):
-    """List all site admins"""
+    """List all site admins via AJAX/Skeleton"""
     if not request.user.is_superuser:
         return redirect("admin-dashboard")
         
-    admins = AdminProfile.objects.select_related('user', 'site').all()
-    
-    # Search Filtering
-    search_query = request.GET.get('search', '')
-    if search_query:
-        admins = admins.filter(
-            Q(user__username__icontains=search_query) |
-            Q(user__email__icontains=search_query) |
-            Q(site__name__icontains=search_query)
-        )
+    if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+        admins_qs = AdminProfile.objects.select_related('user', 'site').all()
         
-    context = {
-        "admins": admins,
-        "sites": Site.objects.all(),
-        "search_query": search_query,
-    }
-    return render(request, "site_admins.html", context)
+        # Search Filtering
+        search_query = request.GET.get('search', '').strip()
+        if search_query:
+            admins_qs = admins_qs.filter(
+                Q(user__username__icontains=search_query) |
+                Q(user__email__icontains=search_query) |
+                Q(site__name__icontains=search_query)
+            )
+            
+        admins_list = []
+        for admin in admins_qs:
+            admins_list.append({
+                'id': admin.user.id,
+                'username': admin.user.username,
+                'email': admin.user.email,
+                'site_id': admin.site.id if admin.site else '',
+                'site_name': admin.site.name if admin.site else 'No Site'
+            })
+            
+        return JsonResponse({
+            'results': admins_list,
+            'sites': list(Site.objects.values('id', 'name')),
+            'search_query': search_query
+        })
+
+    # Initial Skeleton
+    return render(request, "site_admins.html", {
+        "is_superuser": True
+    })
 
 @login_required(login_url="admin-login")
 @require_http_methods(["POST"])
@@ -2145,154 +2353,21 @@ class ExportAttendanceView(APIView):
 
 @login_required
 def admin_reports_view(request):
+    """
+    Renders the Reports page skeleton.
+    Data is loaded via AJAX from /api/reports/data/
+    """
     # Permission Check
     is_superuser = request.user.is_superuser
     try:
         admin_profile = request.user.admin_profile
-        site_admin_site = admin_profile.site
     except AdminProfile.DoesNotExist:
         admin_profile = None
-        site_admin_site = None
 
     if not is_superuser and not admin_profile:
         return render(request, 'dashboard.html', {'error': 'Permission Denied'})
 
-    # Filters
-    date_str = request.GET.get('date')
-    department = request.GET.get('department')
-    search_query = request.GET.get('search')
-    status_filter = request.GET.get('status')
-    site_id = request.GET.get('site')
-    page = request.GET.get('page', 1)
-
-    # Date Logic
-    if date_str:
-        try:
-            selected_date = datetime.strptime(date_str, '%Y-%m-%d').date()
-        except ValueError:
-            selected_date = timezone.localdate()
-    else:
-        selected_date = timezone.localdate()
-
-    # Base Queryset
-    employees = Employee.objects.all()
-
-    # Fetch all sites for dropdown (only for superuser)
-    sites = []
-    selected_site = 'all'
-
-    if is_superuser:
-        sites = Site.objects.all()
-        if site_id and site_id != 'all':
-            try:
-                site_obj = Site.objects.get(id=site_id)
-                employees = employees.filter(site=site_obj)
-                selected_site = int(site_id)
-            except (Site.DoesNotExist, ValueError):
-                pass
-    elif site_admin_site:
-        # Site Admin is restricted to their site
-        employees = employees.filter(site=site_admin_site)
-        selected_site = site_admin_site.id
-
-    # Search Filter
-    if search_query:
-        employees = employees.filter(
-            Q(name__icontains=search_query) |
-            Q(badge_number__icontains=search_query) |
-            Q(email__icontains=search_query) |
-            Q(department__icontains=search_query)
-        )
-
-    # Fetch Attendance for Selected Date
-    attendance_records = Attendance.objects.filter(
-        date=selected_date,
-        user__in=employees
-    ).select_related('user', 'user__site')
-
-    attendance_map = {att.user_id: att for att in attendance_records}
-
-    # Process Data
-    report_data = []
-    stats = {
-        'total': 0,
-        'present': 0,
-        'absent': 0,
-        'late': 0
-    }
-
-    for emp in employees:
-        att = attendance_map.get(emp.id)
-        status = 'Absent'
-        check_in = '-'
-        check_out = '-'
-        site_name = emp.site.name if emp.site else '-'
-
-        if att:
-            status = 'Present'
-            check_in = timezone.localtime(att.check_in_time).strftime('%I:%M %p') if att.check_in_time else '-'
-            check_out = timezone.localtime(att.check_out_time).strftime('%I:%M %p') if att.check_out_time else '-'
-            
-            # Late Logic
-            if att.late_minutes > 0:
-                 stats['late'] += 1
-
-        # Update stats BEFORE filtering
-        stats['total'] += 1
-        if status == 'Present':
-            stats['present'] += 1
-        else:
-            stats['absent'] += 1
-
-        # Apply Status Filter
-        if status_filter:
-            if status_filter.lower() == 'present' and status != 'Present':
-                continue
-            if status_filter.lower() == 'absent' and status != 'Absent':
-                continue
-
-        report_data.append({
-            'employee': emp,
-            'status': status,
-            'check_in': check_in,
-            'check_out': check_out,
-            'site': site_name,
-            'site_id': emp.site.id if emp.site else None,
-            'latitude': att.latitude if att else None,
-            'longitude': att.longitude if att else None
-        })
-
-    # Sort report_data: Present first
-    report_data.sort(key=lambda x: x['status'] != 'Present')
-
-    # Pagination
-    per_page = request.GET.get('per_page', 20)
-    try:
-        per_page = int(per_page)
-    except ValueError:
-        per_page = 20
-
-    paginator = Paginator(report_data, per_page)
-    try:
-        report_page = paginator.page(page)
-    except PageNotAnInteger:
-        report_page = paginator.page(1)
-    except EmptyPage:
-        report_page = paginator.page(paginator.num_pages)
-
-    context = {
-        'report_data': report_page,
-        'stats': stats,
-        'selected_date': selected_date.strftime('%Y-%m-%d'),
-        'search_query': search_query,
-        'status_filter': status_filter,
-        'is_superuser': is_superuser,
-        'site_admin_site': site_admin_site,
-        'sites': sites,
-        'selected_site': selected_site,
-        'per_page': per_page,
-    }
-    return render(request, 'reports.html', context)
+    return render(request, 'reports.html', {'user': request.user, 'is_superuser': is_superuser})
 
 import csv
 from django.http import HttpResponse
@@ -2303,20 +2378,19 @@ def export_reports_view(request):
     is_superuser = request.user.is_superuser
     try:
         admin_profile = request.user.admin_profile
-        site_admin_site = admin_profile.site
+        permission_site = admin_profile.site
     except AdminProfile.DoesNotExist:
         admin_profile = None
-        site_admin_site = None
+        permission_site = None
 
     if not is_superuser and not admin_profile:
         return HttpResponse("Permission Denied", status=403)
 
-    # Filters (Same as above)
+    # Filters
     date_str = request.GET.get('date')
-    department = request.GET.get('department')
-    search_query = request.GET.get('search')
     status_filter = request.GET.get('status')
     site_id = request.GET.get('site')
+    position_filter = request.GET.get('position')
 
     if date_str:
         try:
@@ -2330,23 +2404,12 @@ def export_reports_view(request):
 
     if is_superuser:
         if site_id and site_id != 'all':
-            try:
-                site_obj = Site.objects.get(id=site_id)
-                employees = employees.filter(site=site_obj)
-            except (Site.DoesNotExist, ValueError):
-                pass
-    elif site_admin_site:
-        employees = employees.filter(site=site_admin_site)
-
-    if department:
-        employees = employees.filter(department=department)
-
-    if search_query:
-        employees = employees.filter(
-            Q(name__icontains=search_query) |
-            Q(badge_number__icontains=search_query) |
-            Q(email__icontains=search_query)
-        )
+            employees = employees.filter(site_id=site_id)
+    elif permission_site:
+        employees = employees.filter(site=permission_site)
+    
+    if position_filter and position_filter != 'all':
+        employees = employees.filter(position=position_filter)
 
     attendance_records = Attendance.objects.filter(
         date=selected_date,
@@ -2359,7 +2422,7 @@ def export_reports_view(request):
     response['Content-Disposition'] = f'attachment; filename="attendance_report_{selected_date}.csv"'
 
     writer = csv.writer(response)
-    writer.writerow(['Employee Name', 'Badge ID', 'Department', 'Site', 'Date', 'Status', 'Check In', 'Check Out'])
+    writer.writerow(['Employee Name', 'Badge ID', 'Department', 'Position', 'Site', 'Date', 'Status', 'Check In', 'Check Out'])
 
     for emp in employees:
         att = attendance_map.get(emp.id)
@@ -2374,15 +2437,14 @@ def export_reports_view(request):
             check_out = timezone.localtime(att.check_out_time).strftime('%I:%M %p') if att.check_out_time else '-'
 
         if status_filter:
-            if status_filter.lower() == 'present' and status != 'Present':
-                continue
-            if status_filter.lower() == 'absent' and status != 'Absent':
-                continue
+            if status_filter.lower() == 'present' and status != 'Present': continue
+            if status_filter.lower() == 'absent' and status != 'Absent': continue
 
         writer.writerow([
             emp.name,
             emp.badge_number,
             emp.department,
+            emp.position,
             site_name,
             selected_date,
             status,
@@ -2404,13 +2466,9 @@ class AdminSalaryReportView(APIView):
         month = int(request.GET.get('month', timezone.localdate().month))
         year = int(request.GET.get('year', timezone.localdate().year))
         site_id = request.GET.get('site', 'all')
-        search_query = request.GET.get('search', '')
-        per_page = request.GET.get('per_page', 20)
-        
-        try:
-            per_page = int(per_page)
-        except ValueError:
-            per_page = 20
+        search_query = request.GET.get('search', '').strip()
+        per_page = int(request.GET.get('per_page', 20))
+        page_num = request.GET.get('page', 1)
             
         employees = Employee.objects.all()
         
@@ -2421,7 +2479,9 @@ class AdminSalaryReportView(APIView):
         if search_query:
             employees = employees.filter(
                 Q(name__icontains=search_query) | 
-                Q(badge_number__icontains=search_query)
+                Q(badge_number__icontains=search_query) |
+                Q(email__icontains=search_query) |
+                Q(phone__icontains=search_query)
             )
             
         # Get number of days in month
@@ -2433,49 +2493,75 @@ class AdminSalaryReportView(APIView):
             if calendar.weekday(year, month, day) != 6:  # 6 is Sunday
                 working_days_count += 1
         
+        # Optimize attendance counting
+        attendance_stats = Attendance.objects.filter(
+            date__year=year,
+            date__month=month,
+            status='present',
+            user__in=employees
+        ).values('user_id').annotate(count=Count('id'))
+        
+        attendance_map = {item['user_id']: item['count'] for item in attendance_stats}
+        
         salary_data = []
         for emp in employees:
             if not emp.gross_salary:
                 continue
                 
-            # Get attendance for this month
-            attendance = Attendance.objects.filter(
-                user=emp,
-                date__year=year,
-                date__month=month,
-                status='present'
-            ).count()
-            
+            present_days = attendance_map.get(emp.id, 0)
             daily_rate = float(emp.gross_salary) / 30.0
-            absent_days = working_days_count - attendance
+            absent_days = working_days_count - present_days
             deduction = daily_rate * max(0, absent_days)
             net_salary = float(emp.gross_salary) - deduction
             
             salary_data.append({
-                'employee': emp,
-                'gross_salary': emp.gross_salary,
+                'id': emp.id,
+                'name': emp.name,
+                'badge_number': emp.badge_number or '-',
+                'department': emp.department or '-',
+                'site': emp.site.name if emp.site else '-',
+                'gross_salary': str(emp.gross_salary),
                 'working_days': working_days_count,
-                'present_days': attendance,
+                'present_days': present_days,
                 'absent_days': max(0, absent_days),
                 'deduction': round(deduction, 2),
                 'net_salary': round(net_salary, 2),
             })
             
-        # Pagination
-        paginator = Paginator(salary_data, per_page)
-        page_number = request.GET.get('page', 1)
-        salary_page = paginator.get_page(page_number)
+        # AJAX Response
+        if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+            paginator = Paginator(salary_data, per_page)
+            try:
+                page_obj = paginator.page(page_num)
+            except (PageNotAnInteger, EmptyPage):
+                page_obj = paginator.page(1)
+                
+            return JsonResponse({
+                'results': list(page_obj),
+                'summary': {
+                    'month': month,
+                    'year': year,
+                    'month_name': calendar.month_name[month],
+                    'total_employees': len(salary_data),
+                },
+                'pagination': {
+                    'current_page': page_obj.number,
+                    'num_pages': paginator.num_pages,
+                    'total_items': paginator.count,
+                    'has_next': page_obj.has_next(),
+                    'has_previous': page_obj.has_previous(),
+                    'start_index': page_obj.start_index(),
+                    'end_index': page_obj.end_index(),
+                },
+                'sites': list(Site.objects.values('id', 'name'))
+            })
         
+        # Initial Skeleton
         context = {
-            'salary_data': salary_page,
-            'selected_month': month,
-            'selected_year': year,
-            'selected_site': site_id,
-            'search_query': search_query,
-            'per_page': per_page,
-            'months': range(1, 13),
+            'months': [(i, calendar.month_name[i]) for i in range(1, 13)],
             'years': range(2024, 2031),
-            'sites': Site.objects.all(),
+            'current_month': timezone.localdate().month,
+            'current_year': timezone.localdate().year,
         }
         return render(request, 'salary_report.html', context)
 
@@ -2496,61 +2582,124 @@ class DownloadSalarySlipView(APIView):
             if calendar.weekday(year, month, day) != 6:
                 working_days_count += 1
                 
-        attendance = Attendance.objects.filter(
-            user=emp,
+        present_days = Attendance.objects.filter(
+            user=employee,
             date__year=year,
             date__month=month,
             status='present'
         ).count()
         
-        daily_rate = float(emp.gross_salary or 0) / 30.0
-        absent_days = working_days_count - attendance
+        gross_val = float(employee.gross_salary or 0)
+        daily_rate = gross_val / 30.0
+        absent_days = working_days_count - present_days
         deduction = daily_rate * max(0, absent_days)
-        net_salary = float(emp.gross_salary or 0) - deduction
+        net_salary = gross_val - deduction
         
         # Generate PDF using fpdf2
         pdf = FPDF()
         pdf.add_page()
-        pdf.set_font("helvetica", "B", 16)
         
-        # Header
-        pdf.cell(190, 10, "SALARY SLIP", ln=True, align="C")
+        # Premium Header Styling
+        pdf.set_fill_color(99, 102, 241) # Indigo #6366f1
+        pdf.rect(0, 0, 210, 40, 'F')
+        
+        pdf.set_text_color(255, 255, 255)
+        pdf.set_font("helvetica", "B", 24)
+        pdf.cell(190, 25, "SALARY SLIP", ln=True, align="C")
+        
+        pdf.set_font("helvetica", "B", 10)
+        pdf.cell(190, 5, f"{calendar.month_name[month].upper()} {year}", ln=True, align="C")
+        pdf.ln(20)
+        
+        # Reset text color
+        pdf.set_text_color(30, 41, 59) # Slate 800
+        
+        # Employee Info Section
+        pdf.set_font("helvetica", "B", 12)
+        pdf.cell(95, 10, "EMPLOYEE INFORMATION", ln=True)
+        pdf.set_draw_color(226, 232, 240)
+        pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+        pdf.ln(5)
+        
+        pdf.set_font("helvetica", "", 10)
+        col1 = 40
+        col2 = 60
+        
+        pdf.set_font("helvetica", "B", 10)
+        pdf.cell(col1, 8, "Name:")
+        pdf.set_font("helvetica", "", 10)
+        pdf.cell(col2, 8, employee.name)
+        
+        pdf.set_font("helvetica", "B", 10)
+        pdf.cell(col1, 8, "Badge ID:")
+        pdf.set_font("helvetica", "", 10)
+        pdf.cell(col2, 8, employee.badge_number or "-", ln=True)
+        
+        pdf.set_font("helvetica", "B", 10)
+        pdf.cell(col1, 8, "Department:")
+        pdf.set_font("helvetica", "", 10)
+        pdf.cell(col2, 8, employee.department or "-")
+        
+        pdf.set_font("helvetica", "B", 10)
+        pdf.cell(col1, 8, "Position:")
+        pdf.set_font("helvetica", "", 10)
+        pdf.cell(col2, 8, employee.position or "-", ln=True)
+        
+        pdf.set_font("helvetica", "B", 10)
+        pdf.cell(col1, 8, "Site:")
+        pdf.set_font("helvetica", "", 10)
+        pdf.cell(col2, 8, employee.site.name if employee.site else "-")
+        
+        pdf.set_font("helvetica", "B", 10)
+        pdf.cell(col1, 8, "Working Days:")
+        pdf.set_font("helvetica", "", 10)
+        pdf.cell(col2, 8, str(working_days_count), ln=True)
+        
         pdf.ln(10)
         
-        pdf.set_font("helvetica", "", 12)
-        pdf.cell(95, 10, f"Employee Name: {emp.name}")
-        pdf.cell(95, 10, f"Month/Year: {calendar.month_name[month]} {year}", ln=True)
-        pdf.cell(95, 10, f"Badge ID: {emp.badge_number or '-'}")
-        pdf.cell(95, 10, f"Department: {emp.department or '-'}", ln=True)
-        pdf.ln(10)
+        # Earnings & Deductions Table
+        pdf.set_font("helvetica", "B", 12)
+        pdf.cell(190, 10, "SALARY BREAKDOWN", ln=True)
+        pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+        pdf.ln(5)
         
         # Table Header
-        pdf.set_fill_color(200, 200, 200)
+        pdf.set_fill_color(248, 250, 252)
+        pdf.set_font("helvetica", "B", 10)
+        pdf.cell(140, 10, "  Description", 1, 0, "L", True)
+        pdf.cell(50, 10, "Amount (AED)  ", 1, 1, "R", True)
+        
+        # Items
+        pdf.set_font("helvetica", "", 10)
+        pdf.cell(140, 10, "  Basic Salary (Gross)", 1)
+        pdf.cell(50, 10, f"{gross_val:,.2f}  ", 1, 1, "R")
+        
+        pdf.set_text_color(239, 68, 68) # Red 500
+        pdf.cell(140, 10, f"  Absence Deduction ({max(0, absent_days)} days absent)", 1)
+        pdf.cell(50, 10, f"-{deduction:,.2f}  ", 1, 1, "R")
+        
+        # Total
+        pdf.set_text_color(16, 185, 129) # Emerald 500
         pdf.set_font("helvetica", "B", 12)
-        pdf.cell(100, 10, "Description", 1, 0, "C", True)
-        pdf.cell(90, 10, "Amount (AED)", 1, 1, "C", True)
+        pdf.cell(140, 12, "  NET SALARY PAYABLE", 1, 0, "L", True)
+        pdf.cell(50, 12, f"{net_salary:,.2f}  ", 1, 1, "R", True)
         
-        # Table Body
-        pdf.set_font("helvetica", "", 12)
-        pdf.cell(100, 10, "Gross Salary", 1)
-        pdf.cell(90, 10, f"{float(emp.gross_salary or 0):.2f}", 1, 1, "R")
+        # Footer
+        pdf.ln(30)
+        pdf.set_text_color(100, 116, 139) # Slate 500
+        pdf.set_font("helvetica", "I", 8)
+        pdf.cell(190, 5, "This document is computer-generated and verified by RocketAttendance System.", ln=True, align="C")
+        pdf.cell(190, 5, f"Generated on {timezone.now().strftime('%Y-%m-%d %H:%M:%S')}", ln=True, align="C")
         
-        pdf.cell(100, 10, f"Absence Deduction ({max(0, absent_days)} days)", 1)
-        pdf.cell(90, 10, f"-{deduction:.2f}", 1, 1, "R")
+        # Border
+        pdf.set_draw_color(99, 102, 241)
+        pdf.set_line_width(0.5)
+        pdf.rect(5, 5, 200, 287)
         
-        pdf.set_font("helvetica", "B", 12)
-        pdf.cell(100, 10, "Net Salary", 1)
-        pdf.cell(90, 10, f"{net_salary:.2f}", 1, 1, "R")
-        
-        pdf.ln(20)
-        pdf.set_font("helvetica", "I", 10)
-        pdf.cell(190, 10, "This is a computer generated document and does not require a signature.", ln=True, align="C")
-        
-        # Output PDF
         pdf_output = pdf.output()
         buffer = io.BytesIO(pdf_output)
         
-        filename = f"Salary_Slip_{emp.name}_{calendar.month_name[month]}_{year}.pdf"
+        filename = f"Salary_Slip_{employee.name.replace(' ', '_')}_{calendar.month_name[month]}_{year}.pdf"
         return FileResponse(buffer, as_attachment=True, filename=filename)
 # Monthly Report Views
 from datetime import datetime, timedelta
@@ -2577,111 +2726,140 @@ def monthly_report_view(request):
     if not is_superuser and not admin_profile:
         return render(request, 'dashboard.html', {'error': 'Permission Denied'})
 
-    # Get parameters
-    month = request.GET.get('month')
-    year = request.GET.get('year')
-    site_id = request.GET.get('site')
-    
-    # Default to current month/year
+    # Handle AJAX Request
+    if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+        # Get parameters
+        month = int(request.GET.get('month', datetime.now().month))
+        year = int(request.GET.get('year', datetime.now().year))
+        site_id = request.GET.get('site')
+        search_query = request.GET.get('search', '').strip()
+        page_num = request.GET.get('page', 1)
+        per_page = int(request.GET.get('per_page', 20))
+        
+        selected_site = None
+        if is_superuser:
+            if site_id and site_id != 'all':
+                try:
+                    selected_site = Site.objects.get(id=site_id)
+                except Site.DoesNotExist:
+                    pass
+        elif site_admin_site:
+            selected_site = site_admin_site
+        
+        # Get employees for selected site
+        employees = Employee.objects.all()
+        if selected_site:
+            employees = employees.filter(site=selected_site)
+            
+        # Search Filter
+        if search_query:
+            employees = employees.filter(
+                Q(name__icontains=search_query) |
+                Q(badge_number__icontains=search_query) |
+                Q(email__icontains=search_query) |
+                Q(phone__icontains=search_query)
+            )
+        
+        # Calculate date range for the month
+        num_days = calendar.monthrange(year, month)[1]
+        start_date = datetime(year, month, 1).date()
+        end_date = datetime(year, month, num_days).date()
+        
+        # Get all attendance records for the month
+        attendance_records = Attendance.objects.filter(
+            date__gte=start_date,
+            date__lte=end_date,
+            user__in=employees
+        ).select_related('user')
+        
+        # Process employee-wise data
+        attendance_map = {} # user_id -> list of records
+        for record in attendance_records:
+            if record.user_id not in attendance_map:
+                attendance_map[record.user_id] = []
+            attendance_map[record.user_id].append(record)
+            
+        employee_data = []
+        total_present_all = 0
+        total_late_all = 0
+        
+        for emp in employees:
+            emp_recs = attendance_map.get(emp.id, [])
+            days_present = len([r for r in emp_recs if r.check_in_time])
+            days_absent = num_days - days_present
+            late_count = len([r for r in emp_recs if r.late_minutes > 0])
+            
+            attendance_percentage = (days_present / num_days * 100) if num_days > 0 else 0
+            
+            employee_data.append({
+                'id': emp.id,
+                'name': emp.name,
+                'badge_number': emp.badge_number,
+                'department': emp.department,
+                'site': emp.site.name if emp.site else '-',
+                'days_present': days_present,
+                'days_absent': days_absent,
+                'late_count': late_count,
+                'attendance_percentage': round(attendance_percentage, 2)
+            })
+            
+            total_present_all += days_present
+            total_late_all += late_count
+        
+        # Calculate summary statistics
+        total_employees = employees.count()
+        avg_attendance = (total_present_all / (total_employees * num_days) * 100) if (total_employees * num_days) > 0 else 0
+        
+        # Paginate results
+        paginator = Paginator(employee_data, per_page)
+        try:
+            page_obj = paginator.page(page_num)
+        except (PageNotAnInteger, EmptyPage):
+            page_obj = paginator.page(1)
+
+        data = {
+            'results': list(page_obj),
+            'summary': {
+                'total_days': num_days,
+                'total_employees': total_employees,
+                'avg_attendance': round(avg_attendance, 2),
+                'total_present': total_present_all,
+                'total_late': total_late_all,
+                'month_name': calendar.month_name[month],
+                'year': year
+            },
+            'pagination': {
+                'current_page': page_obj.number,
+                'num_pages': paginator.num_pages,
+                'has_next': page_obj.has_next(),
+                'has_previous': page_obj.has_previous(),
+                'total_items': paginator.count,
+                'start_index': page_obj.start_index(),
+                'end_index': page_obj.end_index(),
+            },
+            'sites': list(Site.objects.all().values('id', 'name')) if is_superuser else [],
+            'permissions': {
+                'is_superuser': is_superuser
+            }
+        }
+        return JsonResponse(data)
+
+    # Initial Page Load (Skeleton)
     now = datetime.now()
-    if not month:
-        month = now.month
-    else:
-        month = int(month)
-    
-    if not year:
-        year = now.year
-    else:
-        year = int(year)
-    
-    # Get all sites for dropdown (only for superuser)
-    sites = []
-    selected_site = None
-    
-    if is_superuser:
-        sites = Site.objects.all()
-        if site_id and site_id != 'all':
-            try:
-                selected_site = Site.objects.get(id=site_id)
-            except Site.DoesNotExist:
-                pass
-    elif site_admin_site:
-        selected_site = site_admin_site
-    
-    # Get employees for selected site
-    employees = Employee.objects.all()
-    if selected_site:
-        employees = employees.filter(site=selected_site)
-    
-    # Calculate date range for the month
-    num_days = calendar.monthrange(year, month)[1]
-    start_date = datetime(year, month, 1).date()
-    end_date = datetime(year, month, num_days).date()
-    
-    # Get all attendance records for the month
-    attendance_records = Attendance.objects.filter(
-        date__gte=start_date,
-        date__lte=end_date,
-        user__in=employees
-    ).select_related('user')
-    
-    # Process employee-wise data
-    employee_data = []
-    total_present = 0
-    total_absent = 0
-    total_late = 0
-    
-    for emp in employees:
-        emp_attendance = attendance_records.filter(user=emp)
-        days_present = emp_attendance.filter(check_in_time__isnull=False).count()
-        days_absent = num_days - days_present
-        late_count = emp_attendance.filter(is_late=True).count() if hasattr(Attendance, 'is_late') else 0
-        
-        attendance_percentage = (days_present / num_days * 100) if num_days > 0 else 0
-        
-        employee_data.append({
-            'employee': emp,
-            'days_present': days_present,
-            'days_absent': days_absent,
-            'late_count': late_count,
-            'attendance_percentage': round(attendance_percentage, 2)
-        })
-        
-        total_present += days_present
-        total_absent += days_absent
-        total_late += late_count
-    
-    # Calculate summary statistics
-    total_employees = employees.count()
-    avg_attendance = (total_present / (total_employees * num_days) * 100) if (total_employees * num_days) > 0 else 0
-    
-    summary = {
-        'total_days': num_days,
-        'total_employees': total_employees,
-        'avg_attendance': round(avg_attendance, 2),
-        'total_present': total_present,
-        'total_absent': total_absent,
-        'total_late': total_late
-    }
-    
-    # Generate month/year options
     months = [(i, calendar.month_name[i]) for i in range(1, 13)]
     years = list(range(now.year - 2, now.year + 1))
-    
+    sites = []
+    if is_superuser:
+        sites = list(Site.objects.all().values('id', 'name'))
+        
     context = {
-        'employee_data': employee_data,
-        'summary': summary,
-        'selected_month': month,
-        'selected_year': year,
-        'selected_site': selected_site,
-        'sites': sites,
         'months': months,
         'years': years,
+        'sites': sites,
         'is_superuser': is_superuser,
-        'site_admin_site': site_admin_site,
-        'month_name': calendar.month_name[month]
+        'current_month': now.month,
+        'current_year': now.year
     }
-    
     return render(request, 'monthly_report.html', context)
 
 
@@ -2790,3 +2968,126 @@ def export_monthly_report(request):
     os.remove(f'monthly_report_{month}_{year}.xlsx')
     
     return response
+
+class AttendanceReportDataView(APIView):
+    permission_classes = [IsAdminUser | IsSiteAdmin]
+
+    def get(self, request):
+        is_superuser = request.user.is_superuser
+        try:
+            admin_profile = request.user.admin_profile
+            permission_site = admin_profile.site
+        except AdminProfile.DoesNotExist:
+            admin_profile = None
+            permission_site = None
+
+        if not is_superuser and not admin_profile:
+             return Response({'error': 'Permission Denied'}, status=403)
+
+        # Filters
+        date_str = request.GET.get('date')
+        site_id = request.GET.get('site')
+        status_filter = request.GET.get('status')
+        position_filter = request.GET.get('position')
+        page_num = request.GET.get('page', 1)
+        per_page = int(request.GET.get('per_page', 20))
+
+        # Date Logic
+        if date_str:
+            try:
+                selected_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+            except ValueError:
+                selected_date = timezone.localdate()
+        else:
+            selected_date = timezone.localdate()
+
+        # Build Querysets
+        employees = Employee.objects.all()
+        sites_list = []
+        positions_list = list(Employee.objects.exclude(position__isnull=True).exclude(position='').values_list('position', flat=True).distinct().order_by('position'))
+
+        if is_superuser:
+            sites_list = list(Site.objects.all().values('id', 'name'))
+            if site_id and site_id != 'all':
+                employees = employees.filter(site_id=site_id)
+        elif permission_site:
+            employees = employees.filter(site=permission_site)
+        
+        # Position Filter
+        if position_filter and position_filter != 'all':
+            employees = employees.filter(position=position_filter)
+
+        # Attendance Fetch
+        attendance_records = Attendance.objects.filter(
+            date=selected_date,
+            user__in=employees
+        ).select_related('user', 'user__site')
+
+        attendance_map = {att.user_id: att for att in attendance_records}
+
+        # Process Results
+        all_results = []
+        stats = {'total': 0, 'present': 0, 'absent': 0, 'late': 0}
+
+        for emp in employees:
+            att = attendance_map.get(emp.id)
+            status = 'Absent'
+            check_in = '-'
+            check_out = '-'
+            
+            if att:
+                status = 'Present'
+                check_in = timezone.localtime(att.check_in_time).strftime('%I:%M %p') if att.check_in_time else '-'
+                check_out = timezone.localtime(att.check_out_time).strftime('%I:%M %p') if att.check_out_time else '-'
+                if att.late_minutes > 0: stats['late'] += 1
+
+            stats['total'] += 1
+            if status == 'Present': stats['present'] += 1
+            else: stats['absent'] += 1
+
+            # Status Filter Applied after stats calculation
+            if status_filter:
+                if status_filter.lower() == 'present' and status != 'Present': continue
+                if status_filter.lower() == 'absent' and status != 'Absent': continue
+
+            all_results.append({
+                'id': emp.id,
+                'name': emp.name,
+                'email': emp.email,
+                'badge_number': emp.badge_number,
+                'department': emp.department,
+                'position': emp.position,
+                'site': emp.site.name if emp.site else '-',
+                'site_id': emp.site.id if emp.site else None,
+                'status': status,
+                'check_in': check_in,
+                'check_out': check_out,
+                'latitude': att.latitude if att else None,
+                'longitude': att.longitude if att else None
+            })
+
+        # Sort: Present first
+        all_results.sort(key=lambda x: x['status'] != 'Present')
+
+        # Paginate
+        paginator = Paginator(all_results, per_page)
+        try:
+            page_obj = paginator.page(page_num)
+        except (PageNotAnInteger, EmptyPage):
+            page_obj = paginator.page(1)
+
+        return Response({
+            'results': list(page_obj),
+            'stats': stats,
+            'sites': sites_list,
+            'positions': positions_list,
+            'selected_site': site_id,
+            'selected_date': selected_date.strftime('%Y-%m-%d'),
+            'permissions': {'is_superuser': is_superuser},
+            'pagination': {
+                'current_page': page_obj.number,
+                'num_pages': paginator.num_pages,
+                'has_next': page_obj.has_next(),
+                'has_previous': page_obj.has_previous(),
+            }
+        })

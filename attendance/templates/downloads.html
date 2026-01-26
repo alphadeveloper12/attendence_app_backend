@@ -1,0 +1,171 @@
+{% extends 'base.html' %}
+{% block title %}App Downloads - RocketAttendance{% endblock %}
+
+{% block content %}
+<!-- Remix Icons & Google Fonts -->
+<link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+    :root {
+        --font-family: 'Outfit', sans-serif;
+        --grad-primary: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+    }
+
+    body {
+        font-family: var(--font-family) !important;
+        background: radial-gradient(circle at top right, #f8fafc 0%, #eef2ff 100%);
+    }
+
+    .dl-container {
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 3rem 1.5rem;
+    }
+
+    .dl-header {
+        text-align: center;
+        margin-bottom: 3rem;
+    }
+
+    .brand-icon {
+        width: 64px;
+        height: 64px;
+        background: var(--grad-primary);
+        border-radius: 1.25rem;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 2rem;
+        font-weight: 800;
+        margin-bottom: 1.5rem;
+        box-shadow: 0 10px 15px -3px rgba(99, 102, 241, 0.3);
+    }
+
+    .build-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+        gap: 2rem;
+        width: 100%;
+        max-width: 900px;
+    }
+
+    .build-card {
+        background: white;
+        border-radius: 2rem;
+        padding: 2.5rem;
+        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.05);
+        border: 1px solid #f1f5f9;
+        transition: transform 0.3s;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .build-card:hover {
+        transform: translateY(-5px);
+    }
+
+    .build-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: var(--grad-primary);
+        opacity: 0.5;
+    }
+
+    .app-type-badge {
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        font-weight: 800;
+        letter-spacing: 0.05em;
+        color: #6366f1;
+        background: #eef2ff;
+        padding: 0.4rem 1rem;
+        border-radius: 2rem;
+        margin-bottom: 1.5rem;
+        display: inline-block;
+    }
+
+    .version-info {
+        font-size: 0.875rem;
+        color: #94a3b8;
+        margin-bottom: 2rem;
+    }
+
+    .btn-download {
+        background: var(--grad-primary);
+        color: white;
+        border: none;
+        border-radius: 1rem;
+        padding: 1rem;
+        font-weight: 700;
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.75rem;
+        transition: all 0.3s;
+        box-shadow: 0 10px 15px -3px rgba(99, 102, 241, 0.2);
+        text-decoration: none;
+    }
+
+    .btn-download:hover {
+        color: white;
+        box-shadow: 0 20px 25px -5px rgba(99, 102, 241, 0.3);
+    }
+
+    .back-link {
+        margin-top: 3rem;
+        color: #64748b;
+        text-decoration: none;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .back-link:hover {
+        color: #1e293b;
+    }
+</style>
+
+<div class="dl-container">
+    <div class="dl-header">
+        <div class="brand-icon">R</div>
+        <h1 class="fw-bold text-dark mb-1">Application Builds</h1>
+        <p class="text-secondary fw-medium">Download the latest versions of RocketAttendance</p>
+    </div>
+
+    <div class="build-grid">
+        {% for build in builds %}
+        <div class="build-card">
+            <span class="app-type-badge">{{ build.get_app_type_display }}</span>
+            <h3 class="fw-bold text-dark mb-2">Build v{{ build.version|default:"1.0.0" }}</h3>
+            <div class="version-info d-flex align-items-center gap-2">
+                <i class="ri-calendar-line"></i> Released {{ build.uploaded_at|date:"F d, Y" }}
+            </div>
+            <a href="{% url 'download-build' build.app_type %}" class="btn-download">
+                <i class="ri-download-cloud-2-line fs-5"></i> Download APK
+            </a>
+        </div>
+        {% empty %}
+        <div class="text-center p-5 w-100">
+            <i class="ri-inbox-line text-muted display-4"></i>
+            <p class="text-secondary mt-3">No builds available at this time.</p>
+        </div>
+        {% endfor %}
+    </div>
+
+    <a href="{% url 'admin-login' %}" class="back-link">
+        <i class="ri-arrow-left-line"></i> Return to Login
+    </a>
+</div>
+
+{% endblock %}

@@ -1,358 +1,590 @@
 {% extends 'base.html' %}
 
-{% block title %}{{ employee.name }} - Attendance Details{% endblock %}
+{% block title %}Employee Details - Admin Dashboard{% endblock %}
 
 {% block content %}
-<!-- Navbar -->
-<nav class="navbar navbar-expand-lg navbar-custom mb-4 shadow-sm">
-    <div class="container-fluid">
-        <a class="navbar-brand d-flex align-items-center gap-2" href="#">
-            <span class="fs-4">📊 Attendance Dashboard</span>
+<!-- Remix Icons & Google Fonts -->
+<link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+    :root {
+        --font-family: 'Outfit', sans-serif;
+        --card-bg: #ffffff;
+        --text-primary: #1e293b;
+        --text-secondary: #64748b;
+
+        --grad-primary: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+        --grad-success: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        --grad-warning: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+        --grad-danger: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);
+        --grad-info: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+    }
+
+    body {
+        font-family: var(--font-family) !important;
+        background-color: #f8fafc;
+    }
+
+    /* Premium Profile Header - Monochrome Professional */
+    .profile-hero {
+        background: white !important;
+        border: 1px solid black !important;
+        border-radius: 1.5rem;
+        padding: 2.5rem;
+        box-shadow: none !important;
+        margin-bottom: 2rem;
+        position: relative;
+        overflow: hidden;
+    }
+
+    /* Header decorative element removed */
+
+    .profile-avatar-wrapper {
+        width: 120px;
+        height: 120px;
+        border-radius: 2rem;
+        background: white;
+        padding: 6px;
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        position: relative;
+        z-index: 1;
+    }
+
+    .profile-avatar {
+        width: 100%;
+        height: 100%;
+        border-radius: 1.7rem;
+        object-fit: cover;
+        background: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 3rem;
+        font-weight: 700;
+        color: black;
+        border: 1px solid black;
+    }
+
+    /* Stats Cards */
+    /* Stats Cards - Professional Monochrome */
+    .stat-card {
+        background: white !important;
+        border: 1px solid black !important;
+        border-radius: 1.25rem;
+        transition: all 0.2s ease;
+        overflow: hidden;
+        height: 100%;
+        color: black !important;
+        padding: 1.5rem;
+        position: relative;
+        box-shadow: none !important;
+    }
+
+    .stat-card:hover {
+        transform: translateY(-4px);
+        background: #fbfbfb !important;
+    }
+
+    .stat-icon-bg {
+        width: 44px;
+        height: 44px;
+        border-radius: 12px;
+        background: #f1f5f9;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+        margin-bottom: 1rem;
+        color: black;
+        border: 1px solid #e2e8f0;
+    }
+
+    /* Controls & Toggles */
+    .filter-btn-group {
+        background: #f1f5f9;
+        padding: 0.4rem;
+        border-radius: 1rem;
+        display: inline-flex;
+        gap: 0.25rem;
+    }
+
+    .filter-btn {
+        border: none;
+        background: transparent;
+        padding: 0.6rem 1.5rem;
+        border-radius: 0.75rem;
+        font-weight: 600;
+        color: #64748b;
+        transition: all 0.2s;
+    }
+
+    .filter-btn.active {
+        background: black !important;
+        color: white !important;
+        box-shadow: none !important;
+    }
+
+    /* Slot Cards */
+    .slot-card {
+        background: white;
+        border-radius: 1.25rem;
+        border: 1px solid black !important;
+        transition: all 0.2s;
+        height: 100%;
+    }
+
+    .slot-card:hover {
+        border-color: #6366f1;
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05);
+    }
+
+    .map-box {
+        height: 140px;
+        border-radius: 1rem;
+        overflow: hidden;
+        background: #f8fafc;
+        border: 1px solid #f1f5f9;
+    }
+
+    /* Calendar Grid */
+    .calendar-grid {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 1rem;
+    }
+
+    .calendar-day-header {
+        text-align: center;
+        font-weight: 700;
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        color: #94a3b8;
+        padding-bottom: 0.5rem;
+    }
+
+    .calendar-cell {
+        background: white;
+        border-radius: 1rem;
+        padding: 1rem;
+        min-height: 110px;
+        border: 1px solid black !important;
+        transition: all 0.2s;
+        cursor: pointer;
+    }
+
+    .calendar-cell:hover {
+        border-color: #6366f1;
+        transform: scale(1.02);
+    }
+
+    .calendar-cell.today {
+        background: #f0f7ff;
+        border-color: #3b82f6;
+    }
+
+    .calendar-badge {
+        font-size: 0.7rem;
+        padding: 0.3rem 0.5rem;
+        border-radius: 0.5rem;
+        font-weight: 600;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    /* Skeleton Loading */
+    .skeleton {
+        background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+        background-size: 200% 100%;
+        animation: pulse 1.5s infinite;
+        border-radius: 8px;
+    }
+
+    @keyframes pulse {
+        0% {
+            background-position: 200% 0;
+        }
+
+        100% {
+            background-position: -200% 0;
+        }
+    }
+
+    @media (max-width: 991px) {
+        .calendar-grid {
+            grid-template-columns: repeat(3, 1fr);
+        }
+    }
+</style>
+
+<!-- Top Bar -->
+<div class="d-flex justify-content-between align-items-center mb-5 pt-2">
+    <div>
+        <h1 class="h3 fw-bold text-dark mb-1">Attendance Details</h1>
+        <p class="text-secondary small font-monospace mb-0" id="top-time">loading...</p>
+    </div>
+    <div class="d-flex gap-3">
+        <a href="{% url 'admin-dashboard' %}" class="btn btn-pro shadow-sm">
+            <i class="ri-arrow-left-line me-2"></i>Dashboard
         </a>
-        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarContent">
-            <span class="navbar-toggler-icon"></span>
+        <button onclick="downloadReport()" class="btn btn-pro shadow-sm"
+            style="background: black !important; color: white !important;">
+            <i class="ri-file-excel-2-line me-2"></i>Export Excel
         </button>
-        <div class="collapse navbar-collapse" id="navbarContent">
-            <div class="ms-auto d-flex align-items-center gap-3 flex-wrap">
-                <div id="liveClock" class="badge bg-light text-dark border p-2 fs-6 fw-normal"></div>
-                <span class="text-white">Welcome, {{ user.username }}</span>
-                <a href="{% url 'admin-dashboard' %}" class="btn btn-secondary btn-sm">Back to Dashboard</a>
-                <a href="{% url 'admin-logout' %}" class="btn btn-danger btn-sm">Logout</a>
-            </div>
-        </div>
     </div>
-</nav>
+</div>
 
-<div class="container">
-    <!-- User Info Card -->
-    <div class="card shadow-sm mb-4">
-        <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
-            <h2 class="h5 mb-0">{{ employee.name }}</h2>
-            <a href="{% url 'admin-dashboard' %}" class="btn btn-outline-secondary btn-sm">← Back</a>
+<!-- Employee Identity Section -->
+<div class="profile-hero shadow-sm">
+    <div class="row align-items-center g-4 position-relative z-index-1">
+        <div class="col-auto">
+            <div class="profile-avatar-wrapper" id="profile-picture-container">
+                <div class="profile-avatar" id="profile-initial">...</div>
+            </div>
         </div>
-        <div class="card-body">
-            <div class="row g-4">
-                <div class="col-md-6 col-xl-3">
-                    <div class="p-3 bg-light rounded h-100">
-                        <h6 class="text-muted mb-2">Email</h6>
-                        <div class="fs-5">{{ employee.email }}</div>
-                    </div>
-                </div>
-                <div class="col-md-6 col-xl-3">
-                    <div class="p-3 bg-light rounded h-100">
-                        <h6 class="text-muted mb-2">Phone</h6>
-                        <div class="fs-5">{{ employee.phone }}</div>
-                    </div>
-                </div>
-                <div class="col-md-6 col-xl-3">
-                    <div class="p-3 bg-light rounded h-100">
-                        <h6 class="text-muted mb-2">Department</h6>
-                        <div class="fs-5">{{ employee.department|default:"N/A" }}</div>
-                    </div>
-                </div>
-                <div class="col-md-6 col-xl-3">
-                    <div class="p-3 bg-light rounded h-100">
-                        <h6 class="text-muted mb-2">Site</h6>
-                        <div class="fs-5">{{ employee.site|default:"N/A" }}</div>
-                    </div>
+        <div class="col">
+            <h2 class="h3 fw-bold mb-1" id="emp-name">...</h2>
+            <div class="d-flex flex-wrap gap-x-4 gap-y-2 text-secondary mb-3">
+                <span id="emp-badge"><i class="ri-id-card-line me-1"></i> -</span>
+                <span id="emp-dept"><i class="ri-team-line me-1"></i> -</span>
+                <span id="emp-pos"><i class="ri-briefcase-line me-1"></i> -</span>
+                <span id="emp-site"><i class="ri-building-line me-1"></i> -</span>
+            </div>
+            <div class="row g-3">
+                <div class="col-auto">
+                    <span class="badge bg-success bg-opacity-10 text-success rounded-pill px-3 py-2 fw-semibold"
+                        id="emp-status-badge">Active</span>
                 </div>
             </div>
         </div>
-    </div>
-
-    <!-- Attendance Records Card -->
-    <div class="card shadow-sm">
-        <div class="card-header bg-white py-3 d-flex flex-wrap justify-content-between align-items-center gap-3">
-            <h2 class="h5 mb-0">Attendance Records</h2>
-            <a href="{% url 'export-attendance' %}?user_id={{ employee.id }}&start_date={{ start_date|date:'Y-m-d' }}&end_date={{ end_date|date:'Y-m-d' }}"
-                class="btn btn-success btn-sm" target="_blank">
-                📥 Download Excel
-            </a>
-        </div>
-
-        <div class="card-body">
-            <!-- Filters -->
-            <div class="d-flex flex-wrap gap-3 align-items-center mb-4">
-                <div class="btn-group" role="group">
-                    <a href="?filter=daily"
-                        class="btn btn-outline-primary {% if filter == 'daily' %}active{% endif %}">Daily</a>
-                    <a href="?filter=weekly"
-                        class="btn btn-outline-primary {% if filter == 'weekly' %}active{% endif %}">Weekly</a>
-                    <a href="?filter=monthly"
-                        class="btn btn-outline-primary {% if filter == 'monthly' %}active{% endif %}">Monthly</a>
-                    <button type="button" class="btn btn-outline-primary {% if filter == 'custom' %}active{% endif %}"
-                        onclick="toggleCustomDate()">Custom</button>
-                </div>
-
-                <!-- Date Navigation for Daily/Weekly/Monthly -->
-                {% if filter != 'custom' %}
-                <form method="GET" class="d-flex align-items-center gap-2">
-                    <input type="hidden" name="filter" value="{{ filter }}">
-                    <input type="date" name="date" value="{{ current_date|date:'Y-m-d' }}"
-                        class="form-control form-control-sm" onchange="this.form.submit()">
-                </form>
-                {% endif %}
-
-                <!-- Custom Date Range -->
-                <div id="customDateRange"
-                    class="d-flex align-items-center gap-2 {% if filter != 'custom' %}d-none{% endif %}">
-                    <form method="GET" class="d-flex align-items-center gap-2">
-                        <input type="hidden" name="filter" value="custom">
-                        <input type="date" name="start_date" value="{{ start_date|date:'Y-m-d' }}"
-                            class="form-control form-control-sm" required>
-                        <span>to</span>
-                        <input type="date" name="end_date" value="{{ end_date|date:'Y-m-d' }}"
-                            class="form-control form-control-sm" required>
-                        <button type="submit" class="btn btn-primary btn-sm">Go</button>
-                    </form>
-                </div>
-            </div>
-
-            <!-- Stats Grid -->
-            <div class="row g-4 mb-4">
-                <div class="col-6 col-md-3">
-                    <div class="p-3 rounded text-center h-100 text-white"
-                        style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
-                        <h6 class="mb-1 opacity-75">Total Records</h6>
-                        <div class="display-6 fw-bold">{{ total_records }}</div>
+        <div class="col-lg-4">
+            <div class="bg-light p-3 rounded-4 border border-white">
+                <div class="row g-3">
+                    <div class="col-6">
+                        <div class="small text-secondary mb-1">Email</div>
+                        <div class="fw-semibold text-truncate" id="emp-email">-</div>
                     </div>
-                </div>
-                <div class="col-6 col-md-3">
-                    <div class="p-3 rounded text-center h-100 text-white"
-                        style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);">
-                        <h6 class="mb-1 opacity-75">Present</h6>
-                        <div class="display-6 fw-bold">{{ present_count }}</div>
-                    </div>
-                </div>
-                <div class="col-6 col-md-3">
-                    <div class="p-3 rounded text-center h-100 text-white"
-                        style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);">
-                        <h6 class="mb-1 opacity-75">Late</h6>
-                        <div class="display-6 fw-bold">{{ late_count }}</div>
-                        <div class="small opacity-75">Total: {{ total_late_minutes|default:"0" }} min</div>
-                    </div>
-                </div>
-                <div class="col-6 col-md-3">
-                    <div class="p-3 rounded text-center h-100 text-white"
-                        style="background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);">
-                        <h6 class="mb-1 opacity-75">Early Leavings</h6>
-                        <div class="display-6 fw-bold">{{ total_early_minutes|default:"0" }} min</div>
+                    <div class="col-6">
+                        <div class="small text-secondary mb-1">Phone</div>
+                        <div class="fw-semibold" id="emp-phone">-</div>
                     </div>
                 </div>
             </div>
-
-            {% if filter == 'daily' %}
-            <!-- Daily View: Slots -->
-            <h4 class="mb-3">Today's Slots - {{ current_date|date:"M d, Y" }}</h4>
-            <div class="row g-4">
-                {% for slot_name, slot_data in slots.items %}
-                <div class="col-md-6">
-                    <div
-                        class="card h-100 {% if slot_data.status == 'present' %}border-success{% elif slot_data.status == 'late' %}border-warning{% elif slot_data.status == 'absent' %}border-danger{% endif %}">
-                        <div class="card-body">
-                            <h5 class="card-title d-flex justify-content-between align-items-center">
-                                {{ slot_name }}
-                                {% if slot_data.status %}
-                                {% if slot_data.status == 'present' %}
-                                <span class="badge bg-success">Present</span>
-                                {% elif slot_data.status == 'late' %}
-                                <span class="badge bg-warning text-dark">Late ({{ slot_data.late_minutes }}m)</span>
-                                {% elif slot_data.status == 'absent' %}
-                                <span class="badge bg-danger">Absent</span>
-                                {% endif %}
-                                {% else %}
-                                <span class="badge bg-secondary">No Record</span>
-                                {% endif %}
-                            </h5>
-                            <!-- <h6 class="card-subtitle mb-2 text-muted">{{ slot_data.time_range }}</h6> -->
-
-                            {% if slot_data.check_in %}
-                            <p class="card-text mb-1"><strong>Check In:</strong> {{ slot_data.check_in|time:"h:i A" }}
-                            </p>
-                            {% endif %}
-
-                            {% if slot_data.early_minutes %}
-                            <p class="card-text text-danger mb-1"><strong>Early:</strong> {{ slot_data.early_minutes }}
-                                min</p>
-                            {% endif %}
-
-                            {% if slot_data.latitude and slot_data.longitude %}
-                            <div class="mt-3">
-                                <div class="small text-muted mb-1">📍 Location</div>
-                                <div class="slot-map-container rounded border" data-lat="{{ slot_data.latitude }}"
-                                    data-lng="{{ slot_data.longitude }}" style="height: 200px; width: 100%;">
-                                </div>
-                                <div class="small text-muted text-center mt-1">
-                                    {{ slot_data.latitude|floatformat:4 }}, {{ slot_data.longitude|floatformat:4 }}
-                                </div>
-                            </div>
-                            {% endif %}
-                        </div>
-                    </div>
-                </div>
-                {% endfor %}
-            </div>
-
-            {% else %}
-            <!-- Calendar Grid View -->
-            <h4 class="mb-3">Period: {{ start_date|date:"M d" }} - {{ end_date|date:"M d, Y" }}</h4>
-
-            <div class="table-responsive">
-                <div class="d-grid gap-2" style="grid-template-columns: repeat(7, minmax(100px, 1fr));">
-                    <!-- Headers -->
-                    <div class="p-2 text-center fw-bold bg-light rounded">Mon</div>
-                    <div class="p-2 text-center fw-bold bg-light rounded">Tue</div>
-                    <div class="p-2 text-center fw-bold bg-light rounded">Wed</div>
-                    <div class="p-2 text-center fw-bold bg-light rounded">Thu</div>
-                    <div class="p-2 text-center fw-bold bg-light rounded">Fri</div>
-                    <div class="p-2 text-center fw-bold bg-light rounded">Sat</div>
-                    <div class="p-2 text-center fw-bold bg-light rounded">Sun</div>
-
-                    <!-- Days -->
-                    {% for day in calendar_days %}
-                    <div class="border rounded p-2 {% if not day.date %}bg-light{% else %}bg-white{% endif %} calendar-day-cell"
-                        style="min-height: 100px; {% if day.date %}cursor: pointer;{% endif %}" {% if day.date %}data-date="{{ day.date|date:'Y-m-d' }}" {% endif %}>
-                        {% if day.date %}
-                        <div class="d-flex justify-content-between align-items-start mb-2">
-                            <span class="fw-bold">{{ day.date|date:"d" }}</span>
-                            <span class="small text-muted">{{ day.date|date:"M" }}</span>
-                        </div>
-
-                        <div class="d-flex flex-column gap-1">
-                            {% for slot in day.slots %}
-                            <div
-                                class="badge text-truncate w-100 {% if slot.status == 'present' %}bg-success{% elif slot.status == 'late' %}bg-warning text-dark{% elif slot.status == 'absent' %}bg-danger{% else %}bg-secondary{% endif %}">
-                                {{ slot.name }}
-                                {% if slot.time %}{{ slot.time|time:"H:i" }}{% endif %}
-                            </div>
-                            {% endfor %}
-
-                            {% if day.record %}
-                            {% if day.record.late_minutes > 0 %}
-                            <div class="badge bg-warning text-dark text-truncate w-100">Late: {{ day.record.late_minutes
-                                }}m</div>
-                            {% endif %}
-                            {% if day.record.early_minutes > 0 %}
-                            <div class="badge bg-danger text-truncate w-100">Early: {{ day.record.early_minutes }}m
-                            </div>
-                            {% endif %}
-                            {% endif %}
-                        </div>
-                        {% endif %}
-                    </div>
-                    {% endfor %}
-                </div>
-            </div>
-            {% endif %}
         </div>
     </div>
 </div>
 
+<!-- Stats Row -->
+<div class="row g-4 mb-5" id="stats-container">
+    <div class="col-md-3">
+        <div class="stat-card">
+            <div class="stat-icon-bg"><i class="ri-calendar-check-line"></i></div>
+            <div class="stat-label mb-1">Total Records</div>
+            <div class="stat-value h2 fw-bold mb-0" id="stat-total">0</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card">
+            <div class="stat-icon-bg"><i class="ri-user-follow-line"></i></div>
+            <div class="stat-label mb-1">Present Count</div>
+            <div class="stat-value h2 fw-bold mb-0" id="stat-present">0</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card">
+            <div class="stat-icon-bg"><i class="ri-timer-flash-line"></i></div>
+            <div class="stat-label mb-1">Total Late</div>
+            <div class="stat-value h2 fw-bold mb-0" id="stat-late">0 <small style="font-size: 0.9rem;">min</small></div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card">
+            <div class="stat-icon-bg"><i class="ri-logout-box-r-line"></i></div>
+            <div class="stat-label mb-1">Early Leaving</div>
+            <div class="stat-value h2 fw-bold mb-0" id="stat-early">0 <small style="font-size: 0.9rem;">min</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Attendance Explorer -->
+<div class="card border-0 rounded-4 shadow-sm mb-5">
+    <div
+        class="card-header bg-white p-4 border-bottom d-flex flex-wrap justify-content-between align-items-center gap-4">
+        <div class="filter-btn-group">
+            <button onclick="setFilter('daily')" id="btn-daily" class="filter-btn active">Daily</button>
+            <button onclick="setFilter('weekly')" id="btn-weekly" class="filter-btn">Weekly</button>
+            <button onclick="setFilter('monthly')" id="btn-monthly" class="filter-btn">Monthly</button>
+            <button onclick="setFilter('custom')" id="btn-custom" class="filter-btn">Custom</button>
+        </div>
+
+        <div class="d-flex align-items-center gap-3">
+            <div id="standard-date-picker" class="d-flex align-items-center gap-2">
+                <input type="date" id="main-date" class="form-control form-control-modern" onchange="loadAllData()">
+            </div>
+            <div id="custom-date-picker" class="d-none d-flex align-items-center gap-2">
+                <input type="date" id="start-date" class="form-control form-control-modern" placeholder="Start">
+                <span class="text-secondary">-</span>
+                <input type="date" id="end-date" class="form-control form-control-modern" placeholder="End">
+                <button onclick="loadAllData()" class="btn btn-primary rounded-3 px-3"><i
+                        class="ri-search-line"></i></button>
+            </div>
+        </div>
+    </div>
+
+    <div class="card-body p-4 bg-light bg-opacity-50">
+        <h4 class="fw-bold mb-4 d-flex align-items-center gap-2">
+            <i class="ri-history-line text-primary"></i> <span id="view-title">Loading logs...</span>
+        </h4>
+
+        <div id="view-content" class="min-vh-50">
+            <!-- Dynamic Content -->
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
 <script
     src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCYAsBPyik1DZcOH3jcR-awecFjyYXr5Qw&libraries=geometry"></script>
 <script>
-    function toggleCustomDate() {
-        const customDiv = document.getElementById('customDateRange');
-        customDiv.classList.toggle('d-none');
-    }
+    const USER_ID = '{{ user_id }}';
+    let currentFilter = 'daily';
+    let siteBoundary = [];
 
-    // Calendar Click Handler
-    document.addEventListener('DOMContentLoaded', function () {
-        document.querySelectorAll('.calendar-day-cell').forEach(cell => {
-            cell.addEventListener('click', function () {
-                const date = this.dataset.date;
-                if (date) {
-                    window.location.href = '?filter=daily&date=' + date;
-                }
-            });
-        });
+    document.addEventListener('DOMContentLoaded', () => {
+        const today = new Date().toISOString().split('T')[0];
+        document.getElementById('main-date').value = today;
+        document.getElementById('start-date').value = today;
+        document.getElementById('end-date').value = today;
+
+        startTime();
+        loadAllData();
     });
 
-    // Live Clock (Reused)
-    function updateClock() {
-        const now = new Date();
-        const options = {
-            timeZone: 'Asia/Dubai',
-            weekday: 'short',
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
-            hour12: true
-        };
-        document.getElementById('liveClock').innerText = '🇦🇪 ' + now.toLocaleString('en-US', options);
-    }
-    setInterval(updateClock, 1000);
-    updateClock();
+    async function loadAllData() {
+        const content = document.getElementById('view-content');
+        content.innerHTML = '<div class="text-center py-5"><div class="spinner-border text-primary"></div><p class="mt-3 text-secondary">Synchronizing attendance records...</p></div>';
 
-    async function initMaps() {
-        const maps = document.querySelectorAll('.slot-map-container');
-        if (maps.length === 0) return;
+        const params = new URLSearchParams({
+            filter: currentFilter,
+            date: document.getElementById('main-date').value,
+            start_date: document.getElementById('start-date').value,
+            end_date: document.getElementById('end-date').value
+        });
 
-        const siteId = '{{ employee.site.id|default:"" }}';
-        let siteCoordinates = [];
+        try {
+            const res = await fetch(`?${params.toString()}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+            const data = await res.json();
 
-        // Fetch site coordinates if site exists
-        if (siteId) {
-            try {
-                const response = await fetch(`/api/attendance/api/sites/${siteId}/coordinates/`);
-                const data = await response.json();
-                if (data.success && data.has_coordinates) {
-                    siteCoordinates = data.coordinates;
-                    // Close polygon
-                    if (siteCoordinates.length > 0) {
-                        const first = siteCoordinates[0];
-                        const last = siteCoordinates[siteCoordinates.length - 1];
-                        if (first.lat !== last.lat || first.lng !== last.lng) {
-                            siteCoordinates.push(first);
-                        }
-                    }
-                }
-            } catch (error) {
-                console.error("Error fetching site coordinates:", error);
+            if (data.error) throw new Error(data.error);
+
+            renderProfile(data.employee);
+            renderStats(data.stats);
+
+            if (currentFilter === 'daily') {
+                const siteId = data.employee.site_id;
+                renderDaily(data.slots, siteId);
+                document.getElementById('view-title').textContent = `Activity Logs for ${formatDate(data.filter.current_date)}`;
+            } else {
+                renderCalendar(data.calendar_days);
+                document.getElementById('view-title').textContent = `${currentFilter.charAt(0).toUpperCase() + currentFilter.slice(1)} Summary`;
             }
+
+        } catch (e) {
+            content.innerHTML = `<div class="alert alert-danger rounded-4">${e.message}</div>`;
         }
+    }
 
-        // Initialize each map
-        maps.forEach(container => {
-            const lat = parseFloat(container.dataset.lat);
-            const lng = parseFloat(container.dataset.lng);
+    function renderProfile(emp) {
+        document.getElementById('emp-name').textContent = emp.name;
+        document.getElementById('emp-email').textContent = emp.email || '-';
+        document.getElementById('emp-phone').textContent = emp.phone || '-';
+        document.getElementById('emp-badge').innerHTML = `<i class="ri-id-card-line me-1"></i> ID: ${emp.badge_number || '-'}`;
+        document.getElementById('emp-dept').innerHTML = `<i class="ri-team-line me-1"></i> ${emp.department || 'N/A'}`;
+        document.getElementById('emp-pos').innerHTML = `<i class="ri-briefcase-line me-1"></i> ${emp.position || 'N/A'}`;
+        document.getElementById('emp-site').innerHTML = `<i class="ri-building-line me-1"></i> ${emp.site || 'N/A'}`;
 
-            if (isNaN(lat) || isNaN(lng)) return;
+        const avatarCont = document.getElementById('profile-picture-container');
+        if (emp.profile_picture) {
+            avatarCont.innerHTML = `<img src="${emp.profile_picture}" class="profile-avatar shadow-sm">`;
+        } else {
+            document.getElementById('profile-initial').textContent = emp.name.charAt(0);
+        }
+    }
 
-            const map = new google.maps.Map(container, {
-                center: { lat: lat, lng: lng },
-                zoom: 15,
-                mapTypeId: google.maps.MapTypeId.ROADMAP
-            });
+    function renderStats(stats) {
+        document.getElementById('stat-total').textContent = stats.total_records;
+        document.getElementById('stat-present').textContent = stats.present;
+        document.getElementById('stat-late').innerHTML = `${stats.late_minutes} <small style="font-size: 0.9rem;">min</small>`;
+        document.getElementById('stat-early').innerHTML = `${stats.early_minutes} <small style="font-size: 0.9rem;">min</small>`;
+    }
 
-            // Attendance Marker (Blue)
-            new google.maps.Marker({
-                position: { lat: lat, lng: lng },
-                map: map,
-                title: "Attendance Location",
-                icon: {
-                    url: "http://maps.google.com/mapfiles/ms/icons/blue-dot.png"
-                }
-            });
+    function renderDaily(slots, siteId) {
+        const content = document.getElementById('view-content');
+        let html = '<div class="row g-4">';
 
-            // Site Boundary (Red Polygon)
-            if (siteCoordinates.length > 0) {
-                const polygon = new google.maps.Polygon({
-                    paths: siteCoordinates,
-                    strokeColor: "#FF0000",
-                    strokeOpacity: 0.8,
-                    strokeWeight: 2,
-                    fillColor: "#FF0000",
-                    fillOpacity: 0.35
-                });
-                polygon.setMap(map);
+        Object.entries(slots).forEach(([name, s]) => {
+            const statusClass = s.status === 'present' ? 'text-success bg-success' : 'text-danger bg-danger';
+            html += `
+                <div class="col-md-6">
+                    <div class="slot-card p-4">
+                        <div class="d-flex justify-content-between align-items-center mb-4">
+                            <div>
+                                <h5 class="fw-bold mb-0">${name}</h5>
+                                <div class="small text-secondary fw-semibold">Target: ${s.time_range}</div>
+                            </div>
+                            <span class="badge ${statusClass} bg-opacity-10 px-3 py-2 rounded-pill fw-bold">
+                                ${s.status ? (s.status === 'present' ? 'Recorded' : 'No Record') : 'No Record'}
+                            </span>
+                        </div>
+                        
+                        <div class="row g-3 mb-4">
+                            <div class="col-6">
+                                <div class="small text-secondary mb-1">Check Time</div>
+                                <div class="fw-bold h5 mb-0">${s.check_in || '--:--'}</div>
+                            </div>
+                            <div class="col-6">
+                                <div class="small text-secondary mb-1">${name.includes('In') ? 'Late' : 'Early'} Min</div>
+                                <div class="fw-bold h5 mb-0 ${(s.late_minutes > 0 || s.early_minutes > 0) ? 'text-danger' : 'text-success'}">
+                                    ${name.includes('In') ? s.late_minutes : s.early_minutes} min
+                                </div>
+                            </div>
+                        </div>
+
+                        ${(s.latitude && s.longitude) ? `
+                            <div class="map-box" id="map-${name.replace(' ', '-')}"></div>
+                            <div class="mt-2 small text-secondary d-flex align-items-center gap-1">
+                                <i class="ri-map-pin-2-line"></i> ${s.latitude.toFixed(4)}, ${s.longitude.toFixed(4)}
+                            </div>
+                        ` : '<div class="bg-white border rounded-4 py-4 text-center text-muted small">No location data captured</div>'}
+                    </div>
+                </div>
+            `;
+        });
+
+        html += '</div>';
+        content.innerHTML = html;
+
+        // Init Maps
+        Object.entries(slots).forEach(([name, s]) => {
+            if (s.latitude && s.longitude) {
+                initSlotMap(`map-${name.replace(' ', '-')}`, s.latitude, s.longitude, siteId);
             }
         });
     }
 
-    window.onload = initMaps;
+    function renderCalendar(days) {
+        const content = document.getElementById('view-content');
+        let html = `
+            <div class="calendar-grid">
+                ${['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(h => `<div class="calendar-day-header">${h}</div>`).join('')}
+        `;
+
+        // Add padding for start day
+        const firstDay = new Date(days[0].date).getDay();
+        const padding = firstDay === 0 ? 6 : firstDay - 1;
+        for (let i = 0; i < padding; i++) html += '<div class="calendar-empty"></div>';
+
+        days.forEach(d => {
+            const dateObj = new Date(d.date);
+            const isToday = new Date().toISOString().split('T')[0] === d.date;
+
+            html += `
+                <div class="calendar-cell ${isToday ? 'today' : ''}" onclick="goToDate('${d.date}')">
+                    <div class="d-flex justify-content-between mb-2">
+                        <span class="fw-bold fs-5">${dateObj.getDate()}</span>
+                        <span class="small opacity-50 fw-semibold">${dateObj.toLocaleString('en-US', { month: 'short' })}</span>
+                    </div>
+                    <div class="d-flex flex-column gap-1">
+                        ${d.slots.length > 0 ? d.slots.map(s => `
+                            <div class="calendar-badge ${s.status === 'present' ? 'bg-success text-white' : 'bg-warning text-dark'}">
+                                ${s.name}: ${s.time}
+                            </div>
+                        `).join('') : '<div class="small text-muted py-2 opacity-50"><i>No activity</i></div>'}
+                    </div>
+                </div>
+            `;
+        });
+
+        html += '</div>';
+        content.innerHTML = html;
+    }
+
+    async function initSlotMap(elementId, lat, lng, siteId) {
+        const element = document.getElementById(elementId);
+        if (!element) return;
+
+        const map = new google.maps.Map(element, {
+            center: { lat: lat, lng: lng },
+            zoom: 15,
+            disableDefaultUI: true,
+            styles: [{ "featureType": "poi", "stylers": [{ "visibility": "off" }] }]
+        });
+
+        new google.maps.Marker({
+            position: { lat: lat, lng: lng },
+            map: map,
+            icon: { url: "http://maps.google.com/mapfiles/ms/icons/blue-dot.png" }
+        });
+
+        if (siteId) {
+            try {
+                const res = await fetch(`/api/attendance/api/sites/${siteId}/coordinates/`);
+                const data = await res.json();
+                if (data.success && data.has_coordinates) {
+                    const poly = new google.maps.Polygon({
+                        paths: data.coordinates,
+                        strokeColor: "#000000", strokeOpacity: 1.0, strokeWeight: 3, fillColor: "#000000", fillOpacity: 0.1
+                    });
+                    poly.setMap(map);
+                }
+            } catch (e) { }
+        }
+    }
+
+    function setFilter(type) {
+        currentFilter = type;
+        document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+        document.getElementById(`btn-${type}`).classList.add('active');
+
+        const standard = document.getElementById('standard-date-picker');
+        const custom = document.getElementById('custom-date-picker');
+
+        if (type === 'custom') {
+            standard.classList.add('d-none');
+            custom.classList.remove('d-none');
+        } else {
+            standard.classList.remove('d-none');
+            custom.classList.add('d-none');
+            loadAllData();
+        }
+    }
+
+    function goToDate(date) {
+        document.getElementById('main-date').value = date;
+        setFilter('daily');
+    }
+
+    function downloadReport() {
+        const start = document.getElementById('start-date').value;
+        const end = document.getElementById('end-date').value;
+        window.location.href = `{% url 'export-attendance' %}?user_id=${USER_ID}&start_date=${start}&end_date=${end}`;
+    }
+
+    function formatDate(dateStr) {
+        return new Date(dateStr).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+    }
+
+    function startTime() {
+        const update = () => {
+            const now = new Date();
+            document.getElementById('top-time').innerHTML = `🇦🇪 ` + now.toLocaleString('en-US', { timeZone: 'Asia/Dubai', weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        };
+        setInterval(update, 1000);
+        update();
+    }
 </script>
 {% endblock %}

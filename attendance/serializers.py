@@ -24,11 +24,12 @@ class AttendanceSerializer(serializers.ModelSerializer):
 
 class EmployeeSerializer(serializers.ModelSerializer):
     profile_picture_url = serializers.SerializerMethodField()
+    site_name = serializers.CharField(source='site.name', read_only=True)
 
     class Meta:
         model = Employee
         fields = [
-            'id', 'name', 'email', 'phone', 'department', 'position', 'profile_picture_url', 'site', 
+            'id', 'name', 'email', 'phone', 'department', 'position', 'profile_picture_url', 'site', 'site_name',
             'job_description', 'salary_grade', 'badge_number', 'mol_id', 'labor_card_number', 'employer', 
             'nationality', 'gender', 'marital_status', 'religion', 'date_of_birth', 'date_of_joining', 
             'passport_number', 'passport_expiry', 'visa_details', 'status', 'gross_salary', 'camp', 'transportation'

@@ -7,6 +7,7 @@ urlpatterns = [
     path('mark-attendance/', MarkAttendanceView.as_view(), name='mark-attendance'),
     path('admin/login/', AdminLoginView.as_view(), name='admin-login'),
     path('stats/', AttendanceStatsView.as_view(), name='attendance-stats'),
+    path('alerts/', AttendanceAlertsView.as_view(), name='attendance-alerts'),
     path('employees/', EmployeeListView.as_view(), name='employee-list'),
     path('employees/import/', ImportEmployeesView.as_view(), name='import-employees'),
     path('employees/template/', DownloadEmployeeTemplateView.as_view(), name='download-employee-template'),
@@ -23,6 +24,7 @@ urlpatterns = [
     path('dashboard/user-face/', admin_user_face_view, name='admin-user-face'),
     path('dashboard/user/<int:user_id>/', admin_user_detail_view, name='admin-user-detail'),
     path('dashboard/logout/', admin_logout_view, name='admin-logout'),
+    path('dashboard/downloads/', admin_downloads_view, name='admin-downloads'),
     
     # Sites Management
     path('dashboard/sites/', admin_sites_view, name='admin-sites'),
@@ -54,5 +56,9 @@ urlpatterns = [
     path('dashboard/reports/export/', export_reports_view, name='export-reports'),
     path('dashboard/monthly-report/', monthly_report_view, name='monthly-report'),
     path('dashboard/monthly-report/export/', export_monthly_report, name='export-monthly-report'),
+    path('dashboard/monthly-report/export/', export_monthly_report, name='export-monthly-report'),
+    
+    # Reports API
+    path('api/reports/data/', AttendanceReportDataView.as_view(), name='api-reports-data'),
 ]
 

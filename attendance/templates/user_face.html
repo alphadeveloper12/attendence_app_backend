@@ -1,310 +1,392 @@
 {% extends 'base.html' %}
 
-{% block title %}User Face Enrollment - Admin{% endblock %}
+{% block title %}User Face Enrollment - Admin Dashboard{% endblock %}
 
 {% block content %}
+<!-- Remix Icons & Google Fonts -->
+<link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
 <style>
-    .avatar-sm {
-        width: 32px;
-        height: 32px;
-        border-radius: 50%;
-        object-fit: cover;
+    :root {
+        --font-family: 'Outfit', sans-serif;
+        --card-bg: #ffffff;
+        --text-primary: #1e293b;
+        --text-secondary: #64748b;
+
+        --grad-primary: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+        --grad-success: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        --grad-warning: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+        --grad-danger: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);
+        --grad-info: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
     }
 
-    .avatar-placeholder {
-        width: 32px;
-        height: 32px;
-        border-radius: 50%;
-        background-color: #e9ecef;
+    body {
+        font-family: var(--font-family) !important;
+        background-color: #f8fafc;
+    }
+
+    /* Page Setup */
+    .page-header {
+        margin-bottom: 2.5rem;
+    }
+
+    /* Premium Cards */
+    .premium-card {
+        background: white;
+        border-radius: 1.5rem;
+        padding: 1.75rem;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+        border: 1px solid #f1f5f9;
+        margin-bottom: 2.5rem;
+    }
+
+    .form-label-premium {
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        font-weight: 700;
+        color: #94a3b8;
+        letter-spacing: 0.05em;
+        margin-bottom: 0.75rem;
+        display: block;
+    }
+
+    .form-control-premium,
+    .form-select-premium {
+        border: 1px solid #e2e8f0;
+        border-radius: 0.875rem;
+        padding: 0.75rem 1rem;
+        font-weight: 500;
+        transition: all 0.2s;
+    }
+
+    .form-control-premium:focus,
+    .form-select-premium:focus {
+        border-color: #6366f1;
+        box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
+    }
+
+    /* Table & Badges */
+    .modern-table-container {
+        background: white;
+        border-radius: 1.5rem;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+        border: 1px solid #f1f5f9;
+        overflow: hidden;
+    }
+
+    .table thead th {
+        background: #f8fafc;
+        padding: 1.25rem 1rem;
+        font-weight: 700;
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        color: #64748b;
+        border-bottom: 2px solid #f1f5f9;
+    }
+
+    .table tbody td {
+        padding: 1.125rem 1rem;
+        vertical-align: middle;
+        border-bottom: 1px solid #f1f5f9;
+    }
+
+    .avatar-wrapper {
+        width: 42px;
+        height: 42px;
+        border-radius: 12px;
+        background: #f1f5f9;
         display: flex;
         align-items: center;
         justify-content: center;
-        font-weight: bold;
-        color: #6c757d;
-        font-size: 14px;
-        flex-shrink: 0;
+        font-weight: 700;
+        color: #4f46e5;
+        border: 2px solid white;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+        overflow: hidden;
     }
 
-    .status-badge {
-        font-size: 0.8rem;
-        padding: 0.4em 0.8em;
+    .avatar-img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .status-pill {
+        font-size: 0.75rem;
+        font-weight: 700;
+        padding: 0.5rem 1rem;
+        border-radius: 2rem;
+        text-transform: uppercase;
+        letter-spacing: 0.02em;
+    }
+
+    /* Pagination */
+    .pagination-container {
+        padding: 1.5rem;
+        background: #f8fafc;
+        border-top: 1px solid #f1f5f9;
+    }
+
+    .page-link-premium {
+        width: 36px;
+        height: 36px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 10px;
+        font-weight: 600;
+        margin: 0 0.2rem;
+        border: 1px solid #e2e8f0;
+        color: #64748b;
+        background: white;
+        transition: all 0.2s;
+    }
+
+    .page-link-premium.active {
+        background: #6366f1;
+        color: white;
+        border-color: #6366f1;
+        box-shadow: 0 4px 6px -1px rgba(99, 102, 241, 0.3);
     }
 </style>
 
-<nav class="navbar navbar-expand-lg navbar-custom mb-4">
-    <div class="container-fluid">
-        <a class="navbar-brand" href="#">👤 User Face Enrollment</a>
-        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"
-            aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
-            <span class="navbar-toggler-icon"></span>
+<!-- Top Bar -->
+<div class="page-header d-flex justify-content-between align-items-center">
+    <div>
+        <h1 class="h3 fw-bold text-dark mb-1">User Face Enrollment</h1>
+        <div class="d-flex align-items-center gap-2 text-secondary font-monospace small">
+            <i class="ri-shield-user-line text-primary"></i>
+            <span id="enrollment-summary">Loading status...</span>
+            <span class="mx-1">•</span>
+            <i class="ri-time-line"></i>
+            <span id="live-clock">--:--:--</span>
+        </div>
+    </div>
+    <div class="d-flex gap-3">
+        <button onclick="window.location.href='/api/attendance/dashboard/'"
+            class="btn btn-white border rounded-3 px-4 py-2 fw-semibold shadow-sm">
+            <i class="ri-arrow-left-line me-2"></i>Dashboard
         </button>
-        <div class="collapse navbar-collapse" id="navbarNav">
-            <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-                <li class="nav-item">
-                    <a class="nav-link" href="{% url 'admin-dashboard' %}">📊 Dashboard</a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link active" href="{% url 'admin-user-face' %}">👤 User Face</a>
-                </li>
-            </ul>
-            <div class="d-flex align-items-center gap-3">
-                <span class="text-secondary fw-medium">Welcome, {{ user.username }}</span>
-                <a href="{% url 'admin-logout' %}" class="btn btn-danger btn-sm">Logout</a>
+    </div>
+</div>
+
+<!-- Filters Card -->
+<div class="premium-card">
+    <div class="row g-4 align-items-end">
+        <div class="col-md-3">
+            <label class="form-label-premium">Site Filter</label>
+            <select id="siteFilter" class="form-select form-select-premium" onchange="loadData(1)">
+                <option value="all">All Sites</option>
+            </select>
+        </div>
+        <div class="col-md-3">
+            <label class="form-label-premium">Enrollment Status</label>
+            <select id="statusFilter" class="form-select form-select-premium" onchange="loadData(1)">
+                <option value="all">All Employees</option>
+                <option value="enrolled">Enrolled</option>
+                <option value="not_enrolled">Not Enrolled</option>
+            </select>
+        </div>
+        <div class="col-md-4">
+            <label class="form-label-premium">Search Employee</label>
+            <div class="input-group shadow-sm rounded-3 overflow-hidden">
+                <span class="input-group-text border-0 bg-white ps-3"><i
+                        class="ri-search-line text-secondary"></i></span>
+                <input type="text" id="searchInput" class="form-control border-0 py-2"
+                    placeholder="Search by name or badge ID..." oninput="debounceSearch()">
             </div>
         </div>
-    </div>
-</nav>
-
-<div class="container-fluid px-4">
-    <div class="card mb-4">
-        <div class="card-body">
-            <h2 class="mb-4">Enrollment Status</h2>
-
-            <form id="filterForm" class="row g-3">
-                <div class="col-md-3">
-                    <label class="form-label">Filter by Site</label>
-                    <select id="siteFilter" name="site" class="form-select">
-                        <option value="all">All Sites</option>
-                        {% for site in all_sites %}
-                        <option value="{{ site.id }}">{{ site.name }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-md-3">
-                    <label class="form-label">Enrollment Status</label>
-                    <select id="statusFilter" name="status" class="form-select">
-                        <option value="all">All</option>
-                        <option value="enrolled">Enrolled</option>
-                        <option value="not_enrolled">Not Enrolled</option>
-                    </select>
-                </div>
-                <div class="col-md-4">
-                    <label class="form-label">Search</label>
-                    <div class="input-group">
-                        <input type="text" id="searchInput" name="search" class="form-control"
-                            placeholder="Name or Badge ID..." value="{{ search_query }}">
-                        <button class="btn btn-primary" type="submit">Search</button>
-                    </div>
-                </div>
-                <div class="col-md-2 d-flex align-items-end">
-                    <button type="button" id="clearFilters" class="btn btn-outline-secondary w-100">Clear
-                        Filters</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <div class="card">
-        <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
-            <h3 class="mb-0 fs-5">Employees</h3>
-            <span id="totalBadge" class="badge bg-primary">{{ employees.paginator.count }} Total</span>
-        </div>
-        <div class="table-responsive">
-            <table class="table table-hover mb-0">
-                <thead class="table-light">
-                    <tr>
-                        <th>Employee</th>
-                        <th>Badge ID</th>
-                        <th>Site</th>
-                        <th>Face Status</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="employeeTableBody">
-                    {% for employee in employees %}
-                    <tr>
-                        <td>
-                            <div class="d-flex align-items-center gap-2">
-                                {% if employee.profile_picture %}
-                                <img src="{{ employee.profile_picture.url }}" alt="{{ employee.name }}"
-                                    class="avatar-sm">
-                                {% else %}
-                                <div class="avatar-placeholder">{{ employee.name|slice:":1"|upper }}</div>
-                                {% endif %}
-                                <div>
-                                    <div class="fw-bold">{{ employee.name }}</div>
-                                    <div class="small text-muted">{{ employee.position|default:"-" }}</div>
-                                </div>
-                            </div>
-                        </td>
-                        <td>{{ employee.badge_number|default:"-" }}</td>
-                        <td>{{ employee.site.name|default:"-" }}</td>
-                        <td>
-                            {% if employee.face_embedding %}
-                            <span class="badge bg-success status-badge">✅ Enrolled</span>
-                            {% else %}
-                            <span class="badge bg-danger status-badge">❌ Not Enrolled</span>
-                            {% endif %}
-                        </td>
-                        <td>
-                            <a href="{% url 'admin-user-detail' employee.id %}"
-                                class="btn btn-sm btn-outline-primary">View Profile</a>
-                        </td>
-                    </tr>
-                    {% empty %}
-                    <tr>
-                        <td colspan="5" class="text-center py-5 text-muted">No employees found matching criteria.</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-        <div id="paginationContainer" class="card-footer bg-white">
-            {% include "pagination.html" with page_obj=employees %}
+        <div class="col-md-2">
+            <button onclick="clearFilters()" class="btn btn-light border w-100 py-2 rounded-3 fw-semibold">
+                <i class="ri-restart-line me-1"></i> Clear
+            </button>
         </div>
     </div>
 </div>
 
-<script>
-    document.addEventListener('DOMContentLoaded', function () {
-        const form = document.getElementById('filterForm');
-        const siteFilter = document.getElementById('siteFilter');
-        const statusFilter = document.getElementById('statusFilter');
-        const searchInput = document.getElementById('searchInput');
-        const clearBtn = document.getElementById('clearFilters');
-        const tableBody = document.getElementById('employeeTableBody');
-        const paginationContainer = document.getElementById('paginationContainer');
-        const totalBadge = document.getElementById('totalBadge');
+<!-- Table Header Actions -->
+<div class="d-flex justify-content-between align-items-center mb-4 px-2">
+    <h5 class="fw-bold mb-0 text-dark">Employee List <span class="badge bg-light text-primary ms-2 shadow-sm border"
+            id="total-count-badge">0</span></h5>
+    <div class="d-flex align-items-center gap-2">
+        <label class="small fw-bold text-secondary text-uppercase mb-0">Rows:</label>
+        <select id="perPageFilter" class="form-select form-select-sm border-0 shadow-sm rounded-3 fw-bold"
+            style="width: 80px;" onchange="loadData(1)">
+            <option value="20" selected>20</option>
+            <option value="100">100</option>
+            <option value="500">500</option>
+        </select>
+    </div>
+</div>
 
-        // Set initial values from URL params
-        const urlParams = new URLSearchParams(window.location.search);
-        if (urlParams.has('site')) siteFilter.value = urlParams.get('site');
-        if (urlParams.has('status')) statusFilter.value = urlParams.get('status');
-        if (urlParams.has('search')) searchInput.value = urlParams.get('search');
-
-        async function updateTable(page = 1) {
-            const params = new URLSearchParams({
-                site: siteFilter.value,
-                status: statusFilter.value,
-                search: searchInput.value,
-                page: page
-            });
-
-            // Update URL without reload
-            const newUrl = `${window.location.pathname}?${params.toString()}`;
-            window.history.pushState({ path: newUrl }, '', newUrl);
-
-            try {
-                const response = await fetch(newUrl, {
-                    headers: {
-                        'X-Requested-With': 'XMLHttpRequest'
-                    }
-                });
-                const data = await response.json();
-
-                // Update Table
-                renderTable(data.employees);
-                // Update Pagination
-                renderPagination(data.pagination);
-                // Update Badge
-                totalBadge.textContent = `${data.total_count} Total`;
-
-            } catch (error) {
-                console.error('Error fetching data:', error);
-            }
-        }
-
-        function renderTable(employees) {
-            if (employees.length === 0) {
-                tableBody.innerHTML = `<tr><td colspan="5" class="text-center py-5 text-muted">No employees found matching criteria.</td></tr>`;
-                return;
-            }
-
-            tableBody.innerHTML = employees.map(emp => `
+<!-- Table Container -->
+<div class="modern-table-container">
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead>
                 <tr>
-                    <td>
-                        <div class="d-flex align-items-center gap-2">
-                            ${emp.profile_picture
-                    ? `<img src="${emp.profile_picture}" alt="${emp.name}" class="avatar-sm">`
-                    : `<div class="avatar-placeholder">${emp.name.charAt(0).toUpperCase()}</div>`
-                }
-                            <div>
-                                <div class="fw-bold">${emp.name}</div>
-                                <div class="small text-muted">${emp.position}</div>
-                            </div>
-                        </div>
-                    </td>
-                    <td>${emp.badge_number}</td>
-                    <td>${emp.site_name}</td>
-                    <td>
-                        <span class="badge ${emp.face_enrolled ? 'bg-success' : 'bg-danger'} status-badge">
-                            ${emp.face_enrolled ? '✅ Enrolled' : '❌ Not Enrolled'}
-                        </span>
-                    </td>
-                    <td>
-                        <a href="${emp.detail_url}" class="btn btn-sm btn-outline-primary">View Profile</a>
-                    </td>
+                    <th class="ps-4">Employee</th>
+                    <th>Badge ID</th>
+                    <th>Site</th>
+                    <th>Face Status</th>
+                    <th class="text-end pe-4">Actions</th>
                 </tr>
-            `).join('');
-        }
+            </thead>
+            <tbody id="employeeTableBody">
+                <!-- Dynamically Populated -->
+            </tbody>
+        </table>
+    </div>
+    <div id="paginationContainer" class="pagination-container">
+        <!-- Pagination Hydrated via JS -->
+    </div>
+</div>
 
-        function renderPagination(pagination) {
-            if (pagination.total_pages <= 1) {
-                paginationContainer.innerHTML = '';
-                return;
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let filterInitialized = false;
+    let searchTimer;
+    let currentPage = 1;
+
+    document.addEventListener('DOMContentLoaded', () => {
+        startTime();
+        loadData(1);
+    });
+
+    function debounceSearch() {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(() => loadData(1), 500);
+    }
+
+    async function loadData(page = 1) {
+        currentPage = page;
+        const tbody = document.getElementById('employeeTableBody');
+        tbody.innerHTML = `<tr><td colspan="5" class="text-center py-5">
+            <div class="spinner-border text-primary spinner-border-sm"></div>
+            <p class="mt-2 mb-0 text-secondary small">Syncing enrollment records...</p>
+        </td></tr>`;
+
+        const site = document.getElementById('siteFilter').value;
+        const status = document.getElementById('statusFilter').value;
+        const search = document.getElementById('searchInput').value;
+        const perPage = document.getElementById('perPageFilter').value;
+
+        const params = new URLSearchParams({ site, status, search, page, per_page: perPage });
+
+        try {
+            const res = await fetch(`?${params.toString()}`, {
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            });
+            const data = await res.json();
+
+            // Init Sites Dropdown if needed
+            if (!filterInitialized && data.permissions.is_superuser) {
+                const siteSelect = document.getElementById('siteFilter');
+                if (data.sites) {
+                    data.sites.forEach(s => {
+                        const opt = document.createElement('option');
+                        opt.value = s.id;
+                        opt.textContent = s.name;
+                        siteSelect.appendChild(opt);
+                    });
+                }
+                filterInitialized = true;
             }
 
-            let html = '<nav aria-label="Page navigation"><ul class="pagination pagination-sm mb-0 justify-content-center">';
+            renderTable(data.employees);
+            renderPagination(data.pagination);
 
-            // Previous
-            html += `
-                <li class="page-item ${pagination.has_previous ? '' : 'disabled'}">
-                    <a class="page-link" href="#" data-page="${pagination.current_page - 1}" ${pagination.has_previous ? '' : 'tabindex="-1" aria-disabled="true"'}>
-                        <span aria-hidden="true">&laquo;</span>
-                    </a>
-                </li>
-            `;
+            document.getElementById('total-count-badge').textContent = data.total_count;
+            document.getElementById('enrollment-summary').textContent = `System verified ${data.total_count} employees`;
 
-            // Page Buttons
-            pagination.page_range.forEach(p => {
-                if (p === '...') {
-                    html += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
-                } else {
-                    html += `
-                        <li class="page-item ${p === pagination.current_page ? 'active' : ''}">
-                            <a class="page-link" href="#" data-page="${p}">${p}</a>
-                        </li>
-                    `;
-                }
-            });
+        } catch (e) {
+            tbody.innerHTML = `<tr><td colspan="5" class="text-center py-5 text-danger">Failed to connect to enrollment server.</td></tr>`;
+        }
+    }
 
-            // Next
-            html += `
-                <li class="page-item ${pagination.has_next ? '' : 'disabled'}">
-                    <a class="page-link" href="#" data-page="${pagination.current_page + 1}" ${pagination.has_next ? '' : 'tabindex="-1" aria-disabled="true"'}>
-                        <span aria-hidden="true">&raquo;</span>
-                    </a>
-                </li>
-            `;
-
-            html += '</ul></nav>';
-            paginationContainer.innerHTML = html;
-
-            // Add event listeners to new pagination links
-            paginationContainer.querySelectorAll('.page-link').forEach(link => {
-                link.addEventListener('click', function (e) {
-                    e.preventDefault();
-                    if (!this.parentElement.classList.contains('disabled') && !this.parentElement.classList.contains('active')) {
-                        updateTable(this.dataset.page);
-                    }
-                });
-            });
+    function renderTable(employees) {
+        const tbody = document.getElementById('employeeTableBody');
+        if (employees.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="5" class="text-center py-5 text-muted">No matching enrollment records.</td></tr>`;
+            return;
         }
 
-        // Event Listeners
-        siteFilter.addEventListener('change', () => updateTable(1));
-        statusFilter.addEventListener('change', () => updateTable(1));
-        form.addEventListener('submit', (e) => {
-            e.preventDefault();
-            updateTable(1);
-        });
+        tbody.innerHTML = employees.map(emp => `
+            <tr>
+                <td class="ps-4">
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="avatar-wrapper">
+                            ${emp.profile_picture ? `<img src="${emp.profile_picture}" class="avatar-img">` : emp.name.charAt(0)}
+                        </div>
+                        <div>
+                            <div class="fw-bold text-dark">${emp.name}</div>
+                            <div class="small text-secondary fw-medium">${emp.position}</div>
+                        </div>
+                    </div>
+                </td>
+                <td><span class="badge bg-light text-dark border font-monospace px-2">${emp.badge_number}</span></td>
+                <td><div class="d-flex align-items-center gap-1 small fw-medium"><i class="ri-map-pin-line text-secondary"></i> ${emp.site_name}</div></td>
+                <td>
+                    <span class="status-pill shadow-sm ${emp.face_enrolled ? 'bg-success bg-opacity-10 text-success' : 'bg-danger bg-opacity-10 text-danger'}">
+                        ${emp.face_enrolled ? '<i class="ri-checkbox-circle-line me-1"></i> Enrolled' : '<i class="ri-close-circle-line me-1"></i> Not Enrolled'}
+                    </span>
+                </td>
+                <td class="text-end pe-4">
+                    <button onclick="window.location.href='${emp.detail_url}'" class="btn btn-sm btn-white border rounded-3 px-3 shadow-sm hover-elevate">
+                        View Profile
+                    </button>
+                </td>
+            </tr>
+        `).join('');
+    }
 
-        clearBtn.addEventListener('click', () => {
-            siteFilter.value = 'all';
-            statusFilter.value = 'all';
-            searchInput.value = '';
-            updateTable(1);
-        });
-    });
+    function renderPagination(p) {
+        const container = document.getElementById('paginationContainer');
+        if (p.total_pages <= 1) {
+            container.innerHTML = `
+                <div class="d-flex justify-content-between align-items-center small text-secondary fw-semibold">
+                    <span>Showing ${p.start_index}-${p.total_items} of ${p.total_items} entries</span>
+                </div>
+            `;
+            return;
+        }
+
+        let start = p.start_index;
+        let end = p.end_index;
+
+        container.innerHTML = `
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+                <span class="small text-secondary fw-bold">Showing <span class="text-dark">${start}-${end}</span> of <span class="text-dark">${p.total_items}</span> records</span>
+                <div class="d-flex gap-2">
+                    <button class="page-link-premium shadow-sm" onclick="loadData(${p.current_page - 1})" ${!p.has_previous ? 'disabled style="opacity:0.5"' : ''}>
+                        <i class="ri-arrow-left-s-line"></i>
+                    </button>
+                    <div class="page-link-premium active">${p.current_page}</div>
+                    <button class="page-link-premium shadow-sm" onclick="loadData(${p.current_page + 1})" ${!p.has_next ? 'disabled style="opacity:0.5"' : ''}>
+                        <i class="ri-arrow-right-s-line"></i>
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+
+    function clearFilters() {
+        document.getElementById('siteFilter').value = 'all';
+        document.getElementById('statusFilter').value = 'all';
+        document.getElementById('searchInput').value = '';
+        loadData(1);
+    }
+
+    function startTime() {
+        const update = () => {
+            const now = new Date();
+            document.getElementById('live-clock').innerText = `🇦🇪 ` + now.toLocaleString('en-US', { timeZone: 'Asia/Dubai', weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        };
+        setInterval(update, 1000);
+        update();
+    }
 </script>
 {% endblock %}

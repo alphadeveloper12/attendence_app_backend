@@ -1,136 +1,232 @@
 {% extends 'base.html' %}
 
-{% block title %}Site Details - {{ site.name }}{% endblock %}
+{% block title %}Site Profile Details - Admin Dashboard{% endblock %}
 
 {% block content %}
-<!-- Navbar -->
-<nav class="navbar navbar-expand-lg navbar-custom mb-4 shadow-sm">
-    <div class="container-fluid">
-        <a class="navbar-brand d-flex align-items-center gap-2" href="#">
-            <span class="fs-4">📍 {{ site.name }}</span>
-        </a>
-        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarContent">
-            <span class="navbar-toggler-icon"></span>
+<!-- Remix Icons & Google Fonts -->
+<link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+    :root {
+        --font-family: 'Outfit', sans-serif;
+        --card-bg: #ffffff;
+        --text-primary: #1e293b;
+        --text-secondary: #64748b;
+
+        --grad-primary: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+        --grad-success: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        --grad-info: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+    }
+
+    body {
+        font-family: var(--font-family) !important;
+        background-color: #f8fafc;
+    }
+
+    /* Page Header */
+    .page-header {
+        margin-bottom: 2.5rem;
+    }
+
+    /* Site Identity Card - Monochrome Professional */
+    .site-hero-card {
+        background: white !important;
+        border: 1px solid black !important;
+        border-radius: 1.5rem;
+        padding: 2rem;
+        box-shadow: none !important;
+        margin-bottom: 2rem;
+        display: flex;
+        align-items: center;
+        gap: 2rem;
+        position: relative;
+        overflow: hidden;
+    }
+
+    /* Decorative element removed for professional look */
+
+    .site-icon-box {
+        width: 80px;
+        height: 80px;
+        border-radius: 20px;
+        background: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 2.5rem;
+        color: black;
+        border: 1px solid black;
+    }
+
+    .site-stat-card {
+        background: white;
+        border-radius: 1.25rem;
+        padding: 1.25rem;
+        border: 1px solid black;
+        flex: 1;
+    }
+
+    /* Map Styling */
+    .map-wrapper {
+        background: white;
+        border-radius: 1.5rem;
+        box-shadow: none !important;
+        border: 1px solid black !important;
+        overflow: hidden;
+    }
+
+    #map {
+        height: 600px;
+        width: 100%;
+    }
+
+    .map-header {
+        padding: 1.25rem 1.75rem;
+        border-bottom: 1px solid #f1f5f9;
+    }
+</style>
+
+<!-- Top Bar -->
+<div class="page-header d-flex justify-content-between align-items-center">
+    <div>
+        <h1 class="h3 fw-bold text-dark mb-1" id="page-title">Site Profile</h1>
+        <div class="d-flex align-items-center gap-2 text-secondary font-monospace small">
+            <i class="ri-map-pin-line text-primary"></i>
+            <span id="site-location-meta">Identifying coordinates...</span>
+            <span class="mx-1">•</span>
+            <i class="ri-group-line"></i>
+            <span id="total-employees-meta">-- Members</span>
+        </div>
+    </div>
+    <div class="d-flex gap-3">
+        <button onclick="window.location.href='/api/attendance/dashboard/sites/'" class="btn btn-pro">
+            <i class="ri-arrow-left-line me-2"></i>Back to Sites
         </button>
-        <div class="collapse navbar-collapse" id="navbarContent">
-            <div class="ms-auto d-flex align-items-center gap-3">
-                <span class="text-white">Welcome, {{ user.username }}</span>
-                <a href="{% url 'admin-logout' %}" class="btn btn-danger btn-sm">Logout</a>
-            </div>
-        </div>
     </div>
-</nav>
-
-<!-- Navigation Menu -->
-<div class="container mb-4">
-    <ul class="nav nav-pills nav-fill bg-white p-2 rounded shadow-sm">
-        <li class="nav-item">
-            <a class="nav-link" href="{% url 'admin-dashboard' %}">📊 Dashboard</a>
-        </li>
-        <li class="nav-item">
-            <a class="nav-link" href="{% url 'admin-reports' %}">📈 Reports</a>
-        </li>
-        {% if user.is_superuser %}
-        <li class="nav-item">
-            <a class="nav-link active" href="{% url 'admin-sites' %}">🏢 Sites</a>
-        </li>
-        <li class="nav-item">
-            <a class="nav-link" href="{% url 'admin-site-admins' %}">👤 Site Admins</a>
-        </li>
-        {% endif %}
-    </ul>
 </div>
 
-<div class="container">
-    <div class="card shadow-sm">
-        <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
-            <h2 class="h5 mb-0">Site Information</h2>
-            <a href="{% url 'admin-sites' %}" class="btn btn-secondary btn-sm">Back to Sites</a>
-        </div>
-
-        <div class="card-body">
-            <div class="bg-light p-3 rounded mb-4">
-                <div class="row">
-                    <div class="col-md-6">
-                        <p class="mb-1"><strong>Name:</strong></p>
-                        <p class="fs-5">{{ site.name }}</p>
-                    </div>
-                    <div class="col-md-6">
-                        <p class="mb-1"><strong>Total Employees:</strong></p>
-                        <p class="fs-5">{{ employee_count }}</p>
-                    </div>
-                </div>
+<!-- Site Hero Section -->
+<div class="site-hero-card">
+    <div class="site-icon-box" id="site-initial">
+        <i class="ri-building-line"></i>
+    </div>
+    <div class="flex-grow-1">
+        <h2 class="fw-bold text-dark mb-1" id="hero-site-name">Loading Site Profile...</h2>
+        <div class="d-flex gap-4 mt-3">
+            <div class="site-stat-card">
+                <div class="stat-label mb-1">Registered Staff</div>
+                <div class="stat-value h4 fw-bold mb-0" id="stat-staff-count">--</div>
             </div>
-
-            <div class="map-container">
-                <h3 class="h6 mb-3">Site Boundary</h3>
-                <div id="map" style="height: 500px; width: 100%; border-radius: 12px;"></div>
-                <div id="map-message" class="alert alert-warning d-none mt-3" role="alert">
-                    No boundary coordinates available for this site.
-                </div>
+            <div class="site-stat-card">
+                <div class="small fw-bold text-secondary text-uppercase mb-1 opacity-75">Geofence Status</div>
+                <div class="h4 fw-bold mb-0" id="stat-geofence-status">Checking...</div>
             </div>
         </div>
     </div>
 </div>
 
+<!-- Map Section -->
+<div class="map-wrapper">
+    <div class="map-header d-flex justify-content-between align-items-center">
+        <h5 class="fw-bold mb-0 d-flex align-items-center gap-2">
+            <i class="ri-earth-line text-primary"></i> Virtual Boundary Map
+        </h5>
+        <div id="map-type-badges">
+            <span class="badge bg-light text-dark border px-3 py-2 rounded-pill fw-bold">Active Geofence</span>
+        </div>
+    </div>
+    <div id="map"></div>
+    <div id="map-message" class="alert alert-warning m-3 d-none">
+        <i class="ri-alert-line me-2"></i> Boundary coordinates not defined for this site. Ensure KML is uploaded in
+        site settings.
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
 <script
     src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCYAsBPyik1DZcOH3jcR-awecFjyYXr5Qw&libraries=geometry"></script>
 <script>
-    async function initMap() {
-        const siteId = '{{ site.id }}';
+    const SITE_ID = "{{ site_id }}";
 
+    document.addEventListener('DOMContentLoaded', () => {
+        loadSiteData();
+        initMap();
+    });
+
+    async function loadSiteData() {
         try {
-            // Fetch coordinates via AJAX
-            const response = await fetch(`/api/attendance/api/sites/${siteId}/coordinates/`);
-            const data = await response.json();
-
-            if (!data.success) {
-                console.error('Failed to load coordinates:', data.error);
-                const msg = document.getElementById('map-message');
-                msg.classList.remove('d-none');
-                return;
-            }
-
-            // Initialize map with center from API
-            const map = new google.maps.Map(document.getElementById("map"), {
-                center: { lat: data.center.lat, lng: data.center.lng },
-                zoom: 15
+            const res = await fetch(`?site_id=${SITE_ID}`, {
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
             });
+            const data = await res.json();
+            const site = data.site;
 
-            // Only draw polygon if coordinates exist
-            if (data.has_coordinates && data.coordinates.length > 0) {
-                const boundaryCoords = data.coordinates;
+            document.getElementById('page-title').textContent = site.name;
+            document.getElementById('hero-site-name').textContent = site.name;
+            document.getElementById('stat-staff-count').textContent = site.employee_count;
+            document.getElementById('total-employees-meta').textContent = `${site.employee_count} Members`;
+            document.getElementById('site-initial').innerHTML = `<span style="font-size: 2rem;">${site.name.charAt(0)}</span>`;
 
-                // Close the polygon if not already closed
-                const first = boundaryCoords[0];
-                const last = boundaryCoords[boundaryCoords.length - 1];
-                if (first.lat !== last.lat || first.lng !== last.lng) {
-                    boundaryCoords.push(first);
-                }
-
-                // Create and display polygon
-                const polygon = new google.maps.Polygon({
-                    paths: boundaryCoords,
-                    strokeColor: "#FF0000",
-                    strokeOpacity: 0.8,
-                    strokeWeight: 2,
-                    fillColor: "#FF0000",
-                    fillOpacity: 0.35
-                });
-                polygon.setMap(map);
-            } else {
-                // Show message if no coordinates
-                const msg = document.getElementById('map-message');
-                msg.classList.remove('d-none');
-            }
-        } catch (error) {
-            console.error('Error loading map:', error);
-            const msg = document.getElementById('map-message');
-            msg.classList.remove('d-none');
+        } catch (e) {
+            console.error('Core data sync failed.');
         }
     }
 
-    // Initialize map when window loads
-    window.onload = initMap;
+    async function initMap() {
+        try {
+            const res = await fetch(`/api/attendance/api/sites/${SITE_ID}/coordinates/`);
+            const data = await res.json();
+
+            if (!data.success) {
+                document.getElementById('map-message').classList.remove('d-none');
+                document.getElementById('stat-geofence-status').innerHTML = '<span class="text-danger">Inactive</span>';
+                return;
+            }
+
+            const mapOptions = {
+                center: { lat: data.center.lat, lng: data.center.lng },
+                zoom: 16,
+                mapTypeControl: true,
+                streetViewControl: false,
+                fullscreenControl: true,
+                styles: [
+                    { "featureType": "administrative", "elementType": "labels.text.fill", "stylers": [{ "color": "#444444" }] },
+                    { "featureType": "landscape", "elementType": "all", "stylers": [{ "color": "#f2f2f2" }] },
+                    { "featureType": "poi", "elementType": "all", "stylers": [{ "visibility": "off" }] },
+                    { "featureType": "road", "elementType": "all", "stylers": [{ "saturation": -100 }, { "lightness": 45 }] },
+                    { "featureType": "water", "elementType": "all", "stylers": [{ "color": "#cbd5e1" }, { "visibility": "on" }] }
+                ]
+            };
+
+            const map = new google.maps.Map(document.getElementById("map"), mapOptions);
+
+            if (data.has_coordinates && data.coordinates.length > 0) {
+                const boundaryCoords = data.coordinates;
+
+                // Drawing Indigo Polygon
+                const siteBoundary = new google.maps.Polygon({
+                    paths: boundaryCoords,
+                    strokeColor: "#000000",
+                    strokeOpacity: 1.0,
+                    strokeWeight: 4,
+                    fillColor: "#000000",
+                    fillOpacity: 0.1
+                });
+
+                siteBoundary.setMap(map);
+                document.getElementById('stat-geofence-status').innerHTML = '<span class="text-success">Active Geofence</span>';
+                document.getElementById('site-location-meta').textContent = `${boundaryCoords.length} Coords Defined`;
+            } else {
+                document.getElementById('map-message').classList.remove('d-none');
+                document.getElementById('stat-geofence-status').innerHTML = '<span class="text-warning">Missing Grid</span>';
+            }
+
+        } catch (e) {
+            document.getElementById('map-message').classList.remove('d-none');
+        }
+    }
 </script>
 {% endblock %}

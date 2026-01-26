@@ -1,305 +1,509 @@
 {% extends 'base.html' %}
 
-{% block title %}Site Admins - Admin{% endblock %}
+{% block title %}Site Admins Management - Admin Dashboard{% endblock %}
 
 {% block content %}
-<!-- Navbar -->
-<nav class="navbar navbar-expand-lg navbar-custom mb-4 shadow-sm">
-    <div class="container-fluid">
-        <a class="navbar-brand d-flex align-items-center gap-2" href="#">
-            <span class="fs-4">👤 Site Admins Management</span>
-        </a>
-        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarContent">
-            <span class="navbar-toggler-icon"></span>
-        </button>
-        <div class="collapse navbar-collapse" id="navbarContent">
-            <div class="ms-auto d-flex align-items-center gap-3">
-                <span class="text-white">Welcome, {{ user.username }}</span>
-                <a href="{% url 'admin-logout' %}" class="btn btn-danger btn-sm">Logout</a>
-            </div>
+<!-- Remix Icons & Google Fonts -->
+<link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+    :root {
+        --font-family: 'Outfit', sans-serif;
+        --card-bg: #ffffff;
+        --text-primary: #1e293b;
+        --text-secondary: #64748b;
+
+        --grad-primary: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+        --grad-success: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        --grad-warning: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+        --grad-danger: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);
+    }
+
+    body {
+        font-family: var(--font-family) !important;
+        background-color: #f8fafc;
+    }
+
+    /* Page Header */
+    .page-header {
+        margin-bottom: 2.5rem;
+    }
+
+    /* Premium Design Elements - Monochrome Professional */
+    .premium-card {
+        background: white !important;
+        border: 1px solid black !important;
+        border-radius: 1.5rem;
+        padding: 1.75rem;
+        box-shadow: none !important;
+        margin-bottom: 2rem;
+    }
+
+    .form-label-premium {
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        font-weight: 700;
+        color: #94a3b8;
+        letter-spacing: 0.05em;
+        margin-bottom: 0.75rem;
+        display: block;
+    }
+
+    .form-control-premium,
+    .form-select-premium {
+        border: 1px solid #e2e8f0;
+        border-radius: 0.875rem;
+        padding: 0.75rem 1rem;
+        font-weight: 500;
+        transition: all 0.2s;
+    }
+
+    .form-control-premium:focus,
+    .form-select-premium:focus {
+        border-color: #6366f1;
+        box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
+    }
+
+    /* Table & Action Badges */
+    .modern-table-container {
+        background: white;
+        border-radius: 1.5rem;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+        border: 1px solid #f1f5f9;
+        overflow: hidden;
+    }
+
+    .table thead th {
+        background: #f8fafc;
+        padding: 1.25rem 1rem;
+        font-weight: 700;
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        color: #64748b;
+        border-bottom: 2px solid #f1f5f9;
+    }
+
+    .table tbody td {
+        padding: 1.125rem 1rem;
+        vertical-align: middle;
+        border-bottom: 1px solid #f1f5f9;
+    }
+
+    /* Badges */
+    .site-tag-badge {
+        font-size: 0.75rem;
+        font-weight: 700;
+        padding: 0.35rem 0.75rem;
+        border-radius: 2rem;
+        background: white;
+        color: black;
+        border: 1px solid black;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+    }
+
+    /* Modals */
+    .modal-content-premium {
+        border-radius: 1.5rem;
+        border: none;
+        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+    }
+
+    .modal-header-premium {
+        background: white !important;
+        border-bottom: 1px solid black !important;
+        padding: 1.5rem 1.75rem;
+        border-radius: 1.5rem 1.5rem 0 0;
+    }
+
+    .modal-footer-premium {
+        background: white !important;
+        border-top: 1px solid black !important;
+        padding: 1.25rem 1.75rem;
+        border-radius: 0 0 1.5rem 1.5rem;
+    }
+</style>
+
+<!-- Top Bar -->
+<div class="page-header d-flex justify-content-between align-items-center">
+    <div>
+        <h1 class="h3 fw-bold text-dark mb-1">Site Administrators</h1>
+        <div class="d-flex align-items-center gap-2 text-secondary font-monospace small">
+            <i class="ri-user-settings-line text-primary"></i>
+            <span id="admin-summary">Managing regional permissions</span>
+            <span class="mx-1">•</span>
+            <i class="ri-time-line"></i>
+            <span id="live-clock">--:--:--</span>
         </div>
     </div>
-</nav>
-
-<!-- Navigation Menu -->
-<div class="container mb-4">
-    <ul class="nav nav-pills nav-fill bg-white p-2 rounded shadow-sm">
-        <li class="nav-item">
-            <a class="nav-link" href="{% url 'admin-dashboard' %}">📊 Dashboard</a>
-        </li>
-        <li class="nav-item">
-            <a class="nav-link" href="{% url 'admin-reports' %}">📈 Reports</a>
-        </li>
-        {% if user.is_superuser %}
-        <li class="nav-item">
-            <a class="nav-link" href="{% url 'admin-sites' %}">🏢 Sites</a>
-        </li>
-        <li class="nav-item">
-            <a class="nav-link active" href="{% url 'admin-site-admins' %}">👤 Site Admins</a>
-        </li>
-        {% endif %}
-    </ul>
+    <div class="d-flex gap-3">
+        <button onclick="showAddModal()" class="btn btn-pro shadow-sm"
+            style="background: black !important; color: white !important;">
+            <i class="ri-user-add-line me-2"></i>Add New Admin
+        </button>
+    </div>
 </div>
 
-<div class="container">
-    {% if error %}
-    <div class="alert alert-danger alert-dismissible fade show" role="alert">
-        {{ error }}
-        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-    </div>
-    {% endif %}
-
-    <div class="card shadow-sm">
-        <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
-            <h2 class="h5 mb-0">All Site Admins</h2>
-            <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addModal">
-                + Add New Site Admin
+<!-- Search & Filtering Bar -->
+<div class="premium-card">
+    <div class="row g-4 align-items-end">
+        <div class="col-md-9">
+            <label class="form-label-premium">Search Administrators</label>
+            <div class="input-group shadow-sm rounded-3 overflow-hidden">
+                <span class="input-group-text border-0 bg-white ps-3"><i
+                        class="ri-search-line text-secondary"></i></span>
+                <input type="text" id="searchInput" class="form-control border-0 py-2"
+                    placeholder="Search by username, email or site..." oninput="debounceSearch()">
+            </div>
+        </div>
+        <div class="col-md-3">
+            <button id="bulkDeleteBtn" onclick="bulkDeleteAdmins()"
+                class="btn btn-danger w-100 py-2 d-none rounded-3 fw-bold shadow-sm">
+                <i class="ri-delete-bin-line me-2"></i>Delete Selected
             </button>
         </div>
+    </div>
+</div>
 
-        <div class="card-body">
-            <div class="d-flex justify-content-between align-items-center mb-4">
-                <div class="d-flex gap-2">
-                    <button id="bulkDeleteBtn" onclick="bulkDeleteAdmins()" class="btn btn-danger btn-sm"
-                        style="display: none;">
-                        Delete Selected
-                    </button>
-                    <form method="GET" class="d-flex gap-2">
-                        <div class="input-group">
-                            <input type="text" name="search" class="form-control form-control-sm"
-                                placeholder="Search admins..." value="{{ search_query }}">
-                            <button type="submit" class="btn btn-secondary btn-sm">Search</button>
+<!-- Table Header Actions -->
+<div class="d-flex justify-content-between align-items-center mb-4 px-2">
+    <h5 class="fw-bold mb-0 text-dark">Administrative Roster <span
+            class="badge bg-light text-primary ms-2 shadow-sm border" id="total-count-badge">0</span></h5>
+</div>
+
+<!-- Admins Table Container -->
+<div class="modern-table-container">
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead>
+                <tr>
+                    <th class="ps-4" style="width: 50px;">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="selectAllCheckbox"
+                                onclick="toggleSelectAll()">
                         </div>
-                        {% if search_query %}
-                        <a href="{% url 'admin-site-admins' %}"
-                            class="btn btn-outline-secondary btn-sm d-flex align-items-center">Clear</a>
-                        {% endif %}
-                    </form>
-                </div>
-            </div>
-
-            {% if admins %}
-            <div class="table-responsive">
-                <table class="table table-hover align-middle">
-                    <thead class="table-light">
-                        <tr>
-                            <th style="width: 40px;"><input type="checkbox" class="form-check-input" id="selectAll"
-                                    onclick="toggleSelectAll()"></th>
-                            <th>Username</th>
-                            <th>Email</th>
-                            <th>Assigned Site</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for admin in admins %}
-                        <tr>
-                            <td><input type="checkbox" class="form-check-input admin-checkbox"
-                                    value="{{ admin.user.id }}" onclick="updateBulkDeleteBtn()"></td>
-                            <td><strong>{{ admin.user.username }}</strong></td>
-                            <td>{{ admin.user.email }}</td>
-                            <td>
-                                {% if admin.site %}
-                                <span class="badge bg-info text-dark">{{ admin.site.name }}</span>
-                                {% else %}
-                                <span class="badge bg-warning text-dark">No Site</span>
-                                {% endif %}
-                            </td>
-                            <td>
-                                <button
-                                    onclick="showEditModal({{ admin.user.id }}, '{{ admin.user.username|escapejs }}', '{{ admin.user.email|escapejs }}', '{{ admin.site.id|default:"" }}')"
-                                    class="btn btn-outline-secondary btn-sm me-1">Edit</button>
-                                <button
-                                    onclick="confirmDelete({{ admin.user.id }}, '{{ admin.user.username|escapejs }}')"
-                                    class="btn btn-outline-danger btn-sm">Delete</button>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-            {% else %}
-            <div class="text-center py-5 text-muted">
-                <p class="mb-0">No site admins found.</p>
-            </div>
-            {% endif %}
-        </div>
+                    </th>
+                    <th>Identity</th>
+                    <th>Permissions Scope</th>
+                    <th class="text-end pe-4">Account Access</th>
+                </tr>
+            </thead>
+            <tbody id="adminsTableBody">
+                <!-- Dynamically Hydrated -->
+            </tbody>
+        </table>
     </div>
 </div>
 
-<!-- Add Site Admin Modal -->
-<div class="modal fade" id="addModal" tabindex="-1" aria-labelledby="addModalLabel" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="addModalLabel">Add New Site Admin</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+<!-- Add Admin Modal -->
+<div class="modal fade" id="addModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content modal-content-premium">
+            <div class="modal-header modal-header-premium">
+                <h5 class="fw-bold mb-0">System Onboarding</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            <form method="POST" action="{% url 'admin-add-site-admin' %}">
-                <div class="modal-body">
-                    {% csrf_token %}
-                    <div class="mb-3">
-                        <label for="add-username" class="form-label">Username</label>
-                        <input type="text" class="form-control" id="add-username" name="username" required>
+            <form id="addAdminForm" onsubmit="handleAddAdmin(event)">
+                <div class="modal-body p-4">
+                    <div class="mb-4">
+                        <label class="form-label-premium">Username</label>
+                        <input type="text" name="username" class="form-control form-control-premium"
+                            placeholder="Enter username" required>
                     </div>
-                    <div class="mb-3">
-                        <label for="add-email" class="form-label">Email</label>
-                        <input type="email" class="form-control" id="add-email" name="email" required>
+                    <div class="mb-4">
+                        <label class="form-label-premium">Email Address</label>
+                        <input type="email" name="email" class="form-control form-control-premium"
+                            placeholder="admin@rocket.com" required>
                     </div>
-                    <div class="mb-3">
-                        <label for="add-password" class="form-label">Password</label>
-                        <input type="password" class="form-control" id="add-password" name="password" required>
+                    <div class="mb-4">
+                        <label class="form-label-premium">Access Password</label>
+                        <input type="password" name="password" class="form-control form-control-premium"
+                            placeholder="••••••••" required>
                     </div>
-                    <div class="mb-3">
-                        <label for="add-site" class="form-label">Assigned Site</label>
-                        <select class="form-select" id="add-site" name="site" required>
-                            <option value="">Select Site</option>
-                            {% for site in sites %}
-                            <option value="{{ site.id }}">{{ site.name }}</option>
-                            {% endfor %}
+                    <div class="mb-0">
+                        <label class="form-label-premium">Assigned Regional Site</label>
+                        <select id="addSiteSelect" name="site" class="form-select form-select-premium" required>
+                            <option value="">Select Site Location</option>
                         </select>
                     </div>
                 </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                    <button type="submit" class="btn btn-primary">Add Site Admin</button>
+                <div class="modal-footer modal-footer-premium">
+                    <button type="button" class="btn btn-pro" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-pro"
+                        style="background: black !important; color: white !important;">Provision Account</button>
                 </div>
             </form>
         </div>
     </div>
 </div>
 
-<!-- Edit Site Admin Modal -->
-<div class="modal fade" id="editModal" tabindex="-1" aria-labelledby="editModalLabel" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="editModalLabel">Edit Site Admin</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+<!-- Edit Admin Modal -->
+<div class="modal fade" id="editModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content modal-content-premium">
+            <div class="modal-header modal-header-premium">
+                <h5 class="fw-bold mb-0">Identity Management</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            <form method="POST" id="editForm">
-                <div class="modal-body">
-                    {% csrf_token %}
-                    <div class="mb-3">
-                        <label for="edit-username" class="form-label">Username</label>
-                        <input type="text" class="form-control" id="edit-username" name="username" required>
+            <form id="editAdminForm" onsubmit="handleEditAdmin(event)">
+                <input type="hidden" id="editAdminId" name="id">
+                <div class="modal-body p-4">
+                    <div class="mb-4">
+                        <label class="form-label-premium">Update Username</label>
+                        <input type="text" id="editUsername" name="username" class="form-control form-control-premium"
+                            required>
                     </div>
-                    <div class="mb-3">
-                        <label for="edit-email" class="form-label">Email</label>
-                        <input type="email" class="form-control" id="edit-email" name="email" required>
+                    <div class="mb-4">
+                        <label class="form-label-premium">Update Email</label>
+                        <input type="email" id="editEmail" name="email" class="form-control form-control-premium"
+                            required>
                     </div>
-                    <div class="mb-3">
-                        <label for="edit-password" class="form-label">Password (Leave blank to keep current)</label>
-                        <input type="password" class="form-control" id="edit-password" name="password">
+                    <div class="mb-4">
+                        <label class="form-label-premium">Update Password (Optional)</label>
+                        <input type="password" name="password" class="form-control form-control-premium"
+                            placeholder="Leave blank to maintain current">
                     </div>
-                    <div class="mb-3">
-                        <label for="edit-site" class="form-label">Assigned Site</label>
-                        <select class="form-select" id="edit-site" name="site" required>
-                            <option value="">Select Site</option>
-                            {% for site in sites %}
-                            <option value="{{ site.id }}">{{ site.name }}</option>
-                            {% endfor %}
+                    <div class="mb-0">
+                        <label class="form-label-premium">Regional Site Alignment</label>
+                        <select id="editSiteSelect" name="site" class="form-select form-select-premium" required>
+                            <option value="">Select Site Location</option>
                         </select>
                     </div>
                 </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                <div class="modal-footer modal-footer-premium">
+                    <button type="button" class="btn btn-pro" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-pro"
+                        style="background: black !important; color: white !important;">Save Attributes</button>
                 </div>
             </form>
         </div>
     </div>
 </div>
 
+{% endblock %}
+
+{% block scripts %}
 <script>
-    // Initialize Bootstrap modals
-    let editModalInstance = null;
+    let searchTimer;
+    let checkedAdmins = new Set();
+    let sitesData = [];
 
-    document.addEventListener('DOMContentLoaded', function () {
-        // Initialize modal instances if needed
-        const editModalEl = document.getElementById('editModal');
-        if (editModalEl) {
-            editModalInstance = new bootstrap.Modal(editModalEl);
-        }
+    document.addEventListener('DOMContentLoaded', () => {
+        startTime();
+        loadData();
     });
 
+    function startTime() {
+        const update = () => {
+            const now = new Date();
+            document.getElementById('live-clock').innerText = `🇦🇪 ` + now.toLocaleString('en-US', {
+                timeZone: 'Asia/Dubai',
+                weekday: 'short', month: 'short', day: 'numeric',
+                hour: '2-digit', minute: '2-digit', second: '2-digit'
+            });
+        };
+        setInterval(update, 1000);
+        update();
+    }
+
+    function debounceSearch() {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(() => loadData(), 500);
+    }
+
+    async function loadData() {
+        const tbody = document.getElementById('adminsTableBody');
+        tbody.innerHTML = `<tr><td colspan="4" class="text-center py-5">
+            <div class="spinner-border text-primary spinner-border-sm"></div>
+            <p class="mt-2 mb-0 text-secondary small">Authenticating directory records...</p>
+        </td></tr>`;
+
+        const search = document.getElementById('searchInput').value;
+
+        try {
+            const res = await fetch(`?search=${search}`, {
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            });
+            const data = await res.json();
+
+            sitesData = data.sites;
+            populateSiteDropdowns(data.sites);
+            renderTable(data.results);
+
+            document.getElementById('total-count-badge').textContent = data.results.length;
+            document.getElementById('selectAllCheckbox').checked = false;
+            updateBulkDeleteBtnVisibility();
+
+        } catch (e) {
+            tbody.innerHTML = `<tr><td colspan="4" class="text-center py-5 text-danger">Directory synchronization interrupted.</td></tr>`;
+        }
+    }
+
+    function populateSiteDropdowns(sites) {
+        const addSelect = document.getElementById('addSiteSelect');
+        const editSelect = document.getElementById('editSiteSelect');
+
+        // Clear except first
+        addSelect.innerHTML = '<option value="">Select Site Location</option>';
+        editSelect.innerHTML = '<option value="">Select Site Location</option>';
+
+        sites.forEach(s => {
+            const opt1 = document.createElement('option');
+            opt1.value = s.id; opt1.textContent = s.name;
+            addSelect.appendChild(opt1);
+
+            const opt2 = document.createElement('option');
+            opt2.value = s.id; opt2.textContent = s.name;
+            editSelect.appendChild(opt2);
+        });
+    }
+
+    function renderTable(admins) {
+        const tbody = document.getElementById('adminsTableBody');
+        if (admins.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="4" class="text-center py-5 text-muted">No administrative profiles found.</td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = admins.map(a => `
+            <tr>
+                <td class="ps-4">
+                    <div class="form-check">
+                        <input class="form-check-input admin-checkbox" type="checkbox" value="${a.id}" ${checkedAdmins.has(a.id.toString()) ? 'checked' : ''} onclick="toggleItem('${a.id}')">
+                    </div>
+                </td>
+                <td>
+                    <div class="d-flex align-items-center gap-3">
+                        <div style="width: 40px; height: 40px; border-radius: 12px; background: #eef2ff; display: flex; align-items: center; justify-content: center; font-weight: 700; color: #4f46e5; border: 2px solid white; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
+                            ${a.username.charAt(0).toUpperCase()}
+                        </div>
+                        <div>
+                            <div class="fw-bold text-dark">${a.username}</div>
+                            <div class="small text-secondary font-monospace">${a.email}</div>
+                        </div>
+                    </div>
+                </td>
+                <td>
+                    <span class="site-tag-badge shadow-sm">
+                        <i class="ri-map-pin-5-line"></i> ${a.site_name}
+                    </span>
+                </td>
+                <td class="text-end pe-4">
+                    <div class="d-flex gap-2 justify-content-end">
+                        <button onclick="showEditModal('${a.id}', '${a.username.replace(/'/g, "\\'")}', '${a.email.replace(/'/g, "\\'")}', '${a.site_id}')" class="btn btn-sm btn-pro">
+                            <i class="ri-user-settings-line"></i> Modify
+                        </button>
+                        <button onclick="confirmDeleteAdmin('${a.id}', '${a.username.replace(/'/g, "\\'")}')" class="btn btn-sm btn-pro text-danger">
+                            <i class="ri-delete-bin-line"></i>
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    // Modal Instance References
+    const addModal = new bootstrap.Modal(document.getElementById('addModal'));
+    const editModal = new bootstrap.Modal(document.getElementById('editModal'));
+
+    function showAddModal() { addModal.show(); }
     function showEditModal(id, username, email, siteId) {
-        document.getElementById('edit-username').value = username;
-        document.getElementById('edit-email').value = email;
-        document.getElementById('edit-site').value = siteId;
-        document.getElementById('editForm').action = `/api/attendance/dashboard/site-admins/edit/${id}/`;
-
-        if (editModalInstance) {
-            editModalInstance.show();
-        }
+        document.getElementById('editAdminId').value = id;
+        document.getElementById('editUsername').value = username;
+        document.getElementById('editEmail').value = email;
+        document.getElementById('editSiteSelect').value = siteId;
+        editModal.show();
     }
 
-    function confirmDelete(id, username) {
-        if (confirm(`Are you sure you want to delete "${username}"? This action cannot be undone.`)) {
-            const form = document.createElement('form');
-            form.method = 'POST';
-            form.action = `/api/attendance/dashboard/site-admins/delete/${id}/`;
-
-            const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
-            const csrfInput = document.createElement('input');
-            csrfInput.type = 'hidden';
-            csrfInput.name = 'csrfmiddlewaretoken';
-            csrfInput.value = csrfToken;
-            form.appendChild(csrfInput);
-
-            document.body.appendChild(form);
-            form.submit();
-        }
+    async function handleAddAdmin(e) {
+        e.preventDefault();
+        const formData = new FormData(e.target);
+        try {
+            const res = await fetch('/api/attendance/dashboard/site-admins/add/', {
+                method: 'POST',
+                headers: { 'X-CSRFToken': '{{ csrf_token }}' },
+                body: formData
+            });
+            if (res.ok) {
+                addModal.hide();
+                e.target.reset();
+                loadData();
+            } else { alert('Operation failed. Ensure credentials are unique and valid.'); }
+        } catch (e) { alert('Network disruption during provisioning.'); }
     }
 
-    // Bulk Delete Logic
+    async function handleEditAdmin(e) {
+        e.preventDefault();
+        const id = document.getElementById('editAdminId').value;
+        const formData = new FormData(e.target);
+        try {
+            const res = await fetch(`/api/attendance/dashboard/site-admins/edit/${id}/`, {
+                method: 'POST',
+                headers: { 'X-CSRFToken': '{{ csrf_token }}' },
+                body: formData
+            });
+            if (res.ok) {
+                editModal.hide();
+                loadData();
+            } else { alert('Update operation failed.'); }
+        } catch (e) { alert('Security pipeline rejection.'); }
+    }
+
+    async function confirmDeleteAdmin(id, user) {
+        if (!confirm(`Warning: Deleting administrator "${user}" will revoke all regional access privileges. Proceed?`)) return;
+        try {
+            const res = await fetch(`/api/attendance/dashboard/site-admins/delete/${id}/`, {
+                method: 'POST',
+                headers: { 'X-CSRFToken': '{{ csrf_token }}' }
+            });
+            if (res.ok) { loadData(); }
+        } catch (e) { alert('Access revocation encountered an error.'); }
+    }
+
+    // Bulk Operations
+    function toggleItem(id) {
+        if (checkedAdmins.has(id)) checkedAdmins.delete(id);
+        else checkedAdmins.add(id);
+        updateBulkDeleteBtnVisibility();
+    }
+
     function toggleSelectAll() {
-        const selectAll = document.getElementById('selectAll');
+        const selectAll = document.getElementById('selectAllCheckbox');
         const checkboxes = document.querySelectorAll('.admin-checkbox');
-        checkboxes.forEach(cb => cb.checked = selectAll.checked);
-        updateBulkDeleteBtn();
+        checkboxes.forEach(cb => {
+            cb.checked = selectAll.checked;
+            if (selectAll.checked) checkedAdmins.add(cb.value);
+            else checkedAdmins.delete(cb.value);
+        });
+        updateBulkDeleteBtnVisibility();
     }
 
-    function updateBulkDeleteBtn() {
-        const checkboxes = document.querySelectorAll('.admin-checkbox:checked');
+    function updateBulkDeleteBtnVisibility() {
         const btn = document.getElementById('bulkDeleteBtn');
-        if (checkboxes.length > 0) {
-            btn.style.display = 'block';
-            btn.innerText = `Delete Selected (${checkboxes.length})`;
-        } else {
-            btn.style.display = 'none';
-        }
+        if (checkedAdmins.size > 0) {
+            btn.classList.remove('d-none');
+            btn.innerText = `Revoke Selected (${checkedAdmins.size})`;
+        } else { btn.classList.add('d-none'); }
     }
 
     async function bulkDeleteAdmins() {
-        const checkboxes = document.querySelectorAll('.admin-checkbox:checked');
-        const ids = Array.from(checkboxes).map(cb => cb.value);
-
-        if (ids.length === 0) return;
-
-        if (confirm(`Are you sure you want to delete ${ids.length} admins? This action cannot be undone.`)) {
-            try {
-                const response = await fetch('{% url "admin-bulk-delete-site-admins" %}', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': '{{ csrf_token }}'
-                    },
-                    body: JSON.stringify({ ids: ids })
-                });
-
-                const result = await response.json();
-
-                if (response.ok) {
-                    alert(result.message);
-                    window.location.reload();
-                } else {
-                    alert('Error: ' + (result.error || 'Unknown error'));
-                }
-            } catch (error) {
-                alert('Error: ' + error.message);
-            }
-        }
+        if (!confirm(`Critical Operation: Revoking access for ${checkedAdmins.size} administrators. Continue?`)) return;
+        try {
+            const res = await fetch('/api/attendance/dashboard/site-admins/delete/bulk/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token }}'
+                },
+                body: JSON.stringify({ ids: Array.from(checkedAdmins) })
+            });
+            if (res.ok) {
+                checkedAdmins.clear();
+                loadData();
+            } else { alert('Bulk revocation was partially blocked.'); }
+        } catch (e) { alert('Communication with authentication server lost.'); }
     }
 </script>
 {% endblock %}

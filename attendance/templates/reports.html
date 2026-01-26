@@ -3,371 +3,633 @@
 {% block title %}Reports - Admin Dashboard{% endblock %}
 
 {% block content %}
+<!-- Remix Icons -->
+<link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+<!-- Google Fonts (Outfit) -->
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
-<!-- Navbar -->
-<nav class="navbar navbar-expand-lg navbar-custom mb-4 shadow-sm">
-    <div class="container-fluid">
-        <a class="navbar-brand d-flex align-items-center gap-2" href="#">
-            <span class="fs-4">📊 Attendance Reports</span>
-        </a>
-        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarContent">
-            <span class="navbar-toggler-icon"></span>
-        </button>
-        <div class="collapse navbar-collapse" id="navbarContent">
-            <div class="ms-auto d-flex align-items-center gap-3 flex-wrap">
-                <div id="liveClock" class="badge bg-light text-dark border p-2 fs-6 fw-normal"></div>
-                <span class="text-white">Welcome, {{ user.username }}</span>
-                <a href="{% url 'admin-dashboard' %}" class="btn btn-secondary btn-sm">Back to Dashboard</a>
-                <a href="{% url 'admin-logout' %}" class="btn btn-danger btn-sm">Logout</a>
-            </div>
+
+<style>
+    :root {
+        --font-family: 'Outfit', sans-serif;
+        --card-bg: #ffffff;
+        --text-primary: #1e293b;
+        --text-secondary: #64748b;
+
+        /* Modern Gradients */
+        --grad-total: linear-gradient(135deg, #4f46e5 0%, #818cf8 100%);
+        --grad-present: linear-gradient(135deg, #059669 0%, #34d399 100%);
+        --grad-absent: linear-gradient(135deg, #e11d48 0%, #fb7185 100%);
+        --grad-late: linear-gradient(135deg, #d97706 0%, #fbbf24 100%);
+    }
+
+    body {
+        font-family: var(--font-family) !important;
+        background-color: #f8fafc;
+    }
+
+    /* Card & Stats - Monochrome Professional */
+    .stat-card {
+        background: white !important;
+        border: 1px solid black !important;
+        border-radius: 1.25rem;
+        transition: all 0.2s ease;
+        overflow: hidden;
+        position: relative;
+        height: 100%;
+        cursor: pointer;
+        box-shadow: none !important;
+    }
+
+    .stat-card:hover {
+        transform: translateY(-4px);
+        background: #fbfbfb !important;
+    }
+
+    .stat-card .card-body {
+        padding: 1.75rem;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        height: 100%;
+    }
+
+    .stat-icon-wrapper {
+        width: 48px;
+        height: 48px;
+        border-radius: 12px;
+        background: #f1f5f9;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 1rem;
+        font-size: 1.5rem;
+        color: black;
+        border: 1px solid #e2e8f0;
+    }
+
+    .stat-label {
+        font-size: 0.75rem;
+        font-weight: 700;
+        color: #64748b;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-bottom: 0.25rem;
+    }
+
+    .stat-value {
+        font-size: 2.5rem;
+        font-weight: 800;
+        color: black;
+        line-height: 1.1;
+    }
+
+    /* Action Buttons */
+    .btn-action {
+        padding: 0.75rem 1.5rem;
+        border-radius: 0.75rem;
+        font-weight: 600;
+        transition: all 0.2s;
+        border: 1px solid black !important;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        background: white !important;
+        color: black !important;
+        box-shadow: none !important;
+    }
+
+    .btn-action:hover {
+        background: black !important;
+        color: white !important;
+        transform: translateY(-1px);
+    }
+
+    /* Table */
+    .modern-table-container {
+        background: white;
+        border-radius: 1.25rem;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+        border: none;
+        overflow: hidden;
+    }
+
+    .table thead th {
+        background: #f1f5f9;
+        color: #475569;
+        font-weight: 600;
+        text-transform: uppercase;
+        font-size: 0.75rem;
+        letter-spacing: 0.05em;
+        padding: 1.25rem 1rem;
+        border-bottom: 2px solid #e2e8f0;
+    }
+
+    .table tbody td {
+        padding: 1rem;
+        vertical-align: middle;
+        border-bottom: 1px solid #f1f5f9;
+        font-size: 0.95rem;
+    }
+
+    .avatar-circle {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%);
+        color: #4338ca;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        font-size: 1rem;
+    }
+
+    .badge-soft {
+        padding: 0.35rem 0.75rem;
+        border-radius: 9999px;
+        font-weight: 600;
+        font-size: 0.75rem;
+        letter-spacing: 0.025em;
+    }
+
+    .badge-present {
+        background: #dcfce7;
+        color: #15803d;
+    }
+
+    .badge-absent {
+        background: #fee2e2;
+        color: #b91c1c;
+    }
+
+    .btn-view-map {
+        background: white;
+        border: 1px solid #e2e8f0;
+        color: #475569;
+        padding: 0.4rem 0.8rem;
+        border-radius: 0.5rem;
+        font-size: 0.85rem;
+        font-weight: 500;
+        transition: all 0.2s;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+    }
+
+    .btn-view-map:hover {
+        background: #f8fafc;
+        border-color: #cbd5e1;
+        color: #0f172a;
+    }
+
+    /* Skeleton */
+    .skeleton {
+        background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+        background-size: 200% 100%;
+        animation: pulse 1.5s infinite;
+        border-radius: 6px;
+    }
+
+    @keyframes pulse {
+        0% {
+            background-position: 200% 0;
+        }
+
+        100% {
+            background-position: -200% 0;
+        }
+    }
+</style>
+
+<!-- Main Header -->
+<div class="d-flex justify-content-between align-items-center mb-5 pt-2">
+    <div>
+        <h1 class="h3 fw-bold text-dark mb-1" style="font-family: 'Outfit', sans-serif;">Attendance Reports</h1>
+        <div class="d-flex align-items-center gap-2 text-secondary font-monospace small">
+            <i class="ri-time-line"></i>
+            <span id="liveClock">Loading time...</span>
+            <span class="mx-1">•</span>
+            <i class="ri-user-smile-line"></i>
+            <span>{{ user.username }}</span>
         </div>
     </div>
-</nav>
-
-<!-- Navigation Menu -->
-<div class="container mb-4">
-    <ul class="nav nav-pills nav-fill bg-white p-2 rounded shadow-sm">
-        <li class="nav-item">
-            <a class="nav-link" href="{% url 'admin-dashboard' %}">📊 Dashboard</a>
-        </li>
-        <li class="nav-item">
-            <a class="nav-link active" href="{% url 'admin-reports' %}">📈 Reports</a>
-        </li>
-        <li class="nav-item">
-            <a class="nav-link" href="{% url 'monthly-report' %}">📅 Monthly Report</a>
-        </li>
-        <li class="nav-item">
-            <a class="nav-link" href="{% url 'admin-user-face' %}">👤 User Face</a>
-        </li>
-        {% if is_superuser %}
-        <li class="nav-item">
-            <a class="nav-link" href="{% url 'admin-salary-report' %}">💰 Salary</a>
-        </li>
-        {% endif %}
-        {% if is_superuser %}
-        <li class="nav-item">
-            <a class="nav-link" href="{% url 'admin-sites' %}">🏢 Sites</a>
-        </li>
-        <li class="nav-item">
-            <a class="nav-link" href="{% url 'admin-site-admins' %}">👤 Site Admins</a>
-        </li>
-        {% endif %}
-    </ul>
+    <button type="button" onclick="downloadExcel()" class="btn btn-action shadow-sm">
+        <i class="ri-file-excel-2-line"></i> Download Excel Report
+    </button>
 </div>
 
-<div class="container">
-    <!-- Filters -->
-    <div class="card mb-4 shadow-sm">
-        <div class="card-body">
-            <form method="GET" class="row g-3 align-items-end">
-                <div class="col-md-3">
-                    <label class="form-label">Date</label>
-                    <input type="date" name="date" value="{{ selected_date }}" class="form-control"
-                        onchange="this.form.submit()">
-                </div>
-
-                {% if is_superuser %}
-                <div class="col-md-3">
-                    <label class="form-label">Site</label>
-                    <select name="site" class="form-select" onchange="this.form.submit()">
-                        <option value="all">All Sites</option>
-                        {% for site in sites %}
-                        <option value="{{ site.id }}" {% if selected_site == site.id %}selected{% endif %}>
-                            {{ site.name }}
-                        </option>
-                        {% endfor %}
-                    </select>
-                </div>
-                {% endif %}
-
-                <div class="col-md-2">
-                    <label class="form-label">Per Page</label>
-                    <select name="per_page" class="form-select" onchange="this.form.submit()">
-                        <option value="20" {% if per_page == 20 %}selected{% endif %}>20</option>
-                        <option value="50" {% if per_page == 50 %}selected{% endif %}>50</option>
-                        <option value="100" {% if per_page == 100 %}selected{% endif %}>100</option>
-                        <option value="500" {% if per_page == 500 %}selected{% endif %}>500</option>
-                        <option value="1000" {% if per_page == 1000 %}selected{% endif %}>1000</option>
-                        <option value="2000" {% if per_page == 2000 %}selected{% endif %}>2000</option>
-                    </select>
-                </div>
-
-                <div class="col-md-2 d-flex gap-2">
-                    <button type="submit" class="btn btn-primary flex-grow-1">Filter</button>
-                    <a href="{% url 'admin-reports' %}" class="btn btn-secondary">Reset</a>
-                </div>
-
-                <div class="col-12 text-end mt-3">
-                    <a href="{% url 'export-reports' %}?date={{ selected_date }}&department={{ selected_department|default:'' }}&search={{ search_query|default:'' }}&status={{ status_filter|default:'' }}&site={{ selected_site|default:'all' }}"
-                        class="btn btn-success" target="_blank">
-                        📥 Download Excel
-                    </a>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- Stats Grid -->
-    <div class="row g-4 mb-4">
-        <div class="col-12 col-md-6 col-xl-3">
-            <a href="?date={{ selected_date }}&department={{ selected_department|default:'' }}&search={{ search_query|default:'' }}&per_page={{ per_page }}"
-                class="text-decoration-none">
-                <div class="card text-white h-100"
-                    style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
-                    <div class="card-body text-center">
-                        <h5 class="card-title">Total Employees</h5>
-                        <p class="card-text display-4 fw-bold">{{ stats.total }}</p>
+<!-- Stats Grid -->
+<div class="row g-4 mb-4">
+    <div class="col-12 col-md-6 col-xl-3">
+        <div class="stat-card" onclick="filterStatus('')" role="button">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div class="stat-icon-wrapper">
+                        <i class="ri-team-line"></i>
                     </div>
+                    <i class="ri-arrow-right-up-line opacity-50"></i>
                 </div>
-            </a>
-        </div>
-        <div class="col-12 col-md-6 col-xl-3">
-            <a href="?date={{ selected_date }}&department={{ selected_department|default:'' }}&search={{ search_query|default:'' }}&status=Present&per_page={{ per_page }}"
-                class="text-decoration-none">
-                <div class="card text-white h-100"
-                    style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);">
-                    <div class="card-body text-center">
-                        <h5 class="card-title">Present Today</h5>
-                        <p class="card-text display-4 fw-bold">{{ stats.present }}</p>
-                    </div>
-                </div>
-            </a>
-        </div>
-        <div class="col-12 col-md-6 col-xl-3">
-            <a href="?date={{ selected_date }}&department={{ selected_department|default:'' }}&search={{ search_query|default:'' }}&status=Absent&per_page={{ per_page }}"
-                class="text-decoration-none">
-                <div class="card text-white h-100"
-                    style="background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);">
-                    <div class="card-body text-center">
-                        <h5 class="card-title">Absent Today</h5>
-                        <p class="card-text display-4 fw-bold">{{ stats.absent }}</p>
-                    </div>
-                </div>
-            </a>
-        </div>
-        <div class="col-12 col-md-6 col-xl-3">
-            <div class="card text-white h-100" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);">
-                <div class="card-body text-center">
-                    <h5 class="card-title">Late Arrivals</h5>
-                    <p class="card-text display-4 fw-bold">{{ stats.late }}</p>
+                <div>
+                    <div class="stat-label">Total Employees</div>
+                    <div class="stat-value" id="stat-total">-</div>
                 </div>
             </div>
         </div>
     </div>
-
-    <div class="row g-4">
-        <!-- Table -->
-        <div class="col-lg-12">
-            <div class="card shadow-sm h-100">
-                <div class="card-header bg-white py-3">
-                    <h5 class="mb-0">Employee Attendance List {% if status_filter %}- <span class="text-primary">{{
-                            status_filter }}</span>{% endif %}</h5>
+    <div class="col-12 col-md-6 col-xl-3">
+        <div class="stat-card" onclick="filterStatus('Present')" role="button">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div class="stat-icon-wrapper">
+                        <i class="ri-check-double-line"></i>
+                    </div>
                 </div>
-                <div class="table-responsive">
-                    <table class="table table-hover mb-0 align-middle">
-                        <thead class="table-light">
-                            <tr>
-                                <th>Employee</th>
-                                <th>Badge ID</th>
-                                <th>Department</th>
-                                <th>Site</th>
-                                <th>Status</th>
-                                <th>Check In</th>
-                                <th>Check Out</th>
-                                <th>Location</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for item in report_data %}
-                            <tr>
-                                <td>
-                                    <div class="fw-bold">{{ item.employee.name }}</div>
-                                    <div class="small text-muted">{{ item.employee.email|default:"" }}</div>
-                                </td>
-                                <td>{{ item.employee.badge_number|default:"-" }}</td>
-                                <td>{{ item.employee.department|default:"-" }}</td>
-                                <td>{{ item.site }}</td>
-                                <td>
-                                    {% if item.status == 'Present' %}
-                                    <span class="badge bg-success">Present</span>
-                                    {% else %}
-                                    <span class="badge bg-danger">Absent</span>
-                                    {% endif %}
-                                </td>
-                                <td>{{ item.check_in }}</td>
-                                <td>{{ item.check_out }}</td>
-                                <td>
-                                    {% if item.latitude and item.longitude and item.site_id %}
-                                    <button
-                                        onclick="viewLocation({{ item.site_id }}, {{ item.latitude }}, {{ item.longitude }})"
-                                        class="btn btn-sm btn-info text-white">View</button>
-                                    {% else %}
-                                    <span class="text-muted">-</span>
-                                    {% endif %}
-                                </td>
-                            </tr>
-                            {% empty %}
-                            <tr>
-                                <td colspan="8" class="text-center py-5 text-muted">No records found.</td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-
-                <!-- Pagination -->
-                <div class="card-footer bg-white d-flex justify-content-center">
-                    {% if report_data.has_other_pages %}
-                    <nav aria-label="Page navigation">
-                        <ul class="pagination mb-0">
-                            {% if report_data.has_previous %}
-                            <li class="page-item">
-                                <a class="page-link"
-                                    href="?page={{ report_data.previous_page_number }}&date={{ selected_date }}&department={{ selected_department|default:'' }}&search={{ search_query|default:'' }}&status={{ status_filter|default:'' }}&per_page={{ per_page }}">Previous</a>
-                            </li>
-                            {% endif %}
-
-                            <li class="page-item disabled">
-                                <span class="page-link">Page {{ report_data.number }} of {{
-                                    report_data.paginator.num_pages }}</span>
-                            </li>
-
-                            {% if report_data.has_next %}
-                            <li class="page-item">
-                                <a class="page-link"
-                                    href="?page={{ report_data.next_page_number }}&date={{ selected_date }}&department={{ selected_department|default:'' }}&search={{ search_query|default:'' }}&status={{ status_filter|default:'' }}&per_page={{ per_page }}">Next</a>
-                            </li>
-                            {% endif %}
-                        </ul>
-                    </nav>
-                    {% endif %}
+                <div>
+                    <div class="stat-label">Present Today</div>
+                    <div class="stat-value" id="stat-present">-</div>
                 </div>
             </div>
         </div>
-
     </div>
+    <div class="col-12 col-md-6 col-xl-3">
+        <div class="stat-card" onclick="filterStatus('Absent')" role="button">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div class="stat-icon-wrapper">
+                        <i class="ri-close-circle-line"></i>
+                    </div>
+                </div>
+                <div>
+                    <div class="stat-label">Absent Today</div>
+                    <div class="stat-value" id="stat-absent">-</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-12 col-md-6 col-xl-3">
+        <div class="stat-card" role="button">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div class="stat-icon-wrapper">
+                        <i class="ri-alarm-warning-line"></i>
+                    </div>
+                </div>
+                <div>
+                    <div class="stat-label">Late Arrivals</div>
+                    <div class="stat-value" id="stat-late">-</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Section -->
+<div class="filter-card mb-4">
+    <form id="filterForm" class="row g-4 align-items-end">
+        <div class="col-md-3">
+            <label class="form-label small fw-bold text-secondary text-uppercase mb-2">
+                <i class="ri-calendar-line me-1"></i> Date
+            </label>
+            <input type="date" id="filterDate" class="form-control form-control-modern" onchange="loadData(1)">
+        </div>
+
+        <div class="col-md-3" id="siteFilterContainer" style="display:none;">
+            <label class="form-label small fw-bold text-secondary text-uppercase mb-2">
+                <i class="ri-building-line me-1"></i> Site
+            </label>
+            <select id="filterSite" class="form-select form-select-modern" onchange="loadData(1)">
+                <option value="all">All Sites</option>
+            </select>
+        </div>
+
+        <div class="col-md-3">
+            <label class="form-label small fw-bold text-secondary text-uppercase mb-2">
+                <i class="ri-user-settings-line me-1"></i> Position
+            </label>
+            <select id="filterPosition" class="form-select form-select-modern" onchange="loadData(1)">
+                <option value="all">All Positions</option>
+            </select>
+        </div>
+
+        <div class="col-md-2">
+            <label class="form-label small fw-bold text-secondary text-uppercase mb-2">
+                <i class="ri-list-check-2 me-1"></i> Entries
+            </label>
+            <select id="filterPerPage" class="form-select form-select-modern" onchange="loadData(1)">
+                <option value="20" selected>20</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+                <option value="500">500</option>
+            </select>
+        </div>
+
+        <input type="hidden" id="filterStatus" value="">
+    </form>
+</div>
+
+<!-- Data Table -->
+<div class="card modern-table-container">
+    <div class="card-header bg-white py-4 px-4 border-bottom">
+        <div class="d-flex align-items-center justify-content-between">
+            <h5 class="mb-0 fw-bold d-flex align-items-center gap-2">
+                <i class="ri-table-line text-primary"></i> Daily Logs
+            </h5>
+            <span id="statusBadge"
+                class="badge bg-primary bg-opacity-10 text-primary px-3 py-2 rounded-pill d-none"></span>
+        </div>
+    </div>
+
+    <div class="table-responsive">
+        <table class="table table-hover mb-0">
+            <thead>
+                <tr>
+                    <th class="ps-4">Employee</th>
+                    <th>Badge ID</th>
+                    <th>Department</th>
+                    <th>Position</th>
+                    <th>Site</th>
+                    <th>Status</th>
+                    <th>Time</th>
+                    <th class="text-end pe-4">Actions</th>
+                </tr>
+            </thead>
+            <tbody id="reportTableBody">
+                <!-- Data -->
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    <div class="card-footer bg-white py-4" id="paginationContainer"></div>
 </div>
 
 <!-- Map Modal -->
 <div class="modal fade" id="mapModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-centered">
-        <div class="modal-content" style="height: 80vh;">
-            <div class="modal-header">
-                <h5 class="modal-title">Attendance Location</h5>
+        <div class="modal-content border-0 shadow-2xl" style="height: 85vh; border-radius: 1.5rem; overflow: hidden;">
+            <div class="modal-header border-bottom bg-white p-4">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="bg-primary bg-opacity-10 p-2 rounded-circle text-primary">
+                        <i class="ri-map-pin-user-line fs-4"></i>
+                    </div>
+                    <div>
+                        <h5 class="modal-title fw-bold">Location Details</h5>
+                        <p class="mb-0 text-secondary small">View employee check-in location</p>
+                    </div>
+                </div>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"
                     onclick="closeMapModal()"></button>
             </div>
-            <div class="modal-body p-0">
+            <div class="modal-body p-0 position-relative bg-light">
                 <div id="map" class="w-100 h-100"></div>
             </div>
         </div>
     </div>
 </div>
 
+{% endblock %}
 
+{% block scripts %}
 <script
     src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCYAsBPyik1DZcOH3jcR-awecFjyYXr5Qw&libraries=geometry"></script>
 <script>
-    // Map Logic
-    let map;
-    let marker;
-    let polygon;
-    let mapModal;
+    // Config
+    const API_URL = '{% url "api-reports-data" %}';
+    const EXPORT_URL = '{% url "export-reports" %}';
 
-    document.addEventListener('DOMContentLoaded', function () {
-        mapModal = new bootstrap.Modal(document.getElementById('mapModal'));
+    // State
+    let currentPage = 1;
+    let sitesLoaded = false;
+    let currentMap = null;
+    let currentMarker = null;
+    let currentPolygon = null;
+    let mapModalInstance = null;
+
+    // Initialization
+    document.addEventListener('DOMContentLoaded', () => {
+        mapModalInstance = new bootstrap.Modal(document.getElementById('mapModal'));
+        const today = new Date().toISOString().split('T')[0];
+        document.getElementById('filterDate').value = today;
+        loadData(1);
+        updateClock();
+        setInterval(updateClock, 1000);
     });
 
-    async function viewLocation(siteId, lat, lng) {
-        mapModal.show();
+    async function loadData(page = 1) {
+        currentPage = page;
+        const tbody = document.getElementById('reportTableBody');
 
-        // Wait for modal to be visible before initializing map
-        setTimeout(async () => {
-            if (!map) {
-                map = new google.maps.Map(document.getElementById("map"), {
-                    center: { lat: lat, lng: lng },
-                    zoom: 16
+        // Skeleton Row
+        const skeletonRow = `
+            <tr>
+                <td class="ps-4"><div class="skeleton" style="width: 180px; height: 40px;"></div></td>
+                <td><div class="skeleton" style="width: 60px; height: 20px;"></div></td>
+                <td><div class="skeleton" style="width: 100px; height: 20px;"></div></td>
+                <td><div class="skeleton" style="width: 100px; height: 20px;"></div></td>
+                <td><div class="skeleton" style="width: 80px; height: 20px;"></div></td>
+                <td><div class="skeleton" style="width: 140px; height: 20px;"></div></td>
+                <td class="text-end pe-4"><div class="skeleton" style="width: 80px; height: 32px;"></div></td>
+            </tr>`;
+        tbody.innerHTML = skeletonRow.repeat(5);
+
+        const date = document.getElementById('filterDate').value;
+        const site = document.getElementById('filterSite').value;
+        const perPage = document.getElementById('filterPerPage').value;
+        const status = document.getElementById('filterStatus').value;
+        const position = document.getElementById('filterPosition').value;
+
+        const params = new URLSearchParams({ page, per_page: perPage, date: date || '', site: site || 'all', status: status || '', position: position || 'all' });
+
+        try {
+            const res = await fetch(`${API_URL}?${params}`);
+            if (!res.ok) throw new Error('Failed');
+            const data = await res.json();
+
+            // Stats
+            document.getElementById('stat-total').textContent = data.stats.total;
+            document.getElementById('stat-present').textContent = data.stats.present;
+            document.getElementById('stat-absent').textContent = data.stats.absent;
+            document.getElementById('stat-late').textContent = data.stats.late;
+
+            // Site Filter
+            if (!sitesLoaded && data.permissions.is_superuser) {
+                const siteSelect = document.getElementById('filterSite');
+                document.getElementById('siteFilterContainer').style.display = 'block';
+                siteSelect.innerHTML = '<option value="all">All Sites</option>';
+                data.sites.forEach(s => {
+                    const opt = document.createElement('option');
+                    opt.value = s.id; opt.textContent = s.name;
+                    siteSelect.appendChild(opt);
                 });
-            } else {
-                map.setCenter({ lat: lat, lng: lng });
-                map.setZoom(16);
-                google.maps.event.trigger(map, 'resize');
+                sitesLoaded = true;
+                if (data.selected_site && data.selected_site !== 'all') siteSelect.value = data.selected_site;
             }
 
-            // Clear previous markers/polygons
-            if (marker) marker.setMap(null);
-            if (polygon) polygon.setMap(null);
+            // Position Filter Population
+            const posSelect = document.getElementById('filterPosition');
+            if (posSelect.options.length <= 1 && data.positions) {
+                data.positions.forEach(p => {
+                    const opt = document.createElement('option');
+                    opt.value = p; opt.textContent = p;
+                    posSelect.appendChild(opt);
+                });
+            }
 
-            // Add User Marker
-            marker = new google.maps.Marker({
+            // Table
+            renderTable(data.results);
+            renderPagination(data.pagination);
+
+        } catch (error) {
+            console.error(error);
+            tbody.innerHTML = `<tr><td colspan="7" class="text-center py-5 text-danger"><i class="ri-error-warning-line fs-2 d-block mb-2"></i>Error loading data</td></tr>`;
+        }
+    }
+
+    function renderTable(rows) {
+        const tbody = document.getElementById('reportTableBody');
+        if (rows.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="7" class="text-center py-5"><div class="text-muted"><i class="ri-file-search-line fs-1 d-block mb-3 opacity-25"></i>No records found</div></td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = rows.map(item => `
+            <tr>
+                <td class="ps-4">
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="avatar-circle">
+                            ${item.name.charAt(0)}
+                        </div>
+                        <div>
+                            <div class="fw-bold text-dark">${item.name}</div>
+                            <div class="small text-secondary">${item.email || '-'}</div>
+                        </div>
+                    </div>
+                </td>
+                <td><span class="font-monospace fw-bold text-dark bg-secondary bg-opacity-10 px-2 py-1 rounded small">${item.badge_number || '-'}</span></td>
+                <td>${item.department || '<span class="text-muted">-</span>'}</td>
+                <td>${item.position || '<span class="text-muted">-</span>'}</td>
+                <td><div class="d-flex align-items-center gap-1"><i class="ri-building-line text-secondary"></i> ${item.site}</div></td>
+                <td>
+                    ${item.status === 'Present'
+                ? '<span class="badge-soft badge-present"><i class="ri-checkbox-circle-line me-1"></i>Present</span>'
+                : '<span class="badge-soft badge-absent"><i class="ri-close-circle-line me-1"></i>Absent</span>'}
+                </td>
+                 <td>
+                    <div class="d-flex flex-column small">
+                        <span class="text-success"><i class="ri-login-box-line me-1"></i>${item.check_in}</span>
+                        <span class="text-danger"><i class="ri-logout-box-line me-1"></i>${item.check_out}</span>
+                    </div>
+                </td>
+                <td class="text-end pe-4">
+                    ${(item.latitude && item.longitude && item.site_id)
+                ? `<button onclick="viewLocation(${item.site_id}, ${item.latitude}, ${item.longitude})"
+                                class="btn-view-map">
+                                <i class="ri-map-pin-2-line"></i> Location
+                           </button>`
+                : '<span class="text-muted small opacity-50">No Data</span>'}
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    function renderPagination(pagination) {
+        const container = document.getElementById('paginationContainer');
+        if (pagination.num_pages <= 1) {
+            container.innerHTML = '';
+            return;
+        }
+
+        container.innerHTML = `
+            <nav>
+                <ul class="pagination justify-content-center mb-0 gap-2">
+                    <li class="page-item ${!pagination.has_previous ? 'disabled' : ''}">
+                        <button class="btn btn-light border" onclick="loadData(${pagination.current_page - 1})" ${!pagination.has_previous ? 'disabled' : ''}>
+                            <i class="ri-arrow-left-s-line"></i> Prev
+                        </button>
+                    </li>
+                    <li class="page-item disabled">
+                        <span class="btn border-0 fw-bold">Page ${pagination.current_page} of ${pagination.num_pages}</span>
+                    </li>
+                    <li class="page-item ${!pagination.has_next ? 'disabled' : ''}">
+                        <button class="btn btn-light border" onclick="loadData(${pagination.current_page + 1})" ${!pagination.has_next ? 'disabled' : ''}>
+                            Next <i class="ri-arrow-right-s-line"></i>
+                        </button>
+                    </li>
+                </ul>
+            </nav>
+        `;
+    }
+
+    function filterStatus(status) {
+        document.getElementById('filterStatus').value = status;
+        const badge = document.getElementById('statusBadge');
+        if (status) {
+            badge.textContent = status;
+            badge.classList.remove('d-none');
+        } else {
+            badge.classList.add('d-none');
+        }
+        loadData(1);
+    }
+
+    function resetFilters() {
+        document.getElementById('filterDate').value = new Date().toISOString().split('T')[0];
+        document.getElementById('filterSite').value = 'all';
+        document.getElementById('filterPosition').value = 'all';
+        document.getElementById('filterStatus').value = '';
+        document.getElementById('statusBadge').classList.add('d-none');
+        loadData(1);
+    }
+
+    function downloadExcel() {
+        const params = new URLSearchParams({
+            date: document.getElementById('filterDate').value || '',
+            site: document.getElementById('filterSite').value || 'all',
+            status: document.getElementById('filterStatus').value || '',
+            position: document.getElementById('filterPosition').value || 'all',
+        });
+        window.location.href = `${EXPORT_URL}?${params.toString()}`;
+    }
+
+    function updateClock() {
+        const now = new Date();
+        document.getElementById('liveClock').innerText = now.toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    }
+
+    async function viewLocation(siteId, lat, lng) {
+        mapModalInstance.show();
+        setTimeout(async () => {
+            const mapEl = document.getElementById("map");
+            if (!currentMap) {
+                currentMap = new google.maps.Map(mapEl, { center: { lat: lat, lng: lng }, zoom: 16 });
+            } else {
+                currentMap.setCenter({ lat: lat, lng: lng });
+                currentMap.setZoom(16);
+                google.maps.event.trigger(currentMap, 'resize');
+            }
+            if (currentMarker) currentMarker.setMap(null);
+            if (currentPolygon) currentPolygon.setMap(null);
+
+            currentMarker = new google.maps.Marker({
                 position: { lat: lat, lng: lng },
-                map: map,
+                map: currentMap,
                 title: "Employee Location",
-                icon: {
-                    url: "http://maps.google.com/mapfiles/ms/icons/blue-dot.png"
-                }
+                icon: { url: "http://maps.google.com/mapfiles/ms/icons/blue-dot.png" }
             });
 
-            // Fetch Site Polygon
             try {
                 const response = await fetch(`/api/attendance/api/sites/${siteId}/coordinates/`);
                 const data = await response.json();
-
                 if (data.success && data.has_coordinates && data.coordinates.length > 0) {
                     const boundaryCoords = data.coordinates;
-
-                    // Close polygon
-                    const first = boundaryCoords[0];
-                    const last = boundaryCoords[boundaryCoords.length - 1];
-                    if (first.lat !== last.lat || first.lng !== last.lng) {
-                        boundaryCoords.push(first);
-                    }
-
-                    polygon = new google.maps.Polygon({
-                        paths: boundaryCoords,
-                        strokeColor: "#FF0000",
-                        strokeOpacity: 0.8,
-                        strokeWeight: 2,
-                        fillColor: "#FF0000",
-                        fillOpacity: 0.35
-                    });
-                    polygon.setMap(map);
-
-                    // Fit bounds to include both user and site
-                    const bounds = new google.maps.LatLngBounds();
-                    bounds.extend({ lat: lat, lng: lng });
-                    boundaryCoords.forEach(coord => bounds.extend(coord));
-                    map.fitBounds(bounds);
+                    if (boundaryCoords[0].lat !== boundaryCoords[boundaryCoords.length - 1].lat) boundaryCoords.push(boundaryCoords[0]);
+                    currentPolygon = new google.maps.Polygon({ paths: boundaryCoords, strokeColor: "#ef4444", strokeOpacity: 0.8, strokeWeight: 2, fillColor: "#ef4444", fillOpacity: 0.2 });
+                    currentPolygon.setMap(currentMap);
                 }
-            } catch (error) {
-                console.error("Error fetching site coordinates:", error);
-            }
-        }, 200);
+            } catch (error) { console.error("Map Error", error); }
+        }, 300);
     }
-
-    function closeMapModal() {
-        mapModal.hide();
-    }
-
-    // Live Clock (Reused)
-    function updateClock() {
-        const now = new Date();
-        const options = {
-            timeZone: 'Asia/Dubai',
-            weekday: 'short',
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
-            hour12: true
-        };
-        document.getElementById('liveClock').innerText = '🇦🇪 ' + now.toLocaleString('en-US', options);
-    }
-    setInterval(updateClock, 1000);
-    updateClock();
-
-
+    function closeMapModal() { mapModalInstance.hide(); }
 </script>
 {% endblock %}

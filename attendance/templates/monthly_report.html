@@ -1,226 +1,494 @@
 {% extends 'base.html' %}
 
-{% block title %}Monthly Report - Admin Dashboard{% endblock %}
+{% block title %}Monthly Attendance Report - Admin Dashboard{% endblock %}
 
 {% block content %}
+<!-- Remix Icons & Google Fonts -->
+<link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
-<!-- Navbar -->
-<nav class="navbar navbar-expand-lg navbar-custom mb-4 shadow-sm">
-    <div class="container-fluid">
-        <a class="navbar-brand d-flex align-items-center gap-2" href="#">
-            <span class="fs-4">📅 Monthly Attendance Report</span>
-        </a>
-        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarContent">
-            <span class="navbar-toggler-icon"></span>
-        </button>
-        <div class="collapse navbar-collapse" id="navbarContent">
-            <div class="ms-auto d-flex align-items-center gap-3 flex-wrap">
-                <div id="liveClock" class="badge bg-light text-dark border p-2 fs-6 fw-normal"></div>
-                <span class="text-white">Welcome, {{ user.username }}</span>
-                <a href="{% url 'admin-dashboard' %}" class="btn btn-secondary btn-sm">Back to Dashboard</a>
-                <a href="{% url 'admin-logout' %}" class="btn btn-danger btn-sm">Logout</a>
-            </div>
-        </div>
-    </div>
-</nav>
+<style>
+    :root {
+        --font-family: 'Outfit', sans-serif;
+        --card-bg: #ffffff;
+        --text-primary: #1e293b;
+        --text-secondary: #64748b;
 
-<!-- Navigation Menu -->
-<div class="container mb-4">
-    <ul class="nav nav-pills nav-fill bg-white p-2 rounded shadow-sm">
-        <li class="nav-item">
-            <a class="nav-link" href="{% url 'admin-dashboard' %}">📊 Dashboard</a>
-        </li>
-        <li class="nav-item">
-            <a class="nav-link" href="{% url 'admin-reports' %}">📈 Reports</a>
-        </li>
-        <li class="nav-item">
-            <a class="nav-link active" href="{% url 'monthly-report' %}">📅 Monthly Report</a>
-        </li>
-        <li class="nav-item">
-            <a class="nav-link" href="{% url 'admin-salary-report' %}">💰 Salary</a>
-        </li>
-        {% if is_superuser %}
-        <li class="nav-item">
-            <a class="nav-link" href="{% url 'admin-sites' %}">🏢 Sites</a>
-        </li>
-        <li class="nav-item">
-            <a class="nav-link" href="{% url 'admin-site-admins' %}">👤 Site Admins</a>
-        </li>
-        {% endif %}
-    </ul>
-</div>
-
-<div class="container">
-    <!-- Filters -->
-    <div class="card mb-4 shadow-sm">
-        <div class="card-body">
-            <form method="GET" class="row g-3 align-items-end">
-                <div class="col-md-3">
-                    <label class="form-label">Month</label>
-                    <select name="month" class="form-select" onchange="this.form.submit()">
-                        {% for m_num, m_name in months %}
-                        <option value="{{ m_num }}" {% if selected_month == m_num %}selected{% endif %}>
-                            {{ m_name }}
-                        </option>
-                        {% endfor %}
-
-                    </select>
-                </div>
-
-                <div class="col-md-3">
-                    <label class="form-label">Year</label>
-                    <select name="year" class="form-select" onchange="this.form.submit()">
-                        {% for y in years %}
-                        <option value="{{ y }}" {% if selected_year == y %}selected{% endif %}>
-                            {{ y }}
-                        </option>
-                        {% endfor %}
-                    </select>
-                </div>
-
-                {% if is_superuser %}
-                <div class="col-md-3">
-                    <label class="form-label">Site</label>
-                    <select name="site" class="form-select" onchange="this.form.submit()">
-                        <option value="all">All Sites</option>
-                        {% for site in sites %}
-                            <option value="{{ site.id }}" {% if selected_site and selected_site.id == site.id %}selected{% endif %}>
-                                {{ site.name }}
-                            </option>
-                        {% endfor %}
-
-                    </select>
-                </div>
-                {% endif %}
-
-                <div class="col-md-3 d-flex gap-2">
-                    <button type="submit" class="btn btn-primary flex-grow-1">Filter</button>
-                    <a href="{% url 'monthly-report' %}" class="btn btn-secondary">Reset</a>
-                </div>
-
-                <div class="col-12 text-end mt-3">
-                    <a href="{% url 'export-monthly-report' %}?month={{ selected_month }}&year={{ selected_year }}{% if selected_site %}&site={{ selected_site.id }}{% endif %}"
-                        class="btn btn-success" target="_blank">
-                        📥 Download Excel
-                    </a>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- Summary Stats -->
-    <div class="row g-4 mb-4">
-        <div class="col-12">
-            <h4 class="mb-3">Summary for {{ month_name }} {{ selected_year }}{% if selected_site %} - {{
-                selected_site.name }}{% endif %}</h4>
-        </div>
-        <div class="col-12 col-md-6 col-xl-3">
-            <div class="card text-white h-100" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
-                <div class="card-body text-center">
-                    <h5 class="card-title">Total Working Days</h5>
-                    <p class="card-text display-4 fw-bold">{{ summary.total_days }}</p>
-                </div>
-            </div>
-        </div>
-        <div class="col-12 col-md-6 col-xl-3">
-            <div class="card text-white h-100" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);">
-                <div class="card-body text-center">
-                    <h5 class="card-title">Total Employees</h5>
-                    <p class="card-text display-4 fw-bold">{{ summary.total_employees }}</p>
-                </div>
-            </div>
-        </div>
-        <div class="col-12 col-md-6 col-xl-3">
-            <div class="card text-white h-100" style="background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);">
-                <div class="card-body text-center">
-                    <h5 class="card-title">Avg Attendance</h5>
-                    <p class="card-text display-4 fw-bold">{{ summary.avg_attendance }}%</p>
-                </div>
-            </div>
-        </div>
-        <div class="col-12 col-md-6 col-xl-3">
-            <div class="card text-white h-100" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);">
-                <div class="card-body text-center">
-                    <h5 class="card-title">Total Late Arrivals</h5>
-                    <p class="card-text display-4 fw-bold">{{ summary.total_late }}</p>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Employee Data Table -->
-    <div class="card shadow-sm">
-        <div class="card-header bg-white py-3">
-            <h5 class="mb-0">Employee Attendance Details</h5>
-        </div>
-        <div class="table-responsive">
-            <table class="table table-hover mb-0 align-middle">
-                <thead class="table-light">
-                    <tr>
-                        <th>Employee</th>
-                        <th>Badge ID</th>
-                        <th>Department</th>
-                        <th>Site</th>
-                        <th>Days Present</th>
-                        <th>Days Absent</th>
-                        <th>Late Arrivals</th>
-                        <th>Attendance %</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for data in employee_data %}
-                    <tr>
-                        <td>
-                            <div class="fw-bold">{{ data.employee.name }}</div>
-                            <div class="small text-muted">{{ data.employee.email|default:"" }}</div>
-                        </td>
-                        <td>{{ data.employee.badge_number|default:"-" }}</td>
-                        <td>{{ data.employee.department|default:"-" }}</td>
-                        <td>{{ data.employee.site.name|default:"-" }}</td>
-                        <td><span class="badge bg-success">{{ data.days_present }}</span></td>
-                        <td><span class="badge bg-danger">{{ data.days_absent }}</span></td>
-                        <td><span class="badge bg-warning text-dark">{{ data.late_count }}</span></td>
-                        <td>
-                            <div class="progress" style="height: 25px;">
-                                <div class="progress-bar {% if data.attendance_percentage >= 90 %}bg-success{% elif data.attendance_percentage >= 75 %}bg-warning{% else %}bg-danger{% endif %}"
-                                    role="progressbar" style="width: {{ data.attendance_percentage }}%"
-                                    aria-valuenow="{{ data.attendance_percentage }}" aria-valuemin="0"
-                                    aria-valuemax="100">
-                                    {{ data.attendance_percentage }}%
-                                </div>
-                            </div>
-                        </td>
-                    </tr>
-                    {% empty %}
-                    <tr>
-                        <td colspan="8" class="text-center py-5 text-muted">No employees found for the selected
-                            criteria.</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-    </div>
-</div>
-
-<script>
-    // Live Clock
-    function updateClock() {
-        const now = new Date();
-        const options = {
-            timeZone: 'Asia/Dubai',
-            weekday: 'short',
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
-            hour12: true
-        };
-        document.getElementById('liveClock').innerText = '🇦🇪 ' + now.toLocaleString('en-US', options);
+        --grad-primary: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+        --grad-success: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        --grad-warning: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+        --grad-danger: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);
+        --grad-info: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
     }
-    setInterval(updateClock, 1000);
-    updateClock();
+
+    body {
+        font-family: var(--font-family) !important;
+        background-color: #f8fafc;
+    }
+
+    /* Header Styling */
+    .report-header {
+        margin-bottom: 2.5rem;
+    }
+
+    /* Stat Cards Styling - Professional Monochrome */
+    .stat-card {
+        background: white !important;
+        border: 1px solid black !important;
+        border-radius: 1.25rem;
+        transition: all 0.2s ease;
+        overflow: hidden;
+        position: relative;
+        height: 100%;
+        cursor: pointer;
+        box-shadow: none !important;
+        color: black !important;
+    }
+
+    .stat-card:hover {
+        transform: translateY(-4px);
+        background: #fbfbfb !important;
+    }
+
+    .stat-card .card-body {
+        padding: 1.75rem;
+        position: relative;
+        z-index: 2;
+    }
+
+    .stat-icon-wrapper {
+        width: 44px;
+        height: 44px;
+        border-radius: 12px;
+        background: #f1f5f9;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+        margin-bottom: 1rem;
+        color: black;
+        border: 1px solid #e2e8f0;
+    }
+
+    /* Filter Card */
+    .filter-card {
+        background: white;
+        border-radius: 1.5rem;
+        padding: 1.75rem;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+        margin-bottom: 2.5rem;
+        border: 1px solid #f1f5f9;
+    }
+
+    .form-label-premium {
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        font-weight: 700;
+        color: #94a3b8;
+        letter-spacing: 0.05em;
+        margin-bottom: 0.75rem;
+        display: block;
+    }
+
+    .form-select-premium {
+        border: 1px solid #e2e8f0;
+        border-radius: 0.875rem;
+        padding: 0.75rem 1rem;
+        font-weight: 500;
+        transition: all 0.2s;
+        cursor: pointer;
+    }
+
+    .form-select-premium:focus {
+        border-color: #6366f1;
+        box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
+    }
+
+    /* Table Styling */
+    .modern-table-container {
+        background: white;
+        border-radius: 1.5rem;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+        border: 1px solid #f1f5f9;
+        overflow: hidden;
+    }
+
+    .table thead th {
+        background: #f8fafc;
+        padding: 1.25rem 1rem;
+        font-weight: 700;
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        color: #64748b;
+        border-bottom: 2px solid #f1f5f9;
+    }
+
+    .table tbody td {
+        padding: 1.125rem 1rem;
+        vertical-align: middle;
+        border-bottom: 1px solid #f1f5f9;
+    }
+
+    .percentage-bg {
+        height: 6px;
+        border-radius: 99px;
+        background: #f1f5f9;
+        overflow: hidden;
+        width: 100px;
+    }
+
+    .percentage-fill {
+        height: 100%;
+        border-radius: 99px;
+    }
+
+    /* Buttons - Professional Monochrome */
+    .btn-premium {
+        border-radius: 0.875rem;
+        padding: 0.75rem 1.5rem;
+        font-weight: 600;
+        transition: all 0.2s;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.6rem;
+        background: white !important;
+        color: black !important;
+        border: 1px solid black !important;
+        box-shadow: none !important;
+    }
+
+    .btn-premium:hover {
+        background: black !important;
+        color: white !important;
+        transform: translateY(-1px);
+    }
+</style>
+
+<!-- Top Navigation & Header -->
+<div class="report-header d-flex justify-content-between align-items-center mb-5">
+    <div>
+        <h1 class="h3 fw-bold text-dark mb-1">Monthly Attendance Report</h1>
+        <div class="d-flex align-items-center gap-2 text-secondary font-monospace small">
+            <i class="ri-calendar-todo-line"></i>
+            <span id="current-month-display">...</span>
+            <span class="mx-1">•</span>
+            <i class="ri-time-line"></i>
+            <span id="live-clock">Loading...</span>
+        </div>
+    </div>
+    <div class="d-flex gap-3">
+        <button onclick="window.location.href='/api/attendance/dashboard/'" class="btn btn-premium shadow-sm">
+            <i class="ri-arrow-left-line me-2"></i>Dashboard
+        </button>
+        <button onclick="downloadExcel()" class="btn btn-premium shadow-sm">
+            <i class="ri-file-excel-2-line"></i> Export Excel
+        </button>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="filter-card border-0">
+    <div class="row g-4 align-items-end">
+        <div class="col-md-3">
+            <label class="form-label-premium">Select Month</label>
+            <select id="filterMonth" class="form-select form-select-premium w-100" onchange="loadData(1)"></select>
+        </div>
+        <div class="col-md-3">
+            <label class="form-label-premium">Select Year</label>
+            <select id="filterYear" class="form-select form-select-premium w-100" onchange="loadData(1)"></select>
+        </div>
+        <div class="col-md-4 d-none" id="site-filter-col">
+            <label class="form-label-premium">Select Site</label>
+            <select id="filterSite" class="form-select form-select-premium w-100" onchange="loadData(1)">
+                <option value="all">All Sites</option>
+            </select>
+        </div>
+    </div>
+</div>
+
+<!-- Search and Rows Bar -->
+<div class="d-flex justify-content-between align-items-center mb-4 gap-3 flex-wrap">
+    <div class="flex-grow-1" style="max-width: 400px;">
+        <div class="input-group shadow-sm rounded-3 overflow-hidden">
+            <span class="input-group-text border-0 bg-white ps-3"><i class="ri-search-line text-secondary"></i></span>
+            <input type="text" id="searchInput" class="form-control border-0 py-2"
+                placeholder="Search by name, ID, email..." oninput="debounceSearch()">
+        </div>
+    </div>
+    <div class="d-flex align-items-center gap-2">
+        <label class="small fw-bold text-secondary text-uppercase">Rows:</label>
+        <select id="filterPerPage" class="form-select form-select-sm border-0 shadow-sm rounded-3 fw-semibold"
+            style="width: 80px;" onchange="loadData(1)">
+            <option value="20" selected>20</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+            <option value="500">500</option>
+        </select>
+    </div>
+</div>
+
+<!-- Stats Summary -->
+<div class="row g-4 mb-5" id="stats-container">
+    <div class="col-md-3">
+        <div class="stat-card">
+            <div class="card-body">
+                <div class="stat-icon-wrapper"><i class="ri-calendar-event-line"></i></div>
+                <div class="stat-label mb-1">Working Days</div>
+                <div class="stat-value" id="stat-total-days">-</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card">
+            <div class="card-body">
+                <div class="stat-icon-wrapper"><i class="ri-group-line"></i></div>
+                <div class="stat-label mb-1">Total Employees</div>
+                <div class="stat-value" id="stat-total-employees">-</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card">
+            <div class="card-body">
+                <div class="stat-icon-wrapper"><i class="ri-percent-line"></i></div>
+                <div class="stat-label mb-1">Avg Attendance</div>
+                <div class="stat-value" id="stat-avg-attendance">0%</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card">
+            <div class="card-body">
+                <div class="stat-icon-wrapper"><i class="ri-alarm-warning-line"></i></div>
+                <div class="stat-label mb-1">Total Late</div>
+                <div class="stat-value" id="stat-total-late">0</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Table Container -->
+<div class="modern-table-container">
+    <div class="card-header bg-white p-4 border-bottom">
+        <h5 class="fw-bold mb-0 d-flex align-items-center gap-2">
+            <i class="ri-user-line text-primary"></i> Employee Attendance Details
+        </h5>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead>
+                <tr>
+                    <th class="ps-4">Employee</th>
+                    <th>Badge ID</th>
+                    <th>Department</th>
+                    <th>Site</th>
+                    <th class="text-center">Present</th>
+                    <th class="text-center">Absent</th>
+                    <th class="text-center">Late</th>
+                    <th class="pe-4">Attendance %</th>
+                </tr>
+            </thead>
+            <tbody id="reportTableBody">
+                <!-- Loaded via JS -->
+            </tbody>
+        </table>
+    </div>
+    <div class="card-footer bg-white py-4 px-4 border-top" id="paginationContainer">
+        <!-- Pagination JS -->
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let filterInitialized = false;
+    let searchTimer;
+    let currentPage = 1;
+
+    document.addEventListener('DOMContentLoaded', () => {
+        setupFilterDropdowns();
+        startTime();
+        loadData(1);
+    });
+
+    function setupFilterDropdowns() {
+        const monthSelect = document.getElementById('filterMonth');
+        const yearSelect = document.getElementById('filterYear');
+        const now = new Date();
+
+        const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+        monthNames.forEach((name, i) => {
+            const opt = document.createElement('option');
+            opt.value = i + 1;
+            opt.textContent = name;
+            if (i === now.getMonth()) opt.selected = true;
+            monthSelect.appendChild(opt);
+        });
+
+        const currentYear = now.getFullYear();
+        for (let y = currentYear - 2; y <= currentYear; y++) {
+            const opt = document.createElement('option');
+            opt.value = y;
+            opt.textContent = y;
+            if (y === currentYear) opt.selected = true;
+            yearSelect.appendChild(opt);
+        }
+    }
+
+    function debounceSearch() {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(() => loadData(1), 500);
+    }
+
+    async function loadData(page = 1) {
+        currentPage = page;
+        const tbody = document.getElementById('reportTableBody');
+        tbody.innerHTML = `<tr><td colspan="8" class="text-center py-5">
+            <div class="spinner-border text-primary spinner-border-sm"></div>
+            <p class="mt-2 mb-0 text-secondary small">Generating monthly report...</p>
+        </td></tr>`;
+
+        const month = document.getElementById('filterMonth').value;
+        const year = document.getElementById('filterYear').value;
+        const site = document.getElementById('filterSite')?.value || 'all';
+        const search = document.getElementById('searchInput').value;
+        const perPage = document.getElementById('filterPerPage').value;
+
+        const params = new URLSearchParams({ month, year, site, search, page: currentPage, per_page: perPage });
+
+        try {
+            const res = await fetch(`?${params.toString()}`, {
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            });
+            const data = await res.json();
+
+            if (!filterInitialized && data.permissions.is_superuser) {
+                const siteCol = document.getElementById('site-filter-col');
+                const siteSelect = document.getElementById('filterSite');
+                siteCol.classList.remove('d-none');
+
+                if (data.sites) {
+                    data.sites.forEach(s => {
+                        const opt = document.createElement('option');
+                        opt.value = s.id;
+                        opt.textContent = s.name;
+                        siteSelect.appendChild(opt);
+                    });
+                }
+                filterInitialized = true;
+            }
+
+            renderStats(data.summary);
+            renderTable(data.results);
+            renderPagination(data.pagination);
+
+            document.getElementById('current-month-display').textContent = `${data.summary.month_name} ${data.summary.year}`;
+
+        } catch (e) {
+            tbody.innerHTML = `<tr><td colspan="8" class="text-center py-5 text-danger">Failed to sync report data.</td></tr>`;
+        }
+    }
+
+    function renderStats(summary) {
+        document.getElementById('stat-total-days').textContent = summary.total_days;
+        document.getElementById('stat-total-employees').textContent = summary.total_employees;
+        document.getElementById('stat-avg-attendance').textContent = summary.avg_attendance + '%';
+        document.getElementById('stat-total-late').textContent = summary.total_late;
+    }
+
+    function renderTable(rows) {
+        const tbody = document.getElementById('reportTableBody');
+        if (rows.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="8" class="text-center py-5 text-muted">No records found for this selection.</td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = rows.map(r => `
+            <tr>
+                <td class="ps-4">
+                    <div class="d-flex align-items-center gap-3">
+                        <div style="width: 38px; height: 38px; border-radius: 12px; background: #f1f5f9; display: flex; align-items: center; justify-content: center; font-weight: 700; color: #4f46e5; font-size: 0.95rem; border: 2px solid white; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
+                            ${r.name.charAt(0)}
+                        </div>
+                        <div>
+                            <div class="fw-bold text-dark">${r.name}</div>
+                            <div class="small text-secondary font-monospace" style="font-size: 0.7rem;">ID: ${r.badge_number || '-'}</div>
+                        </div>
+                    </div>
+                </td>
+                <td><span class="badge bg-light text-dark border font-monospace px-2">${r.badge_number || '-'}</span></td>
+                <td class="small fw-semibold text-secondary">${r.department || '-'}</td>
+                <td><div class="d-flex align-items-center gap-1 small fw-medium"><i class="ri-map-pin-line text-secondary"></i> ${r.site}</div></td>
+                <td class="text-center"><span class="badge bg-success bg-opacity-10 text-success px-3 py-2 rounded-pill fw-bold">${r.days_present}</span></td>
+                <td class="text-center"><span class="badge bg-danger bg-opacity-10 text-danger px-3 py-2 rounded-pill fw-bold">${r.days_absent}</span></td>
+                <td class="text-center"><span class="badge bg-warning bg-opacity-10 text-warning px-3 py-2 rounded-pill fw-bold">${r.late_count}</span></td>
+                <td class="pe-4">
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="flex-grow-1" style="max-width: 100px;">
+                            <div class="percentage-bg">
+                                <div class="percentage-fill shadow-sm" style="width: ${r.attendance_percentage}%; background: ${getProgressColor(r.attendance_percentage)}"></div>
+                            </div>
+                        </div>
+                        <span class="small fw-bold text-dark" style="min-width: 45px;">${r.attendance_percentage}%</span>
+                    </div>
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    function renderPagination(p) {
+        const container = document.getElementById('paginationContainer');
+        if (p.num_pages <= 1) {
+            container.innerHTML = `<div class="d-flex justify-content-between align-items-center small text-secondary fw-medium">
+                <span>Showing ${p.start_index}-${p.end_index} of ${p.total_items} entries</span>
+            </div>`;
+            return;
+        }
+
+        container.innerHTML = `
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+                <span class="small text-secondary fw-semibold">Showing <span class="text-dark">${p.start_index}-${p.end_index}</span> of <span class="text-dark">${p.total_items}</span> records</span>
+                <nav>
+                    <ul class="pagination pagination-sm mb-0 gap-2">
+                        <li class="page-item ${!p.has_previous ? 'disabled' : ''}">
+                            <button class="btn btn-light border btn-sm px-3 rounded-3" onclick="loadData(${p.current_page - 1})" ${!p.has_previous ? 'disabled' : ''}>
+                                <i class="ri-arrow-left-s-line"></i>
+                            </button>
+                        </li>
+                        <li class="page-item active"><span class="btn btn-primary btn-sm px-3 rounded-3 shadow-sm">${p.current_page}</span></li>
+                        <li class="page-item ${!p.has_next ? 'disabled' : ''}">
+                            <button class="btn btn-light border btn-sm px-3 rounded-3" onclick="loadData(${p.current_page + 1})" ${!p.has_next ? 'disabled' : ''}>
+                                <i class="ri-arrow-right-s-line"></i>
+                            </button>
+                        </li>
+                    </ul>
+                </nav>
+            </div>
+        `;
+    }
+
+    function getProgressColor(p) {
+        if (p >= 80) return 'black';
+        if (p >= 50) return '#475569';
+        return '#94a3b8';
+    }
+
+    function downloadExcel() {
+        const month = document.getElementById('filterMonth').value;
+        const year = document.getElementById('filterYear').value;
+        const site = document.getElementById('filterSite')?.value || 'all';
+        const params = new URLSearchParams({ month, year, site });
+        window.location.href = `/api/attendance/dashboard/monthly-report/export/?${params.toString()}`;
+    }
+
+    function startTime() {
+        const update = () => {
+            const now = new Date();
+            document.getElementById('live-clock').innerText = `🇦🇪 ` + now.toLocaleString('en-US', { timeZone: 'Asia/Dubai', weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        };
+        setInterval(update, 1000);
+        update();
+    }
 </script>
 {% endblock %}
