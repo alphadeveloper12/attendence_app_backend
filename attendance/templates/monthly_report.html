@@ -162,6 +162,27 @@
         color: white !important;
         transform: translateY(-1px);
     }
+
+    .avatar-circle-sm {
+        width: 38px;
+        height: 38px;
+        border-radius: 50%;
+        background: #f1f5f9;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        color: #4f46e5;
+        font-size: 0.95rem;
+        border: 1px solid #e2e8f0;
+        overflow: hidden;
+    }
+
+    .avatar-circle-sm img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
 </style>
 
 <!-- Top Navigation & Header -->
@@ -408,8 +429,8 @@
             <tr>
                 <td class="ps-4">
                     <div class="d-flex align-items-center gap-3">
-                        <div style="width: 38px; height: 38px; border-radius: 12px; background: #f1f5f9; display: flex; align-items: center; justify-content: center; font-weight: 700; color: #4f46e5; font-size: 0.95rem; border: 2px solid white; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
-                            ${r.name.charAt(0)}
+                        <div class="avatar-circle-sm">
+                            ${r.profile_picture ? `<img src="${r.profile_picture}" alt="${r.name}">` : r.name.charAt(0)}
                         </div>
                         <div>
                             <div class="fw-bold text-dark">${r.name}</div>

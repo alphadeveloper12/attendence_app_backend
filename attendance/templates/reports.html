@@ -136,13 +136,21 @@
         width: 40px;
         height: 40px;
         border-radius: 50%;
-        background: linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%);
+        background: #f1f5f9;
         color: #4338ca;
         display: flex;
         align-items: center;
         justify-content: center;
         font-weight: 700;
         font-size: 1rem;
+        overflow: hidden;
+        border: 1px solid #e2e8f0;
+    }
+
+    .avatar-circle img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
     }
 
     .badge-soft {
@@ -498,7 +506,7 @@
                 <td class="ps-4">
                     <div class="d-flex align-items-center gap-3">
                         <div class="avatar-circle">
-                            ${item.name.charAt(0)}
+                            ${item.profile_picture ? `<img src="${item.profile_picture}" alt="${item.name}">` : item.name.charAt(0)}
                         </div>
                         <div>
                             <div class="fw-bold text-dark">${item.name}</div>
