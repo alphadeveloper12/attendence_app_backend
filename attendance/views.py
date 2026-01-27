@@ -2422,7 +2422,7 @@ def export_reports_view(request):
     response['Content-Disposition'] = f'attachment; filename="attendance_report_{selected_date}.csv"'
 
     writer = csv.writer(response)
-    writer.writerow(['Employee Name', 'Badge ID', 'Department', 'Position', 'Site', 'Date', 'Status', 'Check In', 'Check Out'])
+    writer.writerow(['Employee Name', 'Badge ID', 'Grade', 'Department', 'Position', 'Site', 'Date', 'Status', 'Check In', 'Check Out'])
 
     for emp in employees:
         att = attendance_map.get(emp.id)
@@ -2443,6 +2443,7 @@ def export_reports_view(request):
         writer.writerow([
             emp.name,
             emp.badge_number,
+            emp.salary_grade,
             emp.department,
             emp.position,
             site_name,
@@ -3057,6 +3058,7 @@ class AttendanceReportDataView(APIView):
                 'name': emp.name,
                 'email': emp.email,
                 'badge_number': emp.badge_number,
+                'salary_grade': emp.salary_grade,
                 'department': emp.department,
                 'position': emp.position,
                 'profile_picture': emp.profile_picture.url if emp.profile_picture else None,

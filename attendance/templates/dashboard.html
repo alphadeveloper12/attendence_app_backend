@@ -360,6 +360,7 @@
                     </th>
                     <th>Employee</th>
                     <th>Badge ID</th>
+                    <th>Grade</th>
                     <th>Department</th>
                     <th>Position</th>
                     <th>Site</th>
@@ -736,6 +737,7 @@
                         </div>
                     </td>
                     <td><span class="badge bg-light text-dark border font-monospace px-2">${emp.badge_number || '-'}</span></td>
+                    <td>${emp.salary_grade || '-'}</td>
                     <td>${emp.department || '-'}</td>
                     <td>${emp.position || '-'}</td>
                     <td><i class="ri-map-pin-line text-secondary me-1"></i>${emp.site_name || '-'}</td>
@@ -805,6 +807,7 @@
                     fields: [
                         { label: 'Department', value: emp.department },
                         { label: 'Position', value: emp.position },
+                        { label: 'Grade', value: emp.salary_grade },
                         { label: 'Employer', value: emp.employer },
                         { label: 'Joining Date', value: emp.date_of_joining },
                         { label: 'Salary', value: emp.gross_salary ? `AED ${parseFloat(emp.gross_salary).toLocaleString()}` : '-' }

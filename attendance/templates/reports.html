@@ -354,6 +354,7 @@
                 <tr>
                     <th class="ps-4">Employee</th>
                     <th>Badge ID</th>
+                    <th>Grade</th>
                     <th>Department</th>
                     <th>Position</th>
                     <th>Site</th>
@@ -515,6 +516,7 @@
                     </div>
                 </td>
                 <td><span class="font-monospace fw-bold text-dark bg-secondary bg-opacity-10 px-2 py-1 rounded small">${item.badge_number || '-'}</span></td>
+                <td>${item.salary_grade || '<span class="text-muted">-</span>'}</td>
                 <td>${item.department || '<span class="text-muted">-</span>'}</td>
                 <td>${item.position || '<span class="text-muted">-</span>'}</td>
                 <td><div class="d-flex align-items-center gap-1"><i class="ri-building-line text-secondary"></i> ${item.site}</div></td>
