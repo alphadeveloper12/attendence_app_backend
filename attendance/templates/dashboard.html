@@ -590,6 +590,14 @@
                 <form id="importForm">
                     <input type="file" name="file" class="form-control form-control-modern" accept=".xlsx" required>
                 </form>
+                <div id="importProgressContainer" class="mt-3 d-none">
+                    <div class="progress" style="height: 10px; border-radius: 5px;">
+                        <div id="importProgressBar"
+                            class="progress-bar progress-bar-striped progress-bar-animated bg-success"
+                            role="progressbar" style="width: 0%"></div>
+                    </div>
+                    <p class="text-center small text-secondary mt-1 mb-0" id="importProgressText">Uploading... 0%</p>
+                </div>
             </div>
             <div class="modal-footer border-0 p-4 pt-0">
                 <button type="button" onclick="submitImport()" class="btn btn-premium btn-premium-green w-100 py-3"
@@ -626,6 +634,14 @@
                         <input type="file" name="file" class="form-control form-control-modern" required>
                     </div>
                 </form>
+                <div id="buildProgressContainer" class="mt-3 d-none">
+                    <div class="progress" style="height: 10px; border-radius: 5px;">
+                        <div id="buildProgressBar"
+                            class="progress-bar progress-bar-striped progress-bar-animated bg-warning"
+                            role="progressbar" style="width: 0%"></div>
+                    </div>
+                    <p class="text-center small text-secondary mt-1 mb-0" id="buildProgressText">Uploading... 0%</p>
+                </div>
             </div>
             <div class="modal-footer border-0 p-4 pt-0">
                 <button type="button" onclick="submitBuild()" class="btn btn-premium btn-premium-orange w-100 py-3"
@@ -885,20 +901,105 @@
     function openImportModal() { importModal = new bootstrap.Modal(document.getElementById('importModal')); importModal.show(); }
     function openBuildModal() { buildModal = new bootstrap.Modal(document.getElementById('buildModal')); buildModal.show(); }
 
+    function uploadWithProgress(url, formData, btnId, progressContainerId, progressBarId, progressTextId, successCallback, errorMsg) {
+        const btn = document.getElementById(btnId);
+        const container = document.getElementById(progressContainerId);
+        const bar = document.getElementById(progressBarId);
+        const text = document.getElementById(progressTextId);
+        const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+
+        btn.disabled = true;
+        btn.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span> Processing...`;
+        container.classList.remove('d-none');
+        bar.style.width = '0%';
+        text.textContent = 'Uploading... 0%';
+
+        const xhr = new XMLHttpRequest();
+
+        xhr.upload.addEventListener('progress', (e) => {
+            if (e.lengthComputable) {
+                const percent = Math.round((e.loaded / e.total) * 100);
+                bar.style.width = percent + '%';
+                text.textContent = `Uploading... ${percent}%`;
+                if (percent === 100) {
+                    text.textContent = 'Processing on server...';
+                }
+            }
+        });
+
+        xhr.addEventListener('load', () => {
+            if (xhr.status >= 200 && xhr.status < 300) {
+                successCallback();
+            } else {
+                alert(errorMsg || 'Upload Failed');
+            }
+            resetUI();
+        });
+
+        xhr.addEventListener('error', () => {
+            alert('Network Error');
+            resetUI();
+        });
+
+        function resetUI() {
+            btn.disabled = false;
+            btn.innerHTML = btn.getAttribute('data-original-text') || 'Submit';
+            container.classList.add('d-none');
+        }
+
+        // Store original text
+        if (!btn.getAttribute('data-original-text')) {
+            btn.setAttribute('data-original-text', btn.innerHTML);
+        }
+
+        xhr.open('POST', url);
+        xhr.setRequestHeader('X-CSRFToken', csrfToken);
+        xhr.send(formData);
+    }
+
     async function submitImport() {
-        const formData = new FormData(document.getElementById('importForm'));
-        try {
-            const res = await fetch('{% url "import-employees" %}', { method: 'POST', body: formData, headers: { 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value } });
-            if (res.ok) { importModal.hide(); loadEmployees(); } else { alert('Import Failed'); }
-        } catch (e) { alert('Network Error'); }
+        const form = document.getElementById('importForm');
+        if (!form.file.files.length) {
+            alert("Please select a file first");
+            return;
+        }
+        const formData = new FormData(form);
+        uploadWithProgress(
+            '{% url "import-employees" %}',
+            formData,
+            'importBtn',
+            'importProgressContainer',
+            'importProgressBar',
+            'importProgressText',
+            () => {
+                importModal.hide();
+                loadEmployees();
+                alert('Import successful!');
+            },
+            'Import Failed'
+        );
     }
 
     async function submitBuild() {
-        const formData = new FormData(document.getElementById('buildForm'));
-        try {
-            const res = await fetch('{% url "upload-build" %}', { method: 'POST', body: formData, headers: { 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value } });
-            if (res.ok) { buildModal.hide(); alert('Build Uploaded!'); } else { alert('Upload Failed'); }
-        } catch (e) { alert('Network Error'); }
+        const form = document.getElementById('buildForm');
+        if (!form.file.files.length) {
+            alert("Please select a file first");
+            return;
+        }
+        const formData = new FormData(form);
+        uploadWithProgress(
+            '{% url "upload-build" %}',
+            formData,
+            'buildBtn',
+            'buildProgressContainer',
+            'buildProgressBar',
+            'buildProgressText',
+            () => {
+                buildModal.hide();
+                alert('Build Uploaded Successfully!');
+            },
+            'Upload Failed'
+        );
     }
 
     // --- Bulk Selection & Delete ---
