@@ -1272,12 +1272,18 @@ class EmployeeListView(APIView):
                 Q(badge_number__icontains=search)
             )
 
+        # Pagination
+        paginator = PageNumberPagination()
+        # Default to a large number if not specified, but dashboard specifically sends per_page
+        paginator.page_size = int(request.GET.get('per_page', 1000))
+        result_page = paginator.paginate_queryset(employees, request)
+        
         serializer = EmployeeSerializer(
-            employees,
+            result_page,
             many=True,
             context={"request": request},
         )
-        return Response(serializer.data)
+        return paginator.get_paginated_response(serializer.data)
 
 
 # @login_required(login_url='admin-login')
@@ -2770,7 +2776,7 @@ def monthly_report_view(request):
             user__in=employees
         ).select_related('user')
         
-        # Process employee-wise data
+        attendance_map = {} # user_id -> list of records
         attendance_map = {} # user_id -> list of records
         for record in attendance_records:
             if record.user_id not in attendance_map:
