@@ -1244,7 +1244,6 @@ class AttendanceAlertsView(APIView):
 
 @permission_classes([IsAdminUser | IsSiteAdmin])
 class EmployeeListView(APIView):
-    pagination_class = None  # Disable pagination to return all users
     def get(self, request):
         employees = Employee.objects.select_related('site').all().order_by('name')
         
