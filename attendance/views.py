@@ -1244,6 +1244,7 @@ class AttendanceAlertsView(APIView):
 
 @permission_classes([IsAdminUser | IsSiteAdmin])
 class EmployeeListView(APIView):
+    pagination_class = None  # Disable pagination to return all users
     def get(self, request):
         employees = Employee.objects.select_related('site').all().order_by('name')
         
@@ -1271,17 +1272,12 @@ class EmployeeListView(APIView):
                 Q(badge_number__icontains=search)
             )
 
-        # Pagination
-        paginator = PageNumberPagination()
-        paginator.page_size = int(request.GET.get('per_page', 20))
-        result_page = paginator.paginate_queryset(employees, request)
-        
         serializer = EmployeeSerializer(
-            result_page,
+            employees,
             many=True,
             context={"request": request},
         )
-        return paginator.get_paginated_response(serializer.data)
+        return Response(serializer.data)
 
 
 # @login_required(login_url='admin-login')
