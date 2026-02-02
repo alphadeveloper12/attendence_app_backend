@@ -4,7 +4,7 @@ from .models import Employee, Attendance, Site
 class SiteSerializer(serializers.ModelSerializer):
     class Meta:
         model = Site
-        fields = ['id', 'name']
+        fields = ['id', 'name', 'office_start_time', 'office_end_time', 'worker_start_time', 'worker_end_time', 'office_day_off', 'worker_day_off']
 
 class UserSerializer(serializers.ModelSerializer):
     site_details = SiteSerializer(source='site', read_only=True)
@@ -13,7 +13,8 @@ class UserSerializer(serializers.ModelSerializer):
         model = Employee
         fields = [
             'id', 'name', 'email', 'phone', 'department', 'position', 'face_embedding', 'profile_picture',
-            'job_description', 'salary_grade', 'badge_number', 'mol_id', 'labor_card_number', 'site', 'site_details', 'employer'
+            'job_description', 'salary_grade', 'badge_number', 'mol_id', 'labor_card_number', 'site', 'site_details', 'employer',
+            'category', 'basic_salary'
         ]
 
 class AttendanceSerializer(serializers.ModelSerializer):
@@ -32,7 +33,7 @@ class EmployeeSerializer(serializers.ModelSerializer):
             'id', 'name', 'email', 'phone', 'department', 'position', 'profile_picture_url', 'site', 'site_name',
             'job_description', 'salary_grade', 'badge_number', 'mol_id', 'labor_card_number', 'employer', 
             'nationality', 'gender', 'marital_status', 'religion', 'date_of_birth', 'date_of_joining', 
-            'passport_number', 'passport_expiry', 'visa_details', 'status', 'gross_salary', 'camp', 'transportation'
+            'passport_number', 'passport_expiry', 'visa_details', 'status', 'gross_salary', 'basic_salary', 'category', 'camp', 'transportation'
         ]
 
     def get_profile_picture_url(self, obj):
@@ -67,6 +68,8 @@ class EnrollSerializer(serializers.Serializer):
     visa_details = serializers.CharField(required=False, allow_blank=True)
     status = serializers.CharField(required=False, allow_blank=True)
     gross_salary = serializers.DecimalField(max_digits=10, decimal_places=2, required=False, allow_null=True)
+    basic_salary = serializers.DecimalField(max_digits=10, decimal_places=2, required=False, allow_null=True)
+    category = serializers.CharField(required=False, allow_blank=True)
     camp = serializers.CharField(required=False, allow_blank=True)
     transportation = serializers.CharField(required=False, allow_blank=True)
     # images = serializers.ListField(

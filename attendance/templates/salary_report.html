@@ -268,9 +268,10 @@
                 <tr>
                     <th class="ps-4">Employee</th>
                     <th>Site</th>
-                    <th class="text-center">Gross Salary</th>
+                    <th class="text-center">Basic Salary</th>
                     <th class="text-center">Days (W/P/A)</th>
-                    <th class="text-center">Deduction</th>
+                    <th class="text-center">OT (N/S)</th>
+                    <th class="text-center">Bonus/Deduct</th>
                     <th class="text-center">Net Salary</th>
                     <th class="text-end pe-4">Actions</th>
                 </tr>
@@ -412,7 +413,7 @@
                     </div>
                 </td>
                 <td><div class="small fw-medium text-secondary"><i class="ri-map-pin-line"></i> ${r.site}</div></td>
-                <td class="text-center"><span class="salary-badge">${parseFloat(r.gross_salary).toLocaleString()}</span></td>
+                <td class="text-center"><span class="salary-badge">${parseFloat(r.basic_salary).toLocaleString()}</span></td>
                 <td class="text-center">
                     <div class="d-flex justify-content-center gap-1">
                         <span class="badge bg-light text-dark border rounded-pill px-2" title="Working Days">${r.working_days}W</span>
@@ -420,7 +421,18 @@
                         <span class="badge bg-danger bg-opacity-10 text-danger rounded-pill px-2" title="Absent">${r.absent_days}A</span>
                     </div>
                 </td>
-                <td class="text-center text-danger fw-bold">-${r.deduction.toLocaleString()}</td>
+                <td class="text-center">
+                    <div class="d-flex flex-column gap-1">
+                        <span class="badge bg-info bg-opacity-10 text-info rounded-pill px-2" title="Normal OT">${r.normal_ot_hours}h N</span>
+                        <span class="badge bg-warning bg-opacity-10 text-warning rounded-pill px-2" title="Special OT">${r.special_ot_hours}h S</span>
+                    </div>
+                </td>
+                <td class="text-center">
+                    <div class="d-flex flex-column gap-1">
+                        <span class="text-success small fw-bold">+${r.normal_ot_pay + r.special_ot_pay}</span>
+                        <span class="text-danger small fw-bold">-${r.deduction}</span>
+                    </div>
+                </td>
                 <td class="text-center"><span class="salary-badge net-salary-badge">${r.net_salary.toLocaleString()}</span></td>
                 <td class="text-end pe-4">
                     <div class="d-flex gap-2 justify-content-end">
@@ -503,8 +515,16 @@
                     </thead>
                     <tbody>
                         <tr>
-                            <td class="ps-2">Gross Salary (Basic)</td>
-                            <td class="text-end pe-2 fw-bold">${parseFloat(emp.gross_salary).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                            <td class="ps-2">Basic Salary</td>
+                            <td class="text-end pe-2 fw-bold">${parseFloat(emp.basic_salary).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                        </tr>
+                        <tr>
+                            <td class="ps-2 text-success">Normal Overtime (${emp.normal_ot_hours} hrs @ 1.25x)</td>
+                            <td class="text-end pe-2 text-success fw-bold">+${emp.normal_ot_pay.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                        </tr>
+                        <tr>
+                            <td class="ps-2 text-success">Special Overtime (${emp.special_ot_hours} hrs @ 1.50x)</td>
+                            <td class="text-end pe-2 text-success fw-bold">+${emp.special_ot_pay.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                         </tr>
                         <tr>
                             <td class="ps-2 text-danger">Absence Deduction (${emp.absent_days} days)</td>

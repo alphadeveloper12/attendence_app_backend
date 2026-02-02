@@ -42,7 +42,7 @@ class AttendanceAdmin(admin.ModelAdmin):
 
 # Employee Admin
 class EmployeeAdmin(admin.ModelAdmin):
-    list_display = ('name', 'email', 'phone', 'department', 'position', 'site', 'get_late_minutes')
+    list_display = ('name', 'badge_number', 'site', 'department', 'position', 'nationality', 'gross_salary', 'get_late_minutes')
     list_filter = ('site', 'department', 'position')  # Admin can filter by site, department, and position
     search_fields = ['name', 'email', 'phone']
     ordering = ('site',)  # Default sorting based on the site field
@@ -61,7 +61,7 @@ class DepartmentAdmin(admin.ModelAdmin):
     search_fields = ['name']
 
 class SiteAdmin(admin.ModelAdmin):
-    list_display = ('id', 'name')
+    list_display = ('id', 'name', 'office_start_time', 'office_end_time', 'worker_start_time', 'worker_end_time', 'office_day_off', 'worker_day_off')
     search_fields = ['name']
 
 # Register models in admin

@@ -15,6 +15,14 @@ class Site(models.Model):
     geofence_lat = models.FloatField(null=True, blank=True)
     geofence_lng = models.FloatField(null=True, blank=True)
     geofence_radius_meters = models.FloatField(default=100.0)
+    
+    # New timing fields
+    office_start_time = models.TimeField(null=True, blank=True, default="09:00:00")
+    office_end_time = models.TimeField(null=True, blank=True, default="18:00:00")
+    worker_start_time = models.TimeField(null=True, blank=True, default="08:00:00")
+    worker_end_time = models.TimeField(null=True, blank=True, default="17:00:00")
+    office_day_off = models.CharField(max_length=50, null=True, blank=True, default="Sunday")
+    worker_day_off = models.CharField(max_length=50, null=True, blank=True, default="Sunday")
 
     def __str__(self):
         return self.name
@@ -63,6 +71,8 @@ class Employee(models.Model):
         ('Company Bus', 'Company Bus'),
         ('personal', 'Personal'),
     ])
+    basic_salary = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    category = models.CharField(max_length=20, choices=[('staff', 'Staff'), ('worker', 'Worker')], default='worker')
     
     def __str__(self):
         return self.name
@@ -75,6 +85,8 @@ class Attendance(models.Model):
     check_out_time = models.DateTimeField(null=True, blank=True)
     late_minutes = models.IntegerField(default=0)  # Store late minutes
     early_minutes = models.IntegerField(default=0)  # Store early going minutes
+    normal_ot_hours = models.DecimalField(max_digits=5, decimal_places=2, default=0.00)
+    special_ot_hours = models.DecimalField(max_digits=5, decimal_places=2, default=0.00)
     status = models.CharField(max_length=10, choices=[('present', 'Present'), ('absent', 'Absent'), ('late', 'Late')])
     date = models.DateField(default=timezone.localdate)  # Track date for attendance, using localdate
     latitude = models.FloatField(null=True, blank=True)  # Store latitude
@@ -93,25 +105,64 @@ class Attendance(models.Model):
         return f"{self.user.name} - {self.status} ({self.date})"
 
     def calculate_late_and_early(self):
-        """Calculate late and early minutes using timezone-aware datetimes."""
+        """Calculate late, early minutes and overtime hours including special OT."""
+        from datetime import datetime
+        if not self.user or not self.user.site:
+            return
 
-        # Expected check-in: 09:00 AM
+        site = self.user.site
+        is_staff = self.user.category == 'staff'
+        
+        # Determine schedule based on category
+        start_time = site.office_start_time if is_staff else site.worker_start_time
+        end_time = site.office_end_time if is_staff else site.worker_end_time
+        day_off = site.office_day_off if is_staff else site.worker_day_off
+        
+        if not start_time or not end_time:
+            return
+
+        # Check if today is a special day (off day)
+        day_name = self.date.strftime('%A')
+        is_special_day = day_name.lower() == (day_off or "").lower()
+
+        # Expected check-in
         if self.check_in_time:
             expected_check_in = timezone.make_aware(
-                datetime.combine(self.date, time(9, 0)),
+                datetime.combine(self.date, start_time),
                 timezone.get_current_timezone()
             )
             diff = (self.check_in_time - expected_check_in).total_seconds() / 60
             self.late_minutes = max(0, int(diff))
 
-        # Expected check-out: 06:00 PM
+        # Expected check-out and Overtime
         if self.check_out_time:
             expected_check_out = timezone.make_aware(
-                datetime.combine(self.date, time(18, 0)),
+                datetime.combine(self.date, end_time),
                 timezone.get_current_timezone()
             )
-            diff = (expected_check_out - self.check_out_time).total_seconds() / 60
-            self.early_minutes = max(0, int(diff))
+            
+            # Early minutes
+            early_diff = (expected_check_out - self.check_out_time).total_seconds() / 60
+            self.early_minutes = max(0, int(early_diff))
+            
+            # Overtime Calculation
+            # 1. Normal OT: check_out > expected_check_out + 1 hour (on working days)
+            # 2. Special OT: any work on is_special_day
+            
+            if is_special_day:
+                # All work on special day is Special OT
+                if self.check_in_time and self.check_out_time:
+                    total_work_minutes = (self.check_out_time - self.check_in_time).total_seconds() / 3600
+                    self.special_ot_hours = round(max(0.0, total_work_minutes), 2)
+                    self.normal_ot_hours = 0.0
+            else:
+                # Normal working day
+                ot_diff_seconds = (self.check_out_time - expected_check_out).total_seconds()
+                if ot_diff_seconds >= 3600: # First hour threshold (3600 seconds = 1 hour)
+                    self.normal_ot_hours = round(ot_diff_seconds / 3600, 2)
+                else:
+                    self.normal_ot_hours = 0.0
+                self.special_ot_hours = 0.0
 
         # self.save()  <-- Removed to prevent double-save in view
 

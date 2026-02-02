@@ -308,6 +308,19 @@
     </div>
 </div>
 
+<!-- Employee Profile Section -->
+<div class="card border-0 rounded-4 shadow-sm mb-5">
+    <div class="card-header bg-white p-4 border-bottom">
+        <h5 class="fw-bold mb-0">Employee Profile Details</h5>
+    </div>
+    <div class="card-body p-4">
+        <div class="row g-4" id="profile-details-grid">
+            <!-- Populated via JS -->
+            <div class="text-center py-4 text-muted">Loading profile details...</div>
+        </div>
+    </div>
+</div>
+
 <!-- Attendance Explorer -->
 <div class="card border-0 rounded-4 shadow-sm mb-5">
     <div
@@ -413,6 +426,70 @@
         } else {
             document.getElementById('profile-initial').textContent = emp.name.charAt(0);
         }
+
+        // Render detailed grid
+        const detailGrid = document.getElementById('profile-details-grid');
+        const sections = [
+            {
+                title: "Personal Details",
+                fields: [
+                    { label: 'Nationality', value: emp.nationality },
+                    { label: 'Gender', value: emp.gender },
+                    { label: 'Marital Status', value: emp.marital_status },
+                    { label: 'Religion', value: emp.religion },
+                    { label: 'Date of Birth', value: emp.date_of_birth }
+                ]
+            },
+            {
+                title: "Employment Info",
+                fields: [
+                    { label: 'Division', value: emp.department },
+                    { label: 'Present Designation', value: emp.position },
+                    { label: 'Category', value: emp.salary_grade },
+                    { label: 'Employer', value: emp.employer },
+                    { label: 'D.O.J.', value: emp.date_of_joining }
+                ]
+            },
+            {
+                title: "Passport & Identity",
+                fields: [
+                    { label: 'Passport Nr.', value: emp.passport_number },
+                    { label: 'Passport Expiry', value: emp.passport_expiry },
+                    { label: 'Visa Details', value: emp.visa_details }
+                ]
+            },
+            {
+                title: "Labour Card Details",
+                fields: [
+                    { label: 'L.Card/CEC Nr.', value: emp.labor_card_number },
+                    { label: 'Personal Nr. (MOL)', value: emp.mol_id }
+                ]
+            },
+            {
+                title: "Salary & Logistics",
+                fields: [
+                    { label: 'Gross Salary', value: emp.gross_salary ? `AED ${parseFloat(emp.gross_salary).toLocaleString()}` : '-' },
+                    { label: 'Housing Camp', value: emp.camp },
+                    { label: 'Transportation', value: emp.transportation }
+                ]
+            }
+        ];
+
+        detailGrid.innerHTML = sections.map(s => `
+            <div class="col-12">
+                <h6 class="fw-bold text-primary text-uppercase mb-3" style="font-size: 0.75rem; letter-spacing: 0.05em;">${s.title}</h6>
+                <div class="row g-2 mb-2">
+                    ${s.fields.map(f => `
+                        <div class="col-md-3 col-6">
+                            <div class="p-3 rounded-4 bg-light border border-white h-100">
+                                <div class="text-secondary mb-1" style="font-size: 0.65rem; font-weight: 700; text-transform: uppercase;">${f.label}</div>
+                                <div class="text-dark fw-bold small">${f.value || '-'}</div>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `).join('');
     }
 
     function renderStats(stats) {

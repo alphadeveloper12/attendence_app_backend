@@ -15,7 +15,7 @@ from decimal import Decimal
 
 from django.conf import settings
 from django.db import transaction
-from django.db.models import Count, Q
+from django.db.models import Count, Q, Sum
 from django.utils import timezone
 from django.core.files.base import ContentFile
 from django.urls import reverse
@@ -197,6 +197,9 @@ class ImportEmployeesView(APIView):
             
             col_map['gross_salary'] = find_col_index(['Gross Salary'], header_row_2)
             if col_map['gross_salary'] == -1: col_map['gross_salary'] = find_col_index(['Gross Salary'], header_row_1)
+            
+            col_map['basic_salary'] = find_col_index(['Basic Salary'], header_row_2)
+            if col_map['basic_salary'] == -1: col_map['basic_salary'] = find_col_index(['Basic Salary'], header_row_1)
 
             col_map['nationality'] = find_col_index(['Nationality'], header_row_1)
             if col_map['nationality'] == -1: col_map['nationality'] = find_col_index(['Nationality'], header_row_2)
@@ -263,11 +266,8 @@ class ImportEmployeesView(APIView):
                         debug_info.append(f"Row {index}: Skipped (No Name)")
                         continue # Skip empty rows
 
-                    # Filter by Status
+                    # Filter by Status (Removed as per user request to allow all statuses)
                     status = get_val('status')
-                    if status and status.lower() not in ['active', 'leave']:
-                        debug_info.append(f"Row {index}: Skipped (Status: {status})")
-                        continue
 
                     badge = get_val('badge_number')
                     nationality = get_val('nationality')
@@ -281,7 +281,19 @@ class ImportEmployeesView(APIView):
                     if badge:
                         emp = Employee.objects.filter(badge_number=badge).first()
                     
-                    # If not found by badge, try to find by name + employer + nationality
+                    # Try by MOL ID
+                    if not emp:
+                        mol_id = get_val('mol_id')
+                        if mol_id:
+                            emp = Employee.objects.filter(mol_id=mol_id).first()
+                    
+                    # Try by Passport Number
+                    if not emp:
+                        passport_number = get_val('passport_number')
+                        if passport_number:
+                            emp = Employee.objects.filter(passport_number=passport_number).first()
+                    
+                    # If not found by IDs, try to find by name + employer + nationality
                     if not emp and name and employer_name and nationality:
                         emp = Employee.objects.filter(
                             name=name,
@@ -311,6 +323,28 @@ class ImportEmployeesView(APIView):
                             emp.gross_salary = float(gross_salary_val)
                         except:
                             pass
+                    
+                    # Basic Salary
+                    basic_salary_val = get_val('basic_salary')
+                    if basic_salary_val:
+                        try:
+                            basic_salary_val = basic_salary_val.replace(',', '')
+                            emp.basic_salary = float(basic_salary_val)
+                        except:
+                            pass
+                    
+                    if not emp.basic_salary and emp.gross_salary:
+                        # Fallback: if basic salary not in sheet, assume 60% of gross as a safe default or user defined
+                        # However, for now, let's just use gross if basic is missing
+                        emp.basic_salary = emp.gross_salary
+
+                    # Category detection
+                    div = get_val('department') or ""
+                    cat = get_val('salary_grade') or ""
+                    if 'staff' in div.lower() or 'staff' in cat.lower() or 'office' in div.lower():
+                        emp.category = 'staff'
+                    else:
+                        emp.category = 'worker'
 
                     emp.nationality = get_val('nationality')
                     emp.gender = get_val('gender')
@@ -505,6 +539,8 @@ class AdminAddEmployeeView(APIView):
                 employer=data.get('employer'),
                 site=site,
                 gross_salary=parse_decimal(data.get('gross_salary')),
+                basic_salary=parse_decimal(data.get('basic_salary')),
+                category=data.get('category', 'worker'),
                 camp=data.get('camp'),
                 transportation=data.get('transportation')
             )
@@ -515,8 +551,7 @@ class AdminAddEmployeeView(APIView):
 
 
 class AdminEditEmployeeView(APIView):
-    authentication_classes = [SessionAuthentication]
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsAdminUser | IsSiteAdmin]
 
     def get(self, request, employee_id):
         try:
@@ -602,6 +637,8 @@ class AdminEditEmployeeView(APIView):
             emp.date_of_joining = parse_date(data.get('date_of_joining'))
             emp.passport_expiry = parse_date(data.get('passport_expiry'))
             emp.gross_salary = parse_decimal(data.get('gross_salary'))
+            emp.basic_salary = parse_decimal(data.get('basic_salary'))
+            emp.category = data.get('category', emp.category)
             
             emp.save()
             return Response({'success': True, 'message': 'Employee updated successfully'})
@@ -1158,6 +1195,8 @@ class AttendanceStatsView(APIView):
 
             # Filter by Site (Query Param or Admin Profile)
             site_id = request.GET.get('site')
+            status_filter = request.GET.get('status')
+            
             if not request.user.is_superuser:
                 try:
                     profile = AdminProfile.objects.get(user=request.user)
@@ -1171,6 +1210,14 @@ class AttendanceStatsView(APIView):
             if site_id and site_id != 'all':
                 employees = employees.filter(site_id=site_id)
                 attendance = attendance.filter(user__site_id=site_id)
+
+            if status_filter and status_filter != 'all':
+                employees = employees.filter(status__iexact=status_filter)
+                attendance = attendance.filter(user__status__iexact=status_filter)
+
+            # Get unique statuses for the filter dropdown
+            unique_statuses = Employee.objects.exclude(status__isnull=True).exclude(status='').values_list('status', flat=True).distinct()
+            unique_statuses = sorted(list(unique_statuses))
 
             # Chart Data (Last 7 Days)
             today = timezone.localdate()
@@ -1193,6 +1240,7 @@ class AttendanceStatsView(APIView):
                     "today_attendance_count": attendance.count(),
                     "total_sites": all_sites.count(),
                     "sites": [{"id": s.id, "name": s.name} for s in all_sites],
+                    "statuses": unique_statuses,
                     "chart": {
                         "labels": chart_labels,
                         "data": chart_data
@@ -1261,6 +1309,11 @@ class EmployeeListView(APIView):
 
         if site_id and site_id != 'all':
             employees = employees.filter(site_id=site_id)
+
+        # Filter by status
+        status_filter = request.GET.get('status')
+        if status_filter and status_filter != 'all':
+            employees = employees.filter(status__iexact=status_filter)
 
         # Search
         search = request.GET.get('search')
@@ -1359,6 +1412,11 @@ def admin_dashboard_view(request):
             employees = employees.filter(site_id=selected_site_id)
         except (ValueError, TypeError):
             pass
+            
+    # Status Filtering
+    status_filter = request.GET.get('status', 'all')
+    if status_filter != 'all':
+        employees = employees.filter(status__iexact=status_filter)
             
     # Search Filtering
     search_query = request.GET.get('search', '')
@@ -1816,7 +1874,13 @@ def admin_sites_view(request):
                 'id': site.id,
                 'name': site.name,
                 'employee_count': site.employee_count,
-                'detail_url': reverse('admin-site-detail', args=[site.id])
+                'detail_url': reverse('admin-site-detail', args=[site.id]),
+                'office_start': site.office_start_time.strftime("%H:%M") if site.office_start_time else "",
+                'office_end': site.office_end_time.strftime("%H:%M") if site.office_end_time else "",
+                'worker_start': site.worker_start_time.strftime("%H:%M") if site.worker_start_time else "",
+                'worker_end': site.worker_end_time.strftime("%H:%M") if site.worker_end_time else "",
+                'office_day_off': site.office_day_off or "",
+                'worker_day_off': site.worker_day_off or ""
             })
             
         return JsonResponse({
@@ -1892,6 +1956,134 @@ class ImportSitesView(APIView):
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+class ImportSitesScheduleView(APIView):
+    permission_classes = [IsAdminUser]
+    authentication_classes = [SessionAuthentication]
+
+    def post(self, request):
+        if 'file' not in request.FILES:
+            return Response({'error': 'No file uploaded'}, status=400)
+
+        file = request.FILES['file']
+        try:
+            import pandas as pd
+            from datetime import datetime, time
+            df = pd.read_excel(file, header=None, engine='openpyxl')
+            
+            header_row_index = -1
+            for i in range(10):
+                row_values = df.iloc[i].astype(str).str.strip().tolist()
+                if any('Project' in val for val in row_values) and any('Day OFF' in val for val in row_values):
+                    header_row_index = i
+                    break
+            
+            if header_row_index == -1:
+                return Response({'error': 'Could not find header row with "Project" and "Day OFF"'}, status=400)
+            
+            data_start_index = header_row_index + 2
+            header_row = df.iloc[header_row_index].astype(str).str.strip().tolist()
+            
+            col_map = {}
+            for idx, val in enumerate(header_row):
+                if 'Project' in val: col_map['project'] = idx
+                if 'Office Day Off' in val: col_map['office_day_off'] = idx
+                if 'Worker Day Off' in val: col_map['worker_day_off'] = idx
+                if 'Office' in val:
+                    col_map['office_start'] = idx
+                    col_map['office_end'] = idx + 1
+                if 'Site' in val:
+                    col_map['worker_start'] = idx
+                    col_map['worker_end'] = idx + 1
+
+            imported_count = 0
+            errors = []
+            
+            for index, row in df.iloc[data_start_index:].iterrows():
+                try:
+                    site_name = str(row.iloc[col_map['project']]).strip() if 'project' in col_map else None
+                    if not site_name or site_name.lower() == 'nan': continue
+                    
+                    site_obj = Site.objects.filter(name__iexact=site_name).first()
+                    if not site_obj:
+                        site_obj = Site.objects.create(name=site_name)
+                    
+                    if 'office_day_off' in col_map:
+                        val = row.iloc[col_map['office_day_off']]
+                        site_obj.office_day_off = str(val).strip() if pd.notna(val) else site_obj.office_day_off
+                    
+                    if 'worker_day_off' in col_map:
+                        val = row.iloc[col_map['worker_day_off']]
+                        site_obj.worker_day_off = str(val).strip() if pd.notna(val) else site_obj.worker_day_off
+                    
+                    def parse_time(val):
+                        if pd.isna(val) or str(val).lower() == 'nan': return None
+                        try:
+                            if isinstance(val, (datetime, time)): return val if isinstance(val, time) else val.time()
+                            time_str = str(val).strip()
+                            for fmt in ["%I:%M %p", "%H:%M:%S", "%H:%M"]:
+                                try: return datetime.strptime(time_str, fmt).time()
+                                except: pass
+                            return pd.to_datetime(time_str).time()
+                        except: return None
+
+                    if 'office_start' in col_map: site_obj.office_start_time = parse_time(row.iloc[col_map['office_start']]) or site_obj.office_start_time
+                    if 'office_end' in col_map: site_obj.office_end_time = parse_time(row.iloc[col_map['office_end']]) or site_obj.office_end_time
+                    if 'worker_start' in col_map: site_obj.worker_start_time = parse_time(row.iloc[col_map['worker_start']]) or site_obj.worker_start_time
+                    if 'worker_end' in col_map: site_obj.worker_end_time = parse_time(row.iloc[col_map['worker_end']]) or site_obj.worker_end_time
+                    
+                    site_obj.save()
+                    imported_count += 1
+                except Exception as e:
+                    errors.append(f"Row {index + 1}: {str(e)}")
+
+            return Response({'success': True, 'imported_count': imported_count, 'errors': errors})
+        except Exception as e:
+            return Response({'error': str(e)}, status=500)
+
+
+class DownloadSiteScheduleTemplateView(APIView):
+    permission_classes = [IsAdminUser]
+    authentication_classes = [SessionAuthentication]
+
+    def get(self, request):
+        import pandas as pd
+        import io
+        from django.http import HttpResponse
+
+        header_row_1 = ["S.N.", "Project", "Office Day Off", "Worker Day Off", "Office", "", "Site", ""]
+        header_row_2 = ["", "", "", "", "Duty Start", "Duty End", "Duty Start", "Duty End"]
+        sample_data = [
+            [1, "Elora & Velora", "Friday", "Friday", "07:00 AM", "05:00 PM", "06:30 AM", "05:00 PM"],
+            [2, "City Walk", "Friday", "Friday", "07:30 AM", "05:30 PM", "06:30 AM", "05:30 PM"],
+            [3, "Alana", "Friday", "Friday", "06:30 AM", "05:00 PM", "", ""],
+            [4, "Park Horizon", "Friday", "Friday", "07:00 AM", "05:00 PM", "06:30 AM", "05:00 PM"],
+            [5, "Video", "Friday", "Friday", "07:00 AM", "05:00 PM", "06:30 AM", "05:00 PM"],
+            [6, "Precast", "Sunday", "Sunday", "07:00 AM", "05:00 PM", "06:30 AM", "05:00 PM"],
+            [7, "Abu Dhabi", "Sunday", "Sunday", "07:00 AM", "05:00 PM", "06:30 AM", "05:00 PM"],
+            [8, "Factory Sauce", "Sunday", "Sunday", "07:00 AM", "05:00 PM", "06:30 AM", "05:00 PM"],
+            [9, "Opal Garden", "Sunday", "Sunday", "07:00 AM", "05:00 PM", "06:30 AM", "05:00 PM"],
+            [10, "The Residence", "Sunday", "Sunday", "07:00 AM", "05:00 PM", "06:30 AM", "05:00 PM"],
+        ]
+
+        df = pd.DataFrame([header_row_1, header_row_2] + sample_data)
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            df.to_excel(writer, index=False, header=False, sheet_name='Site Schedules')
+            workbook = writer.book
+            worksheet = writer.sheets['Site Schedules']
+            header_format = workbook.add_format({'bold': True, 'bg_color': '#D7E4BC', 'border': 1})
+            worksheet.merge_range('E1:F1', 'Office', header_format)
+            worksheet.merge_range('G1:H1', 'Site', header_format)
+            for c, v in enumerate(header_row_1):
+                if c not in [4, 5, 6, 7]: worksheet.write(0, c, v, header_format)
+            for c, v in enumerate(header_row_2): worksheet.write(1, c, v, header_format)
+
+        output.seek(0)
+        response = HttpResponse(output.read(), content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        response['Content-Disposition'] = 'attachment; filename=site_schedule_template.xlsx'
+        return response
+
+
 @login_required(login_url="admin-login")
 @require_http_methods(["GET", "POST"])
 def admin_add_site(request):
@@ -1937,7 +2129,23 @@ def admin_add_site(request):
                 except Exception as e:
                     print(f"Error parsing KML: {e}")
 
-            Site.objects.create(name=name, coordinates=coordinates)
+            office_start = request.POST.get("office_start")
+            office_end = request.POST.get("office_end")
+            worker_start = request.POST.get("worker_start")
+            worker_end = request.POST.get("worker_end")
+            office_day_off = request.POST.get("office_day_off")
+            worker_day_off = request.POST.get("worker_day_off")
+
+            Site.objects.create(
+                name=name, 
+                coordinates=coordinates,
+                office_start_time=office_start or "09:00:00",
+                office_end_time=office_end or "18:00:00",
+                worker_start_time=worker_start or "08:00:00",
+                worker_end_time=worker_end or "17:00:00",
+                office_day_off=office_day_off or "Sunday",
+                worker_day_off=worker_day_off or "Sunday"
+            )
             return redirect("admin-sites")
         else:
             # Re-fetch sites with pagination for error display
@@ -2003,6 +2211,21 @@ def admin_edit_site(request, site_id):
                     # Optionally handle error, e.g., return with error message
             
             site.name = name
+            
+            office_start = request.POST.get("office_start")
+            office_end = request.POST.get("office_end")
+            worker_start = request.POST.get("worker_start")
+            worker_end = request.POST.get("worker_end")
+            office_day_off = request.POST.get("office_day_off")
+            worker_day_off = request.POST.get("worker_day_off")
+            
+            if office_start: site.office_start_time = office_start
+            if office_end: site.office_end_time = office_end
+            if worker_start: site.worker_start_time = worker_start
+            if worker_end: site.worker_end_time = worker_end
+            if office_day_off: site.office_day_off = office_day_off
+            if worker_day_off: site.worker_day_off = worker_day_off
+            
             site.save()
             return redirect("admin-sites")
         else:
@@ -2501,20 +2724,36 @@ class AdminSalaryReportView(APIView):
             date__month=month,
             status='present',
             user__in=employees
-        ).values('user_id').annotate(count=Count('id'))
+        ).values('user_id').annotate(
+            count=Count('id'),
+            normal_ot=Sum('normal_ot_hours'),
+            special_ot=Sum('special_ot_hours')
+        )
         
-        attendance_map = {item['user_id']: item['count'] for item in attendance_stats}
+        attendance_map = {item['user_id']: item for item in attendance_stats}
         
         salary_data = []
         for emp in employees:
             if not emp.gross_salary:
                 continue
                 
-            present_days = attendance_map.get(emp.id, 0)
+            att_data = attendance_map.get(emp.id, {'count': 0, 'normal_ot': 0, 'special_ot': 0})
+            present_days = att_data['count']
+            normal_ot_total = float(att_data.get('normal_ot') or 0.0)
+            special_ot_total = float(att_data.get('special_ot') or 0.0)
+            
             daily_rate = float(emp.gross_salary) / 30.0
             absent_days = working_days_count - present_days
             deduction = daily_rate * max(0, absent_days)
-            net_salary = float(emp.gross_salary) - deduction
+            
+            # OT Calculations
+            # Hourly rate based on basic salary
+            basic_salary = float(emp.basic_salary or emp.gross_salary)
+            hourly_base = basic_salary / num_days / 8.0
+            normal_ot_pay = hourly_base * normal_ot_total * 1.25
+            special_ot_pay = hourly_base * special_ot_total * 1.50
+            
+            net_salary = float(emp.gross_salary) - deduction + normal_ot_pay + special_ot_pay
             
             salary_data.append({
                 'id': emp.id,
@@ -2524,9 +2763,14 @@ class AdminSalaryReportView(APIView):
                 'site': emp.site.name if emp.site else '-',
                 'profile_picture': emp.profile_picture.url if emp.profile_picture else None,
                 'gross_salary': str(emp.gross_salary),
+                'basic_salary': str(emp.basic_salary or emp.gross_salary),
                 'working_days': working_days_count,
                 'present_days': present_days,
                 'absent_days': max(0, absent_days),
+                'normal_ot_hours': round(normal_ot_total, 2),
+                'special_ot_hours': round(special_ot_total, 2),
+                'normal_ot_pay': round(normal_ot_pay, 2),
+                'special_ot_pay': round(special_ot_pay, 2),
                 'deduction': round(deduction, 2),
                 'net_salary': round(net_salary, 2),
             })
@@ -2585,18 +2829,34 @@ class DownloadSalarySlipView(APIView):
             if calendar.weekday(year, month, day) != 6:
                 working_days_count += 1
                 
-        present_days = Attendance.objects.filter(
+        # OT Data Fetch
+        att_data = Attendance.objects.filter(
             user=employee,
             date__year=year,
             date__month=month,
             status='present'
-        ).count()
+        ).aggregate(
+            count=Count('id'),
+            normal_ot=Sum('normal_ot_hours'),
+            special_ot=Sum('special_ot_hours')
+        )
+        
+        present_days = att_data['count'] or 0
+        normal_ot_total = float(att_data.get('normal_ot') or 0.0)
+        special_ot_total = float(att_data.get('special_ot') or 0.0)
         
         gross_val = float(employee.gross_salary or 0)
+        basic_salary = float(employee.basic_salary or employee.gross_salary or 0)
         daily_rate = gross_val / 30.0
         absent_days = working_days_count - present_days
         deduction = daily_rate * max(0, absent_days)
-        net_salary = gross_val - deduction
+        
+        # OT Pay calculation
+        hourly_base = basic_salary / num_days / 8.0
+        normal_ot_pay = hourly_base * normal_ot_total * 1.25
+        special_ot_pay = hourly_base * special_ot_total * 1.50
+        
+        net_salary = gross_val - deduction + normal_ot_pay + special_ot_pay
         
         # Generate PDF using fpdf2
         pdf = FPDF()
@@ -2681,6 +2941,16 @@ class DownloadSalarySlipView(APIView):
         pdf.cell(140, 10, f"  Absence Deduction ({max(0, absent_days)} days absent)", 1)
         pdf.cell(50, 10, f"-{deduction:,.2f}  ", 1, 1, "R")
         
+        # OT Additions
+        pdf.set_text_color(16, 185, 129) # Emerald 500
+        if normal_ot_total > 0:
+            pdf.cell(140, 10, f"  Normal Overtime ({normal_ot_total:.2f} hrs @ 1.25x)", 1)
+            pdf.cell(50, 10, f"+{normal_ot_pay:,.2f}  ", 1, 1, "R")
+        
+        if special_ot_total > 0:
+            pdf.cell(140, 10, f"  Special Overtime ({special_ot_total:.2f} hrs @ 1.50x)", 1)
+            pdf.cell(50, 10, f"+{special_ot_pay:,.2f}  ", 1, 1, "R")
+            
         # Total
         pdf.set_text_color(16, 185, 129) # Emerald 500
         pdf.set_font("helvetica", "B", 12)
@@ -3097,3 +3367,59 @@ class AttendanceReportDataView(APIView):
                 'has_previous': page_obj.has_previous(),
             }
         })
+
+class EmployeeAttendanceHistoryView(APIView):
+    permission_classes = [IsAdminUser | IsSiteAdmin]
+
+    def get(self, request, employee_id):
+        try:
+            emp = Employee.objects.get(id=employee_id)
+            
+            # Check permission for site admin
+            if not request.user.is_superuser:
+                 try:
+                     profile = AdminProfile.objects.get(user=request.user)
+                     if profile.site and emp.site != profile.site:
+                         return Response({'error': 'Permission Denied'}, status=403)
+                 except AdminProfile.DoesNotExist:
+                     pass
+
+            attendance = Attendance.objects.filter(user=emp).order_by('-date')
+            
+            events = []
+            for att in attendance:
+                # 1. Office In Event
+                if att.check_in_time:
+                    events.append({
+                        'id': f"{att.id}_in",
+                        'user_id': str(att.user.id),
+                        'check_type': 'office_in',
+                        'actual_time': att.check_in_time.isoformat(),
+                        'is_late': att.late_minutes > 0,
+                        'is_early': False,
+                        'minutes_difference': att.late_minutes,
+                        'face_match_confidence': 0, # Not strictly stored
+                        'created_at': att.check_in_time.isoformat() # Use actual time for sorting
+                    })
+                
+                # 2. Office Out Event
+                if att.check_out_time:
+                    events.append({
+                        'id': f"{att.id}_out",
+                        'user_id': str(att.user.id),
+                        'check_type': 'office_out',
+                        'actual_time': att.check_out_time.isoformat(),
+                        'is_late': False,
+                        'is_early': att.early_minutes > 0,
+                        'minutes_difference': att.early_minutes,
+                        'face_match_confidence': 0,
+                        'created_at': att.check_out_time.isoformat()
+                    })
+
+            # Sort by created_at desc (newest first)
+            events.sort(key=lambda x: x['created_at'], reverse=True)
+            
+            return Response(events)
+            
+        except Employee.DoesNotExist:
+            return Response({'error': 'Employee not found'}, status=404)

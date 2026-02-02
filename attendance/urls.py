@@ -33,6 +33,8 @@ urlpatterns = [
     path('dashboard/sites/delete/<int:site_id>/', admin_delete_site, name='admin-delete-site'),
     path('dashboard/sites/delete/bulk/', AdminBulkDeleteSiteView.as_view(), name='admin-bulk-delete-sites'),
     path('sites/import/', ImportSitesView.as_view(), name='import-sites'),
+    path('sites/import-schedule/', ImportSitesScheduleView.as_view(), name='import-site-schedule'),
+    path('sites/schedule-template/', DownloadSiteScheduleTemplateView.as_view(), name='download-site-schedule-template'),
     path('dashboard/sites/<int:site_id>/', admin_site_detail_view, name='admin-site-detail'),
     
     # API endpoint for site coordinates
@@ -57,6 +59,9 @@ urlpatterns = [
     path('dashboard/monthly-report/', monthly_report_view, name='monthly-report'),
     path('dashboard/monthly-report/export/', export_monthly_report, name='export-monthly-report'),
     path('dashboard/monthly-report/export/', export_monthly_report, name='export-monthly-report'),
+    
+    # Employee History API (Mobile)
+    path('api/employees/<int:employee_id>/history/', EmployeeAttendanceHistoryView.as_view(), name='employee-attendance-history'),
     
     # Reports API
     path('api/reports/data/', AttendanceReportDataView.as_view(), name='api-reports-data'),

@@ -227,6 +227,20 @@
     </div>
 
     <div class="d-flex gap-3 align-items-center">
+        <!-- Status Filter -->
+        <div class="dropdown">
+            <button class="btn btn-white border shadow-sm dropdown-toggle rounded-3 px-3 py-2 fw-semibold" type="button"
+                id="statusFilterBtn" data-bs-toggle="dropdown">
+                <i class="ri-filter-3-line me-1"></i> All Statuses
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end shadow-lg border-0 rounded-4 dropdown-menu-scrollable"
+                id="statusDropdown">
+                <li><a class="dropdown-item py-2" href="#" onclick="filterStatus('all', 'All Statuses')"><i
+                            class="ri-history-line"></i> All Statuses</a></li>
+            </ul>
+        </div>
+
+        <!-- Site Filter -->
         <div class="dropdown">
             <button class="btn btn-white border shadow-sm dropdown-toggle rounded-3 px-3 py-2 fw-semibold" type="button"
                 id="siteFilterBtn" data-bs-toggle="dropdown">
@@ -360,10 +374,15 @@
                     </th>
                     <th>Employee</th>
                     <th>Badge ID</th>
-                    <th>Grade</th>
+                    <th>Category</th>
                     <th>Department</th>
                     <th>Position</th>
                     <th>Site</th>
+                    <th>Nationality</th>
+                    <th>Passport</th>
+                    <th>Labour Card</th>
+                    <th>MOL ID</th>
+                    <th>Salary</th>
                     <th>Status</th>
                     <th class="text-end pe-4">Actions</th>
                 </tr>
@@ -425,13 +444,15 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body p-4">
-                <ul class="nav nav-pills mb-4 bg-light p-1 rounded-3" id="employeeTabs" role="tablist">
-                    <li class="nav-item flex-fill"><button class="nav-link active w-100" data-bs-toggle="pill"
-                            data-bs-target="#basic">1. Basic</button></li>
-                    <li class="nav-item flex-fill"><button class="nav-link w-100" data-bs-toggle="pill"
+                <ul class="nav nav-pills mb-4 bg-light p-1 rounded-3 flex-wrap" id="employeeTabs" role="tablist">
+                    <li class="nav-item flex-fill"><button class="nav-link active w-100 py-2" data-bs-toggle="pill"
+                            data-bs-target="#basic">1. Employment</button></li>
+                    <li class="nav-item flex-fill"><button class="nav-link w-100 py-2" data-bs-toggle="pill"
                             data-bs-target="#personal">2. Personal</button></li>
-                    <li class="nav-item flex-fill"><button class="nav-link w-100" data-bs-toggle="pill"
+                    <li class="nav-item flex-fill"><button class="nav-link w-100 py-2" data-bs-toggle="pill"
                             data-bs-target="#docs">3. Documents</button></li>
+                    <li class="nav-item flex-fill"><button class="nav-link w-100 py-2" data-bs-toggle="pill"
+                            data-bs-target="#salary">4. Salary & Leave</button></li>
                 </ul>
 
                 <form id="addEmployeeForm">
@@ -440,64 +461,68 @@
                     <div class="tab-content">
                         <div class="tab-pane fade show active" id="basic">
                             <div class="row g-3">
-                                <div class="col-md-6 mb-2"><label
+                                <div class="col-md-6"><label
                                         class="form-label small fw-bold text-secondary text-uppercase"
                                         style="font-size: 0.65rem;">Full Name*</label><input type="text" name="name"
                                         required class="form-control form-control-modern"></div>
-                                <div class="col-md-6 mb-2"><label
+                                <div class="col-md-3"><label
                                         class="form-label small fw-bold text-secondary text-uppercase"
                                         style="font-size: 0.65rem;">Badge ID</label><input type="text"
                                         name="badge_number" class="form-control form-control-modern"></div>
-                                <div class="col-md-6 mb-2"><label
-                                        class="form-label small fw-bold text-secondary text-uppercase"
-                                        style="font-size: 0.65rem;">Department</label><input type="text"
-                                        name="department" class="form-control form-control-modern"></div>
-                                <div class="col-md-6 mb-2"><label
-                                        class="form-label small fw-bold text-secondary text-uppercase"
-                                        style="font-size: 0.65rem;">Position</label><input type="text" name="position"
-                                        class="form-control form-control-modern"></div>
-                                <div class="col-md-6 mb-2"><label
-                                        class="form-label small fw-bold text-secondary text-uppercase"
-                                        style="font-size: 0.65rem;">Site</label><select name="site"
-                                        id="employeeSiteSelect" class="form-select form-select-modern"></select></div>
-                                <div class="col-md-6 mb-2"><label
+                                <div class="col-md-3"><label
                                         class="form-label small fw-bold text-secondary text-uppercase"
                                         style="font-size: 0.65rem;">Status</label>
                                     <select name="status" class="form-select form-select-modern">
-                                        <option value="active">Active</option>
-                                        <option value="leave">Leave</option>
-                                        <option value="terminated">Terminated</option>
+                                        <option value="Active">Active</option>
+                                        <option value="Leave">Leave</option>
+                                        <option value="Terminated">Terminated</option>
                                     </select>
                                 </div>
-                                <div class="col-md-6 mb-2"><label
+                                <div class="col-md-6"><label
+                                        class="form-label small fw-bold text-secondary text-uppercase"
+                                        style="font-size: 0.65rem;">Division (Department)</label><input type="text"
+                                        name="department" class="form-control form-control-modern"></div>
+                                <div class="col-md-6"><label
+                                        class="form-label small fw-bold text-secondary text-uppercase"
+                                        style="font-size: 0.65rem;">Present Designation (Position)</label><input
+                                        type="text" name="position" class="form-control form-control-modern"></div>
+                                <div class="col-md-4"><label
+                                        class="form-label small fw-bold text-secondary text-uppercase"
+                                        style="font-size: 0.65rem;">Category</label><input type="text"
+                                        name="salary_grade" class="form-control form-control-modern"></div>
+                                <div class="col-md-4"><label
+                                        class="form-label small fw-bold text-secondary text-uppercase"
+                                        style="font-size: 0.65rem;">Project / Site</label><select name="site"
+                                        id="employeeSiteSelect" class="form-select form-select-modern"></select></div>
+                                <div class="col-md-4"><label
                                         class="form-label small fw-bold text-secondary text-uppercase"
                                         style="font-size: 0.65rem;">Employer</label><input type="text" name="employer"
                                         class="form-control form-control-modern"></div>
-                                <div class="col-md-6 mb-2"><label
-                                        class="form-label small fw-bold text-secondary text-uppercase"
-                                        style="font-size: 0.65rem;">Job Description</label><input type="text"
-                                        name="job_description" class="form-control form-control-modern"></div>
-                                <div class="col-md-6 mb-2"><label
+                                <div class="col-md-6"><label
                                         class="form-label small fw-bold text-secondary text-uppercase"
                                         style="font-size: 0.65rem;">Email</label><input type="email" name="email"
                                         class="form-control form-control-modern"></div>
-                                <div class="col-md-6 mb-2"><label
+                                <div class="col-md-6"><label
                                         class="form-label small fw-bold text-secondary text-uppercase"
                                         style="font-size: 0.65rem;">Phone</label><input type="text" name="phone"
                                         class="form-control form-control-modern"></div>
+                                <div class="col-12"><label
+                                        class="form-label small fw-bold text-secondary text-uppercase"
+                                        style="font-size: 0.65rem;">Job Description</label><input type="text"
+                                        name="job_description" class="form-control form-control-modern"></div>
                             </div>
                         </div>
                         <div class="tab-pane fade" id="personal">
                             <div class="row g-3">
-                                <div class="col-md-6 mb-2"><label
+                                <div class="col-md-6"><label
                                         class="form-label small fw-bold text-secondary text-uppercase"
-                                        style="font-size: 0.65rem;">DOB</label><input type="date" name="date_of_birth"
-                                        class="form-control form-control-modern"></div>
-                                <div class="col-md-6 mb-2"><label
+                                        style="font-size: 0.65rem;">Date of Birth (dd/mm/yyyy)</label><input type="date"
+                                        name="date_of_birth" class="form-control form-control-modern"></div>
+                                <div class="col-md-6"><label
                                         class="form-label small fw-bold text-secondary text-uppercase"
                                         style="font-size: 0.65rem;">Nationality</label><input type="text"
                                         name="nationality" class="form-control form-control-modern"></div>
-                                <div class="col-md-4 mb-2"><label
+                                <div class="col-md-4"><label
                                         class="form-label small fw-bold text-secondary text-uppercase"
                                         style="font-size: 0.65rem;">Gender</label>
                                     <select name="gender" class="form-select form-select-modern">
@@ -506,7 +531,7 @@
                                         <option value="Other">Other</option>
                                     </select>
                                 </div>
-                                <div class="col-md-4 mb-2"><label
+                                <div class="col-md-4"><label
                                         class="form-label small fw-bold text-secondary text-uppercase"
                                         style="font-size: 0.65rem;">Marital Status</label>
                                     <select name="marital_status" class="form-select form-select-modern">
@@ -516,15 +541,15 @@
                                         <option value="Widowed">Widowed</option>
                                     </select>
                                 </div>
-                                <div class="col-md-4 mb-2"><label
+                                <div class="col-md-4"><label
                                         class="form-label small fw-bold text-secondary text-uppercase"
                                         style="font-size: 0.65rem;">Religion</label><input type="text" name="religion"
                                         class="form-control form-control-modern"></div>
-                                <div class="col-md-6 mb-2"><label
+                                <div class="col-md-6"><label
                                         class="form-label small fw-bold text-secondary text-uppercase"
                                         style="font-size: 0.65rem;">Housing Camp</label><input type="text" name="camp"
                                         class="form-control form-control-modern"></div>
-                                <div class="col-md-6 mb-2"><label
+                                <div class="col-md-6"><label
                                         class="form-label small fw-bold text-secondary text-uppercase"
                                         style="font-size: 0.65rem;">Transportation</label><input type="text"
                                         name="transportation" class="form-control form-control-modern"></div>
@@ -532,38 +557,50 @@
                         </div>
                         <div class="tab-pane fade" id="docs">
                             <div class="row g-3">
-                                <div class="col-md-4 mb-2"><label
-                                        class="form-label small fw-bold text-secondary text-uppercase"
-                                        style="font-size: 0.65rem;">Joining Date</label><input type="date"
-                                        name="date_of_joining" class="form-control form-control-modern"></div>
-                                <div class="col-md-4 mb-2"><label
-                                        class="form-label small fw-bold text-secondary text-uppercase"
-                                        style="font-size: 0.65rem;">Gross Salary</label><input type="number" step="0.01"
-                                        name="gross_salary" class="form-control form-control-modern"></div>
-                                <div class="col-md-4 mb-2"><label
-                                        class="form-label small fw-bold text-secondary text-uppercase"
-                                        style="font-size: 0.65rem;">Salary Grade</label><input type="text"
-                                        name="salary_grade" class="form-control form-control-modern"></div>
-                                <div class="col-md-6 mb-2"><label
+                                <div class="col-md-12">
+                                    <h6 class="fw-bold small text-primary text-uppercase">Passport Details</h6>
+                                </div>
+                                <div class="col-md-6"><label
                                         class="form-label small fw-bold text-secondary text-uppercase"
                                         style="font-size: 0.65rem;">Passport Number</label><input type="text"
                                         name="passport_number" class="form-control form-control-modern"></div>
-                                <div class="col-md-6 mb-2"><label
+                                <div class="col-md-6"><label
                                         class="form-label small fw-bold text-secondary text-uppercase"
-                                        style="font-size: 0.65rem;">Passport Expiry</label><input type="date"
+                                        style="font-size: 0.65rem;">Passport Expiry Date</label><input type="date"
                                         name="passport_expiry" class="form-control form-control-modern"></div>
-                                <div class="col-md-6 mb-2"><label
-                                        class="form-label small fw-bold text-secondary text-uppercase"
-                                        style="font-size: 0.65rem;">Labor Card Number</label><input type="text"
-                                        name="labor_card_number" class="form-control form-control-modern"></div>
-                                <div class="col-md-6 mb-2"><label
-                                        class="form-label small fw-bold text-secondary text-uppercase"
-                                        style="font-size: 0.65rem;">MOL ID</label><input type="text" name="mol_id"
-                                        class="form-control form-control-modern"></div>
-                                <div class="col-12 mb-2"><label
+                                <div class="col-md-12"><label
                                         class="form-label small fw-bold text-secondary text-uppercase"
                                         style="font-size: 0.65rem;">Visa Details</label><textarea name="visa_details"
                                         class="form-control form-control-modern" rows="2"></textarea></div>
+
+                                <div class="col-md-12 mt-4">
+                                    <h6 class="fw-bold small text-primary text-uppercase">Labour Card Details</h6>
+                                </div>
+                                <div class="col-md-6"><label
+                                        class="form-label small fw-bold text-secondary text-uppercase"
+                                        style="font-size: 0.65rem;">L.Card/CEC Nr.</label><input type="text"
+                                        name="labor_card_number" class="form-control form-control-modern"></div>
+                                <div class="col-md-6"><label
+                                        class="form-label small fw-bold text-secondary text-uppercase"
+                                        style="font-size: 0.65rem;">Personal Nr. (MOL ID)</label><input type="text"
+                                        name="mol_id" class="form-control form-control-modern"></div>
+                            </div>
+                        </div>
+                        <div class="tab-pane fade" id="salary">
+                            <div class="row g-3">
+                                <div class="col-md-6"><label
+                                        class="form-label small fw-bold text-secondary text-uppercase"
+                                        style="font-size: 0.65rem;">Joining Date (D.O.J.)</label><input type="date"
+                                        name="date_of_joining" class="form-control form-control-modern"></div>
+                                <div class="col-md-6"><label
+                                        class="form-label small fw-bold text-secondary text-uppercase"
+                                        style="font-size: 0.65rem;">Gross Salary</label><input type="number" step="0.01"
+                                        name="gross_salary" class="form-control form-control-modern" placeholder="0.00">
+                                </div>
+                                <div class="col-md-12">
+                                    <p class="text-muted small">Note: Other salary components and leave entitlement
+                                        details can be viewed in the full reports.</p>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -657,6 +694,7 @@
 <script>
     // Parity State & Logic
     let currentSiteId = 'all';
+    let currentStatus = 'all';
     let currentPage = 1;
     let rowsPerPage = 20;
     let searchTimer;
@@ -677,7 +715,7 @@
 
     async function loadStats() {
         try {
-            const res = await fetch(`/api/attendance/stats/?site=${currentSiteId}`);
+            const res = await fetch(`/api/attendance/stats/?site=${currentSiteId}&status=${currentStatus}`);
             const data = await res.json();
 
             document.getElementById('stat-total-employees').textContent = data.total_employees;
@@ -697,12 +735,21 @@
                     siteSelect.appendChild(option);
                 }
             });
+
+            // Load statuses
+            const statusList = document.getElementById('statusDropdown');
+            statusList.innerHTML = `<li><a class="dropdown-item" href="#" onclick="filterStatus('all', 'All Statuses')"><i class="ri-history-line text-secondary"></i> All Statuses</a></li>`;
+            if (data.statuses) {
+                data.statuses.forEach(s => {
+                    statusList.innerHTML += `<li><a class="dropdown-item" href="#" onclick="filterStatus('${s}', '${s}')"><i class="ri-filter-3-line text-secondary"></i> ${s}</a></li>`;
+                });
+            }
         } catch (e) { console.error(e); }
     }
 
     async function loadAlerts() {
         try {
-            const res = await fetch(`/api/attendance/alerts/?site=${currentSiteId}`);
+            const res = await fetch(`/api/attendance/alerts/?site=${currentSiteId}&status=${currentStatus}`);
             const data = await res.json();
             const container = document.getElementById('alertsContainer');
             const wrapper = document.getElementById('alertsWrapper');
@@ -728,14 +775,14 @@
     async function loadEmployees() {
         const query = document.getElementById('tableSearch').value;
         const tbody = document.getElementById('employeeTableBody');
-        tbody.innerHTML = '<tr><td colspan="6" class="text-center py-5"><div class="spinner-border spinner-border-sm text-primary"></div></td></tr>';
+        tbody.innerHTML = '<tr><td colspan="13" class="text-center py-5"><div class="spinner-border spinner-border-sm text-primary"></div></td></tr>';
 
         try {
-            const res = await fetch(`/api/attendance/employees/?page=${currentPage}&site=${currentSiteId}&search=${query}&per_page=${rowsPerPage}`);
+            const res = await fetch(`/api/attendance/employees/?page=${currentPage}&site=${currentSiteId}&status=${currentStatus}&search=${query}&per_page=${rowsPerPage}`);
             const data = await res.json();
             const results = data.results || [];
             if (results.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" class="text-center py-5 text-muted">No matching records found.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="13" class="text-center py-5 text-muted">No matching records found.</td></tr>';
                 return;
             }
 
@@ -757,7 +804,12 @@
                     <td>${emp.department || '-'}</td>
                     <td>${emp.position || '-'}</td>
                     <td><i class="ri-map-pin-line text-secondary me-1"></i>${emp.site_name || '-'}</td>
-                    <td><span class="badge bg-success bg-opacity-10 text-success px-3 py-2 rounded-pill">Active</span></td>
+                    <td>${emp.nationality || '-'}</td>
+                    <td>${emp.passport_number || '-'}</td>
+                    <td>${emp.labor_card_number || '-'}</td>
+                    <td>${emp.mol_id || '-'}</td>
+                    <td class="fw-bold">${emp.gross_salary ? 'AED ' + parseFloat(emp.gross_salary).toLocaleString() : '-'}</td>
+                    <td><span class="badge bg-success bg-opacity-10 text-success px-3 py-2 rounded-pill">${emp.status || 'Active'}</span></td>
                     <td class="text-end pe-4">
                         <div class="d-flex justify-content-end gap-2">
                              <button onclick="editEmployee(${emp.id})" class="btn btn-sm btn-light border rounded-3" title="Edit Employee"><i class="ri-edit-line"></i></button>
@@ -773,15 +825,26 @@
             document.getElementById('paginationInfo').textContent = `Page ${currentPage} of ${Math.ceil(data.count / rowsPerPage) || 1}`;
             document.getElementById('prevBtn').disabled = !data.previous;
             document.getElementById('nextBtn').disabled = !data.next;
-        } catch (e) { tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-danger">Failed to sync data.</td></tr>'; }
+        } catch (e) { tbody.innerHTML = '<tr><td colspan="13" class="text-center py-4 text-danger">Failed to sync data.</td></tr>'; }
     }
 
     // --- Helper Functions (Search, Paging, Filter) ---
     function filterSite(id, name) {
         currentSiteId = id;
-        document.getElementById('siteFilterBtn').innerHTML = `<i class="ri-building-line me-1"></i> ${name}`;
         currentPage = 1;
-        loadStats(); loadEmployees(); loadAlerts();
+        document.getElementById('siteFilterBtn').innerHTML = `<i class="ri-building-line me-1"></i> ${name}`;
+        loadStats();
+        loadEmployees();
+        loadAlerts();
+    }
+
+    function filterStatus(status, label) {
+        currentStatus = status;
+        currentPage = 1;
+        document.getElementById('statusFilterBtn').innerHTML = `<i class="ri-filter-3-line me-1"></i> ${label}`;
+        loadStats();
+        loadEmployees();
+        loadAlerts();
     }
     function changeRowsPerPage() { rowsPerPage = document.getElementById('rowsPerPage').value; currentPage = 1; loadEmployees(); }
     function changePage(delta) { currentPage += delta; if (currentPage < 1) currentPage = 1; loadEmployees(); }
@@ -802,40 +865,40 @@
                 {
                     title: "Status & Core",
                     fields: [
-                        { label: 'Full Name', value: emp.name },
+                        { label: 'Name', value: emp.name },
                         { label: 'Badge ID', value: emp.badge_number },
-                        { label: 'Site', value: emp.site },
+                        { label: 'Division', value: emp.department },
+                        { label: 'Project / Site', value: emp.site },
                         { label: 'Status', value: emp.status }
                     ]
                 },
                 {
                     title: "Personal Details",
                     fields: [
-                        { label: 'Gender', value: emp.gender },
                         { label: 'Nationality', value: emp.nationality },
-                        { label: 'DOB', value: emp.date_of_birth },
+                        { label: 'Gender', value: emp.gender },
+                        { label: 'Marital Status', value: emp.marital_status },
                         { label: 'Religion', value: emp.religion },
-                        { label: 'Marital Status', value: emp.marital_status }
+                        { label: 'Date of Birth', value: emp.date_of_birth }
                     ]
                 },
                 {
                     title: "Employment Info",
                     fields: [
-                        { label: 'Department', value: emp.department },
-                        { label: 'Position', value: emp.position },
-                        { label: 'Grade', value: emp.salary_grade },
+                        { label: 'Present Designation', value: emp.position },
+                        { label: 'Category', value: emp.salary_grade },
                         { label: 'Employer', value: emp.employer },
-                        { label: 'Joining Date', value: emp.date_of_joining },
-                        { label: 'Salary', value: emp.gross_salary ? `AED ${parseFloat(emp.gross_salary).toLocaleString()}` : '-' }
+                        { label: 'D.O.J.', value: emp.date_of_joining },
+                        { label: 'Gross Salary', value: emp.gross_salary ? `AED ${parseFloat(emp.gross_salary).toLocaleString()}` : '-' }
                     ]
                 },
                 {
                     title: "Identity & Documents",
                     fields: [
-                        { label: 'Passport No.', value: emp.passport_number },
-                        { label: 'Passport Expiry', value: emp.passport_expiry },
-                        { label: 'Labor Card', value: emp.labor_card_number },
-                        { label: 'MOL ID', value: emp.mol_id },
+                        { label: 'Passport Nr.', value: emp.passport_number },
+                        { label: 'PP Expiry Date', value: emp.passport_expiry },
+                        { label: 'L.Card/CEC Nr.', value: emp.labor_card_number },
+                        { label: 'Personal Nr.', value: emp.mol_id },
                         { label: 'Visa Details', value: emp.visa_details }
                     ]
                 },
@@ -844,7 +907,7 @@
                     fields: [
                         { label: 'Phone', value: emp.phone },
                         { label: 'Email', value: emp.email },
-                        { label: 'Camp', value: emp.camp },
+                        { label: 'Housing Camp', value: emp.camp },
                         { label: 'Transportation', value: emp.transportation }
                     ]
                 }

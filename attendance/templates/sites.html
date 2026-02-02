@@ -219,10 +219,41 @@
             </div>
             <form id="addSiteForm" onsubmit="handleAddSite(event)">
                 <div class="modal-body p-4">
-                    <div class="mb-4">
-                        <label class="form-label-premium">Site Name</label>
-                        <input type="text" name="name" class="form-control form-control-premium"
-                            placeholder="e.g. Dubai Main Branch" required>
+                    <div class="row g-3 mb-4">
+                        <div class="col-6">
+                            <label class="form-label-premium">Office Start</label>
+                            <input type="time" name="office_start" class="form-control form-control-premium"
+                                value="09:00">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label-premium">Office End</label>
+                            <input type="time" name="office_end" class="form-control form-control-premium"
+                                value="18:00">
+                        </div>
+                    </div>
+                    <div class="row g-3 mb-4">
+                        <div class="col-6">
+                            <label class="form-label-premium">Worker Start</label>
+                            <input type="time" name="worker_start" class="form-control form-control-premium"
+                                value="08:00">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label-premium">Worker End</label>
+                            <input type="time" name="worker_end" class="form-control form-control-premium"
+                                value="17:00">
+                        </div>
+                    </div>
+                    <div class="row g-3 mb-4">
+                        <div class="col-6">
+                            <label class="form-label-premium">Office Day Off</label>
+                            <input type="text" name="office_day_off" class="form-control form-control-premium"
+                                placeholder="e.g. Sunday" value="Sunday">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label-premium">Worker Day Off</label>
+                            <input type="text" name="worker_day_off" class="form-control form-control-premium"
+                                placeholder="e.g. Sunday" value="Sunday">
+                        </div>
                     </div>
                     <div class="mb-0">
                         <label class="form-label-premium">Geofence (KML - Optional)</label>
@@ -257,6 +288,42 @@
                         <input type="text" id="editSiteName" name="name" class="form-control form-control-premium"
                             required>
                     </div>
+                    <div class="row g-3 mb-4">
+                        <div class="col-6">
+                            <label class="form-label-premium">Office Start</label>
+                            <input type="time" id="editOfficeStart" name="office_start"
+                                class="form-control form-control-premium">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label-premium">Office End</label>
+                            <input type="time" id="editOfficeEnd" name="office_end"
+                                class="form-control form-control-premium">
+                        </div>
+                    </div>
+                    <div class="row g-3 mb-4">
+                        <div class="col-6">
+                            <label class="form-label-premium">Worker Start</label>
+                            <input type="time" id="editWorkerStart" name="worker_start"
+                                class="form-control form-control-premium">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label-premium">Worker End</label>
+                            <input type="time" id="editWorkerEnd" name="worker_end"
+                                class="form-control form-control-premium">
+                        </div>
+                    </div>
+                    <div class="row g-3 mb-4">
+                        <div class="col-6">
+                            <label class="form-label-premium">Office Day Off</label>
+                            <input type="text" id="editOfficeDayOff" name="office_day_off"
+                                class="form-control form-control-premium">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label-premium">Worker Day Off</label>
+                            <input type="text" id="editWorkerDayOff" name="worker_day_off"
+                                class="form-control form-control-premium">
+                        </div>
+                    </div>
                     <div class="mb-0">
                         <label class="form-label-premium">Update Geofence (Optional)</label>
                         <input type="file" name="kml_file" class="form-control form-control-premium" accept=".kml">
@@ -274,7 +341,7 @@
     </div>
 </div>
 
-<!-- Import Modal -->
+<!-- Import Modal (Enhanced for Schedule) -->
 <div class="modal fade" id="importModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content modal-content-premium">
@@ -282,26 +349,70 @@
                 <h5 class="fw-bold mb-0">Import Regional Sites</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            <form id="importSitesForm" onsubmit="handleImportSites(event)">
-                <div class="modal-body p-4 text-center">
-                    <div class="mb-4">
-                        <i class="ri-file-excel-2-line text-success" style="font-size: 4rem;"></i>
+            <ul class="nav nav-tabs px-4 border-bottom-0 mt-3" id="importTabs" role="tablist">
+                <li class="nav-item">
+                    <button class="nav-link active fw-bold small text-uppercase" data-bs-toggle="tab"
+                        data-bs-target="#newSitesTab">New Sites</button>
+                </li>
+                <li class="nav-item">
+                    <button class="nav-link fw-bold small text-uppercase" data-bs-toggle="tab"
+                        data-bs-target="#scheduleTab">Site Schedule</button>
+                </li>
+            </ul>
+            <div class="tab-content">
+                <div class="tab-pane fade show active" id="newSitesTab">
+                    <form id="importSitesForm" onsubmit="handleImportSites(event)">
+                        <div class="modal-body p-4 text-center">
+                            <div class="mb-4 text-success"><i class="ri-building-2-line" style="font-size: 3rem;"></i>
+                            </div>
+                            <h6 class="fw-bold mb-2">Mass Import via Excel</h6>
+                            <p class="small text-secondary mb-4">Bulk-create site records using simple site names.</p>
+                            <div class="text-start">
+                                <label class="form-label-premium">Select Workbook (.xlsx / .xls)</label>
+                                <input type="file" name="file" class="form-control form-control-premium"
+                                    accept=".xlsx, .xls" required>
+                            </div>
+                        </div>
+                        <div class="modal-footer modal-footer-premium">
+                            <button type="submit" class="btn btn-pro w-100"
+                                style="background: black !important; color: white !important;">Execute Upload</button>
+                        </div>
+                    </form>
+                </div>
+                <div class="tab-pane fade" id="scheduleTab">
+                    <div class="modal-body p-4 text-center">
+                        <div class="mb-4 text-primary"><i class="ri-calendar-todo-line" style="font-size: 3rem;"></i>
+                        </div>
+                        <h6 class="fw-bold mb-2">Detailed Site Schedule</h6>
+                        <p class="small text-secondary mb-3">Upload timings for Staff (Office) and Workers (Site).</p>
+                        <a href="/api/attendance/sites/schedule-template/"
+                            class="btn btn-sm btn-light border mb-4 rounded-3 fw-bold">
+                            <i class="ri-download-cloud-2-line me-1"></i> Download Excel Template
+                        </a>
+                        <div class="text-start mb-3">
+                            <label class="form-label-premium">Select Filled Schedule Template</label>
+                            <input type="file" id="scheduleFile" class="form-control form-control-premium"
+                                accept=".xlsx" required>
+                        </div>
+                        <!-- Progress Bar Container -->
+                        <div id="importProgressContainer" class="d-none">
+                            <div class="d-flex justify-content-between mb-1 small fw-bold">
+                                <span>Processing...</span>
+                                <span id="progressText">0%</span>
+                            </div>
+                            <div class="progress rounded-pill shadow-sm mb-3" style="height: 10px;">
+                                <div id="importProgressBar"
+                                    class="progress-bar progress-bar-striped progress-bar-animated bg-primary"
+                                    style="width: 0%"></div>
+                            </div>
+                        </div>
                     </div>
-                    <h6 class="fw-bold mb-2">Mass Import via Excel</h6>
-                    <p class="small text-secondary mb-4">Upload an Excel file with a "Name" column to bulk-create site
-                        records.</p>
-                    <div class="text-start">
-                        <label class="form-label-premium">Select Workbook (.xlsx / .xls)</label>
-                        <input type="file" name="file" class="form-control form-control-premium" accept=".xlsx, .xls"
-                            required>
+                    <div class="modal-footer modal-footer-premium">
+                        <button onclick="handleScheduleUpload()" id="scheduleUploadBtn" class="btn btn-pro w-100"
+                            style="background: black !important; color: white !important;">Upload Schedule</button>
                     </div>
                 </div>
-                <div class="modal-footer modal-footer-premium">
-                    <button type="button" class="btn btn-pro" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-pro"
-                        style="background: black !important; color: white !important;">Execute Upload</button>
-                </div>
-            </form>
+            </div>
         </div>
     </div>
 </div>
@@ -387,7 +498,10 @@
                         </div>
                         <div>
                             <div class="fw-bold text-dark">${s.name}</div>
-                            <a href="${s.detail_url}" class="small text-primary text-decoration-none fw-semibold">Profile Overview <i class="ri-arrow-right-line small"></i></a>
+                            <div class="small text-secondary mt-1">
+                                <span class="me-2"><i class="ri-time-line me-1"></i>Staff: ${s.office_start || 'N/A'}-${s.office_end || 'N/A'}</span>
+                                <span><i class="ri-time-line me-1"></i>Worker: ${s.worker_start || 'N/A'}-${s.worker_end || 'N/A'}</span>
+                            </div>
                         </div>
                     </div>
                 </td>
@@ -395,12 +509,17 @@
                     <span class="employee-count-badge">
                         <i class="ri-group-line me-1"></i> ${s.employee_count} Members
                     </span>
+                    <div class="small text-secondary mt-1 ps-2">Staff Off: ${s.office_day_off || 'None'}</div>
+                    <div class="small text-secondary mt-1 ps-2">Worker Off: ${s.worker_day_off || 'None'}</div>
                 </td>
                 <td class="text-end pe-4">
                     <div class="d-flex gap-2 justify-content-end">
-                        <button onclick="showEditModal('${s.id}', '${s.name.replace(/'/g, "\\'")}')" class="btn btn-sm btn-pro">
+                        <button onclick="showEditModal('${s.id}', '${s.name.replace(/'/g, "\\'")}', '${s.office_start}', '${s.office_end}', '${s.worker_start}', '${s.worker_end}', '${s.office_day_off.replace(/'/g, "\\'")}', '${s.worker_day_off.replace(/'/g, "\\'")}')" class="btn btn-sm btn-pro">
                             <i class="ri-edit-line"></i> Edit
                         </button>
+                        <a href="${s.detail_url}" class="btn btn-sm btn-pro">
+                            <i class="ri-focus-line"></i> Map
+                        </a>
                         <button onclick="confirmDeleteSite('${s.id}', '${s.name.replace(/'/g, "\\'")}')" class="btn btn-sm btn-pro text-danger">
                             <i class="ri-delete-bin-line"></i>
                         </button>
@@ -439,9 +558,15 @@
     const importModal = new bootstrap.Modal(document.getElementById('importModal'));
 
     function showAddModal() { addModal.show(); }
-    function showEditModal(id, name) {
+    function showEditModal(id, name, offStart, offEnd, worStart, worEnd, officeDayOff, workerDayOff) {
         document.getElementById('editSiteId').value = id;
         document.getElementById('editSiteName').value = name;
+        document.getElementById('editOfficeStart').value = offStart || "";
+        document.getElementById('editOfficeEnd').value = offEnd || "";
+        document.getElementById('editWorkerStart').value = worStart || "";
+        document.getElementById('editWorkerEnd').value = worEnd || "";
+        document.getElementById('editOfficeDayOff').value = officeDayOff || "";
+        document.getElementById('editWorkerDayOff').value = workerDayOff || "";
         editModal.show();
     }
     function showImportModal() { importModal.show(); }
@@ -507,6 +632,58 @@
                 loadData(1);
             } else { alert(`Import failed: ${data.error}`); }
         } catch (e) { alert('Export pipeline encountered an error.'); }
+    }
+
+    async function handleScheduleUpload() {
+        const fileInput = document.getElementById('scheduleFile');
+        if (!fileInput.files.length) { alert('Please select a file'); return; }
+
+        const formData = new FormData();
+        formData.append('file', fileInput.files[0]);
+
+        const btn = document.getElementById('scheduleUploadBtn');
+        const progContainer = document.getElementById('importProgressContainer');
+        const progBar = document.getElementById('importProgressBar');
+        const progText = document.getElementById('progressText');
+
+        btn.disabled = true;
+        progContainer.classList.remove('d-none');
+
+        let simProgress = 0;
+        const interval = setInterval(() => {
+            simProgress += 5;
+            if (simProgress <= 90) {
+                progBar.style.width = simProgress + '%';
+                progText.innerText = simProgress + '%';
+            }
+        }, 100);
+
+        try {
+            const res = await fetch('/api/attendance/sites/import-schedule/', {
+                method: 'POST',
+                headers: { 'X-CSRFToken': '{{ csrf_token }}' },
+                body: formData
+            });
+            const data = await res.json();
+            clearInterval(interval);
+
+            if (res.ok) {
+                progBar.style.width = '100%';
+                progText.innerText = '100%';
+                setTimeout(() => {
+                    alert(`Schedule updated. Imported: ${data.imported_count}. Errors: ${data.errors.length}`);
+                    importModal.hide();
+                    loadData(currentPage);
+                }, 500);
+            } else {
+                alert(`Error: ${data.error}`);
+            }
+        } catch (e) {
+            alert('Upload failed.');
+        } finally {
+            btn.disabled = false;
+            progContainer.classList.add('d-none');
+        }
     }
 
     // Bulk Operations

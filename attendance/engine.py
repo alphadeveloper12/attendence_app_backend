@@ -260,8 +260,9 @@ class FaceEngine:
         if max(h0, w0) < 900:
             attempts.append(("orig_up", self._upscale_bgr(bgr_image, 1.6)))
 
-        # Removed 90° and 270° rotations as user confirmed only front-face images are used.
-        # This reduces the pipeline to just 'orig' and 'orig_up', maximizing performance.
+        # Restore rotations for robust detection (e.g. mobile uploads)
+        attempts.append(("rot90", self._rotate_bgr(bgr_image, 1)))
+        attempts.append(("rot270", self._rotate_bgr(bgr_image, 3)))
 
         last_meta: Dict[str, Any] = {
             "ok": False,
