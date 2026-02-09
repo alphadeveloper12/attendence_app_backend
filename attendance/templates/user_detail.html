@@ -429,53 +429,54 @@
 
         // Render detailed grid
         const detailGrid = document.getElementById('profile-details-grid');
-        const sections = [
-            {
-                title: "Personal Details",
-                fields: [
-                    { label: 'Nationality', value: emp.nationality },
-                    { label: 'Gender', value: emp.gender },
-                    { label: 'Marital Status', value: emp.marital_status },
-                    { label: 'Religion', value: emp.religion },
-                    { label: 'Date of Birth', value: emp.date_of_birth }
-                ]
-            },
-            {
-                title: "Employment Info",
-                fields: [
-                    { label: 'Division', value: emp.department },
-                    { label: 'Present Designation', value: emp.position },
-                    { label: 'Category', value: emp.salary_grade },
-                    { label: 'Employer', value: emp.employer },
-                    { label: 'D.O.J.', value: emp.date_of_joining }
-                ]
-            },
-            {
-                title: "Passport & Identity",
-                fields: [
-                    { label: 'Passport Nr.', value: emp.passport_number },
-                    { label: 'Passport Expiry', value: emp.passport_expiry },
-                    { label: 'Visa Details', value: emp.visa_details }
-                ]
-            },
-            {
-                title: "Labour Card Details",
-                fields: [
-                    { label: 'L.Card/CEC Nr.', value: emp.labor_card_number },
-                    { label: 'Personal Nr. (MOL)', value: emp.mol_id }
-                ]
-            },
-            {
-                title: "Salary & Logistics",
-                fields: [
-                    { label: 'Gross Salary', value: emp.gross_salary ? `AED ${parseFloat(emp.gross_salary).toLocaleString()}` : '-' },
-                    { label: 'Housing Camp', value: emp.camp },
-                    { label: 'Transportation', value: emp.transportation }
-                ]
-            }
-        ];
+        const isSuperuser = {{ user.is_superuser|lower }};
+    const sections = [
+        {
+            title: "Personal Details",
+            fields: [
+                { label: 'Nationality', value: emp.nationality },
+                { label: 'Gender', value: emp.gender },
+                { label: 'Marital Status', value: emp.marital_status },
+                { label: 'Religion', value: emp.religion },
+                { label: 'Date of Birth', value: emp.date_of_birth }
+            ]
+        },
+        {
+            title: "Employment Info",
+            fields: [
+                { label: 'Division', value: emp.department },
+                { label: 'Present Designation', value: emp.position },
+                { label: 'Category', value: isSuperuser ? emp.salary_grade : null },
+                { label: 'Employer', value: emp.employer },
+                { label: 'D.O.J.', value: emp.date_of_joining }
+            ].filter(f => f.value !== null)
+        },
+        {
+            title: "Passport & Identity",
+            fields: [
+                { label: 'Passport Nr.', value: emp.passport_number },
+                { label: 'Passport Expiry', value: emp.passport_expiry },
+                { label: 'Visa Details', value: emp.visa_details }
+            ]
+        },
+        {
+            title: "Labour Card Details",
+            fields: [
+                { label: 'L.Card/CEC Nr.', value: emp.labor_card_number },
+                { label: 'Personal Nr. (MOL)', value: emp.mol_id }
+            ]
+        },
+        {
+            title: "Salary & Logistics",
+            fields: [
+                { label: 'Gross Salary', value: isSuperuser && emp.gross_salary ? `AED ${parseFloat(emp.gross_salary).toLocaleString()}` : null },
+                { label: 'Housing Camp', value: emp.camp },
+                { label: 'Transportation', value: emp.transportation }
+            ].filter(f => f.value !== null)
+        }
+    ];
 
-        detailGrid.innerHTML = sections.map(s => `
+    detailGrid.innerHTML = sections.map(s => `
             <div class="col-12">
                 <h6 class="fw-bold text-primary text-uppercase mb-3" style="font-size: 0.75rem; letter-spacing: 0.05em;">${s.title}</h6>
                 <div class="row g-2 mb-2">

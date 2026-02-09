@@ -190,10 +190,12 @@
                     class="nav-item {% if 'user-face' in request.path %}active{% endif %}">
                     <span class="nav-icon">👤</span> User Face
                 </a>
+                {% if user.is_superuser %}
                 <a href="{% url 'admin-salary-report' %}"
                     class="nav-item {% if 'salary-report' in request.path %}active{% endif %}">
                     <span class="nav-icon">💰</span> Salary
                 </a>
+                {% endif %}
                 <a href="{% url 'admin-sites' %}"
                     class="nav-item {% if '/sites/' in request.path and 'site-admins' not in request.path %}active{% endif %}">
                     <span class="nav-icon">🏢</span> Sites

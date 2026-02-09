@@ -580,10 +580,13 @@ class AdminEditEmployeeView(APIView):
                 'job_description': emp.job_description,
                 'employer': emp.employer,
                 'site': emp.site.id if emp.site else '',
-                'gross_salary': str(emp.gross_salary) if emp.gross_salary else '',
                 'camp': emp.camp,
                 'transportation': emp.transportation,
             }
+            if request.user.is_superuser:
+                data['gross_salary'] = str(emp.gross_salary) if emp.gross_salary else ''
+                data['basic_salary'] = str(emp.basic_salary) if emp.basic_salary else ''
+                data['salary_grade'] = emp.salary_grade
             return Response(data)
         except Employee.DoesNotExist:
             return Response({'error': 'Employee not found'}, status=404)
@@ -636,9 +639,11 @@ class AdminEditEmployeeView(APIView):
             emp.date_of_birth = parse_date(data.get('date_of_birth'))
             emp.date_of_joining = parse_date(data.get('date_of_joining'))
             emp.passport_expiry = parse_date(data.get('passport_expiry'))
-            emp.gross_salary = parse_decimal(data.get('gross_salary'))
-            emp.basic_salary = parse_decimal(data.get('basic_salary'))
-            emp.category = data.get('category', emp.category)
+            
+            if request.user.is_superuser:
+                emp.gross_salary = parse_decimal(data.get('gross_salary'))
+                emp.basic_salary = parse_decimal(data.get('basic_salary'))
+                emp.salary_grade = data.get('salary_grade', emp.salary_grade)
             
             emp.save()
             return Response({'success': True, 'message': 'Employee updated successfully'})
@@ -1722,7 +1727,6 @@ def admin_user_detail_view(request, user_id):
                     'site_id': employee.site.id if employee.site else None,
                     'status': employee.status,
                     'profile_picture': employee.profile_picture.url if employee.profile_picture else None,
-                    'gross_salary': str(employee.gross_salary) if employee.gross_salary else None,
                     # Expanded Fields
                     'job_description': employee.job_description,
                     'salary_grade': employee.salary_grade,
@@ -1771,6 +1775,15 @@ def admin_user_detail_view(request, user_id):
                     "latitude": record.latitude if record else None,
                     "longitude": record.longitude if record else None,
                 }
+                if request.user.is_superuser:
+                    data['employee']['gross_salary'] = str(employee.gross_salary) if employee.gross_salary else None
+                    if 'salary_grade' in data['employee']: # This is already there, but just to be sure
+                         pass 
+                else:
+                    # Explicitly remove sensitive fields if they were somehow included
+                    data['employee'].pop('gross_salary', None)
+                    data['employee'].pop('salary_grade', None) # Site admin shouldn't see category/grade either as per instruction "donot show salary"
+                
                 # Office Out
                 slots["Office Out"] = {
                     "time_range": "6:00 PM",
