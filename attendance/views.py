@@ -1184,6 +1184,7 @@ class AdminLoginView(APIView):
                 {
                     "message": "Login successful",
                     "access_token": str(refresh.access_token),
+                    "is_superuser": user.is_superuser,
                 },
                 status=200,
             )
