@@ -105,24 +105,131 @@
     }
 
     /* Modals */
-    .modal-content-premium {
-        border-radius: 1.5rem;
+    /* Premium Multi-Select Component */
+    .multi-select-container {
+        position: relative;
+        width: 100%;
+        font-family: var(--font-family);
+    }
+
+    .multi-select-input-box {
+        background: white;
+        border: 1px solid #e2e8f0;
+        border-radius: 0.875rem;
+        padding: 0.5rem;
+        min-height: 50px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        cursor: text;
+        transition: all 0.2s;
+    }
+
+    .multi-select-input-box:focus-within {
+        border-color: #6366f1;
+        box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
+    }
+
+    .site-tag {
+        background: #f1f5f9;
+        color: #1e293b;
+        padding: 0.25rem 0.75rem;
+        border-radius: 0.5rem;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.875rem;
+        font-weight: 500;
+        border: 1px solid #e2e8f0;
+    }
+
+    .site-tag .remove-tag {
+        cursor: pointer;
+        color: #94a3b8;
+        display: flex;
+        align-items: center;
+        transition: color 0.2s;
+    }
+
+    .site-tag .remove-tag:hover {
+        color: #ef4444;
+    }
+
+    .multi-select-search {
         border: none;
-        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+        outline: none;
+        padding: 0.25rem;
+        flex-grow: 1;
+        background: transparent;
+        font-size: 0.875rem;
     }
 
-    .modal-header-premium {
-        background: white !important;
-        border-bottom: 1px solid black !important;
-        padding: 1.5rem 1.75rem;
-        border-radius: 1.5rem 1.5rem 0 0;
+    .multi-select-dropdown {
+        position: absolute;
+        top: calc(100% + 5px);
+        left: 0;
+        right: 0;
+        background: white;
+        border-radius: 1rem;
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+        border: 1px solid #f1f5f9;
+        max-height: 250px;
+        overflow-y: auto;
+        z-index: 1000;
+        display: none;
     }
 
-    .modal-footer-premium {
-        background: white !important;
-        border-top: 1px solid black !important;
-        padding: 1.25rem 1.75rem;
-        border-radius: 0 0 1.5rem 1.5rem;
+    .multi-select-dropdown.active {
+        display: block;
+        animation: slideDown 0.2s ease-out;
+    }
+
+    @keyframes slideDown {
+        from {
+            opacity: 0;
+            transform: translateY(-10px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .dropdown-item-premium {
+        padding: 0.75rem 1rem;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        transition: background 0.1s;
+    }
+
+    .dropdown-item-premium:hover {
+        background: #f8fafc;
+    }
+
+    .dropdown-item-premium.selected {
+        background: #f1f5ff;
+        color: #4f46e5;
+    }
+
+    .dropdown-item-premium .check-icon {
+        width: 18px;
+        height: 18px;
+        border: 2px solid #e2e8f0;
+        border-radius: 4px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
+        color: transparent;
+    }
+
+    .dropdown-item-premium.selected .check-icon {
+        background: #4f46e5;
+        border-color: #4f46e5;
+        color: white;
     }
 </style>
 
@@ -223,10 +330,17 @@
                             placeholder="••••••••" required>
                     </div>
                     <div class="mb-0">
-                        <label class="form-label-premium">Assigned Regional Site</label>
-                        <select id="addSiteSelect" name="site" class="form-select form-select-premium" required>
-                            <option value="">Select Site Location</option>
-                        </select>
+                        <label class="form-label-premium">Assigned Regional Sites</label>
+                        <div class="multi-select-container" id="addSiteContainer">
+                            <div class="multi-select-input-box" onclick="focusSearch('add')">
+                                <div id="addSelectedTags" class="d-flex flex-wrap gap-2"></div>
+                                <input type="text" id="addSiteSearch" class="multi-select-search"
+                                    placeholder="Search sites..." oninput="filterDropdown('add')">
+                            </div>
+                            <div id="addSiteDropdown" class="multi-select-dropdown"></div>
+                        </div>
+                        <!-- Hidden inputs for form submission -->
+                        <div id="addHiddenInputs"></div>
                     </div>
                 </div>
                 <div class="modal-footer modal-footer-premium">
@@ -266,10 +380,17 @@
                             placeholder="Leave blank to maintain current">
                     </div>
                     <div class="mb-0">
-                        <label class="form-label-premium">Regional Site Alignment</label>
-                        <select id="editSiteSelect" name="site" class="form-select form-select-premium" required>
-                            <option value="">Select Site Location</option>
-                        </select>
+                        <label class="form-label-premium">Regional Site Alignments</label>
+                        <div class="multi-select-container" id="editSiteContainer">
+                            <div class="multi-select-input-box" onclick="focusSearch('edit')">
+                                <div id="editSelectedTags" class="d-flex flex-wrap gap-2"></div>
+                                <input type="text" id="editSiteSearch" class="multi-select-search"
+                                    placeholder="Search sites..." oninput="filterDropdown('edit')">
+                            </div>
+                            <div id="editSiteDropdown" class="multi-select-dropdown"></div>
+                        </div>
+                        <!-- Hidden inputs for form submission -->
+                        <div id="editHiddenInputs"></div>
                     </div>
                 </div>
                 <div class="modal-footer modal-footer-premium">
@@ -342,22 +463,82 @@
     }
 
     function populateSiteDropdowns(sites) {
-        const addSelect = document.getElementById('addSiteSelect');
-        const editSelect = document.getElementById('editSiteSelect');
+        // Dropdowns are dynamically populated during search/interaction
+        // But we store sites broadly
+        sitesData = sites;
+    }
 
-        // Clear except first
-        addSelect.innerHTML = '<option value="">Select Site Location</option>';
-        editSelect.innerHTML = '<option value="">Select Site Location</option>';
+    // Modern Multi-Select Logic
+    let selectedSitesAdd = new Set();
+    let selectedSitesEdit = new Set();
 
-        sites.forEach(s => {
-            const opt1 = document.createElement('option');
-            opt1.value = s.id; opt1.textContent = s.name;
-            addSelect.appendChild(opt1);
+    function focusSearch(mode) {
+        document.getElementById(`${mode}SiteSearch`).focus();
+        document.getElementById(`${mode}SiteDropdown`).classList.add('active');
+    }
 
-            const opt2 = document.createElement('option');
-            opt2.value = s.id; opt2.textContent = s.name;
-            editSelect.appendChild(opt2);
-        });
+    // Close dropdowns when clicking outside
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.multi-select-container')) {
+            document.querySelectorAll('.multi-select-dropdown').forEach(d => d.classList.remove('active'));
+        }
+    });
+
+    function filterDropdown(mode) {
+        const query = document.getElementById(`${mode}SiteSearch`).value.toLowerCase();
+        const dropdown = document.getElementById(`${mode}SiteDropdown`);
+        const selectedSet = mode === 'add' ? selectedSitesAdd : selectedSitesEdit;
+
+        dropdown.classList.add('active');
+
+        const filtered = sitesData.filter(s => s.name.toLowerCase().includes(query));
+
+        dropdown.innerHTML = filtered.map(s => `
+            <div class="dropdown-item-premium ${selectedSet.has(s.id) ? 'selected' : ''}" onclick="toggleSiteSelection('${mode}', ${s.id}, '${s.name.replace(/'/g, "\\'")}')">
+                <div class="check-icon"><i class="ri-check-line"></i></div>
+                <span>${s.name}</span>
+            </div>
+        `).join('') || '<div class="p-3 text-center text-secondary small">No sites found.</div>';
+    }
+
+    function toggleSiteSelection(mode, id, name) {
+        const selectedSet = mode === 'add' ? selectedSitesAdd : selectedSitesEdit;
+
+        if (selectedSet.has(id)) {
+            selectedSet.delete(id);
+        } else {
+            selectedSet.add(id);
+        }
+
+        renderSelectedTags(mode);
+        filterDropdown(mode); // Re-render dropdown to update checkboxes
+        updateHiddenInputs(mode);
+    }
+
+    function renderSelectedTags(mode) {
+        const selectedSet = mode === 'add' ? selectedSitesAdd : selectedSitesEdit;
+        const container = document.getElementById(`${mode}SelectedTags`);
+
+        container.innerHTML = Array.from(selectedSet).map(id => {
+            const site = sitesData.find(s => s.id === id);
+            if (!site) return '';
+            return `
+                <div class="site-tag">
+                    ${site.name}
+                    <span class="remove-tag" onclick="event.stopPropagation(); toggleSiteSelection('${mode}', ${site.id}, '${site.name.replace(/'/g, "\\'")}')">
+                        <i class="ri-close-line"></i>
+                    </span>
+                </div>
+            `;
+        }).join('');
+    }
+
+    function updateHiddenInputs(mode) {
+        const selectedSet = mode === 'add' ? selectedSitesAdd : selectedSitesEdit;
+        const container = document.getElementById(`${mode}HiddenInputs`);
+        container.innerHTML = Array.from(selectedSet).map(id => `
+            <input type="hidden" name="sites" value="${id}">
+        `).join('');
     }
 
     function renderTable(admins) {
@@ -392,7 +573,7 @@
                 </td>
                 <td class="text-end pe-4">
                     <div class="d-flex gap-2 justify-content-end">
-                        <button onclick="showEditModal('${a.id}', '${a.username.replace(/'/g, "\\'")}', '${a.email.replace(/'/g, "\\'")}', '${a.site_id}')" class="btn btn-sm btn-pro">
+                        <button onclick="showEditModal('${a.id}', '${a.username.replace(/'/g, "\\'")}', '${a.email.replace(/'/g, "\\'")}', ${JSON.stringify(a.site_ids)})" class="btn btn-sm btn-pro">
                             <i class="ri-user-settings-line"></i> Modify
                         </button>
                         <button onclick="confirmDeleteAdmin('${a.id}', '${a.username.replace(/'/g, "\\'")}')" class="btn btn-sm btn-pro text-danger">
@@ -408,12 +589,24 @@
     const addModal = new bootstrap.Modal(document.getElementById('addModal'));
     const editModal = new bootstrap.Modal(document.getElementById('editModal'));
 
-    function showAddModal() { addModal.show(); }
-    function showEditModal(id, username, email, siteId) {
+    function showAddModal() {
+        selectedSitesAdd.clear();
+        renderSelectedTags('add');
+        updateHiddenInputs('add');
+        filterDropdown('add');
+        addModal.show();
+    }
+
+    function showEditModal(id, username, email, siteIds) {
         document.getElementById('editAdminId').value = id;
         document.getElementById('editUsername').value = username;
         document.getElementById('editEmail').value = email;
-        document.getElementById('editSiteSelect').value = siteId;
+
+        selectedSitesEdit = new Set(siteIds.map(sid => parseInt(sid)));
+        renderSelectedTags('edit');
+        updateHiddenInputs('edit');
+        filterDropdown('edit');
+
         editModal.show();
     }
 

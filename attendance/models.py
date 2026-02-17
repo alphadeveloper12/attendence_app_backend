@@ -29,10 +29,11 @@ class Site(models.Model):
 
 class AdminProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='admin_profile')
-    site = models.ForeignKey(Site, on_delete=models.SET_NULL, null=True, blank=True)
+    sites = models.ManyToManyField(Site, blank=True, related_name='admin_profiles')
 
     def __str__(self):
-        return f"{self.user.username} - {self.site.name if self.site else 'No Site'}"
+        site_names = ", ".join([s.name for s in self.sites.all()])
+        return f"{self.user.username} - {site_names if site_names else 'No Sites'}"
 
 class Employee(models.Model):
     name = models.CharField(max_length=100)

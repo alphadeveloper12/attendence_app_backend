@@ -1191,8 +1191,10 @@ class AdminLoginView(APIView):
         return Response({"error": "Invalid email or password"}, status=400)
 
 
-@permission_classes([IsAdminUser | IsSiteAdmin])
 class AttendanceStatsView(APIView):
+    permission_classes = [IsAdminUser | IsSiteAdmin]
+    authentication_classes = [SessionAuthentication]
+    
     def get(self, request):
         try:
             employees = Employee.objects.all()
@@ -1206,14 +1208,22 @@ class AttendanceStatsView(APIView):
             if not request.user.is_superuser:
                 try:
                     profile = AdminProfile.objects.get(user=request.user)
-                    if profile.site:
-                        site_id = profile.site.id
-                        # Only show assigned site in filter list
-                        all_sites = all_sites.filter(id=profile.site.id)
+                    assigned_sites = profile.sites.all()
+                    all_sites = assigned_sites
+                    
+                    if site_id and site_id != 'all':
+                        if not assigned_sites.filter(id=site_id).exists():
+                            employees = employees.none()
+                            attendance = attendance.none()
+                        else:
+                            employees = employees.filter(site_id=site_id)
+                            attendance = attendance.filter(user__site_id=site_id)
+                    else:
+                        employees = employees.filter(site__in=assigned_sites)
+                        attendance = attendance.filter(user__site__in=assigned_sites)
                 except AdminProfile.DoesNotExist:
                     pass
-            
-            if site_id and site_id != 'all':
+            elif site_id and site_id != 'all':
                 employees = employees.filter(site_id=site_id)
                 attendance = attendance.filter(user__site_id=site_id)
 
@@ -1258,8 +1268,10 @@ class AttendanceStatsView(APIView):
             return Response({"error": str(e)}, status=500)
 
 
-@permission_classes([IsAdminUser | IsSiteAdmin])
 class AttendanceAlertsView(APIView):
+    permission_classes = [IsAdminUser | IsSiteAdmin]
+    authentication_classes = [SessionAuthentication]
+    
     def get(self, request):
         today = timezone.localdate()
         alerts = Attendance.objects.filter(
@@ -1272,12 +1284,17 @@ class AttendanceAlertsView(APIView):
         if not request.user.is_superuser:
             try:
                 profile = AdminProfile.objects.get(user=request.user)
-                if profile.site:
-                    site_id = profile.site.id
+                assigned_sites = profile.sites.all()
+                if site_id and site_id != 'all':
+                    if not assigned_sites.filter(id=site_id).exists():
+                        alerts = alerts.none()
+                    else:
+                        alerts = alerts.filter(user__site_id=site_id)
+                else:
+                    alerts = alerts.filter(user__site__in=assigned_sites)
             except AdminProfile.DoesNotExist:
-                pass
-        
-        if site_id and site_id != 'all':
+                alerts = alerts.none()
+        elif site_id and site_id != 'all':
             alerts = alerts.filter(user__site_id=site_id)
 
         data = []
@@ -1298,20 +1315,31 @@ class AttendanceAlertsView(APIView):
 
 @permission_classes([IsAdminUser | IsSiteAdmin])
 class EmployeeListView(APIView):
+    permission_classes = [IsAdminUser | IsSiteAdmin]
+    authentication_classes = [SessionAuthentication]
+    
     def get(self, request):
         employees = Employee.objects.select_related('site').all().order_by('name')
         
         # Filter by site
         site_id = request.GET.get('site')
-        if not request.user.is_superuser:
+        if not request.user.is_superuser and request.user.is_authenticated: # Keep original condition for site admin check
             try:
                 profile = AdminProfile.objects.get(user=request.user)
-                if profile.site:
-                    site_id = profile.site.id
+                assigned_sites = profile.sites.all()
+                if site_id and site_id != 'all':
+                    if not assigned_sites.filter(id=site_id).exists():
+                        return Response({"results": [], "count": 0})
+                    employees = employees.filter(site_id=site_id)
                 else:
-                    return Response({"results": [], "count": 0})
+                    employees = employees.filter(site__in=assigned_sites)
             except AdminProfile.DoesNotExist:
-                pass
+                return Response({"results": [], "count": 0})
+        elif site_id and site_id != 'all':
+            employees = employees.filter(site_id=site_id)
+        elif not request.user.is_authenticated and not request.GET.get('site'):
+            # For anonymous access (debugging), allow fetching all if no site is specified
+            pass
 
         if site_id and site_id != 'all':
             employees = employees.filter(site_id=site_id)
@@ -1407,11 +1435,21 @@ def admin_dashboard_view(request):
     selected_site = site_filter
     
     # Role-based filtering
-    if not is_superuser and site_admin_profile and site_admin_profile.site:
-        # Force filter by assigned site
-        employees = employees.filter(site=site_admin_profile.site)
-        selected_site = str(site_admin_profile.site.id)
-        site_filter = selected_site # Override filter
+    if not is_superuser and site_admin_profile:
+        assigned_sites = site_admin_profile.sites.all()
+        if site_filter != 'all':
+            try:
+                selected_site_id = int(site_filter)
+                if not assigned_sites.filter(id=selected_site_id).exists():
+                    employees = employees.none()
+                else:
+                    employees = employees.filter(site_id=selected_site_id)
+                    selected_site = site_filter
+            except (ValueError, TypeError):
+                pass
+        else:
+            employees = employees.filter(site__in=assigned_sites)
+            selected_site = 'all'
     elif site_filter != 'all':
         try:
             selected_site_id = int(site_filter)
@@ -1457,7 +1495,10 @@ def admin_dashboard_view(request):
     today_attendance = Attendance.objects.filter(date=today).count()
     
     # Get all sites for the filter dropdown
-    all_sites = Site.objects.all()
+    if not is_superuser and site_admin_profile:
+        all_sites = site_admin_profile.sites.all()
+    else:
+        all_sites = Site.objects.all()
     # Serialize sites for JavaScript
     import json
     sites_json = json.dumps([{"id": site.id, "name": site.name} for site in all_sites])
@@ -1485,8 +1526,8 @@ def admin_dashboard_view(request):
         is_within_geofence=False
     ).select_related('user', 'user__site')
     
-    if not is_superuser and site_admin_profile and site_admin_profile.site:
-        geofence_alerts = geofence_alerts.filter(user__site=site_admin_profile.site)
+    if not is_superuser and site_admin_profile:
+        geofence_alerts = geofence_alerts.filter(user__site__in=site_admin_profile.sites.all())
     
     context = {
         "total_employees": total_employees, # This might need to be filtered too for site admin? 
@@ -1506,12 +1547,13 @@ def admin_dashboard_view(request):
         "search_query": search_query,
         "geofence_alerts": geofence_alerts,
         "is_superuser": is_superuser,
-        "site_admin_site": site_admin_profile.site if site_admin_profile else None
+        "site_admin_sites": site_admin_profile.sites.all() if site_admin_profile else None
     }
     
-    if not is_superuser and site_admin_profile and site_admin_profile.site:
-        context["total_employees"] = Employee.objects.filter(site=site_admin_profile.site).count()
-        context["today_attendance"] = Attendance.objects.filter(date=today, user__site=site_admin_profile.site).count()
+    if not is_superuser and site_admin_profile:
+        assigned_sites = site_admin_profile.sites.all()
+        context["total_employees"] = Employee.objects.filter(site__in=assigned_sites).count()
+        context["today_attendance"] = Attendance.objects.filter(date=today, user__site__in=assigned_sites).count()
         
     return render(request, "dashboard.html", context)
 
@@ -1543,11 +1585,19 @@ def admin_user_face_view(request):
         employees = employees.filter(face_embedding__isnull=True)
 
     # Site filtering
-    selected_site = site_filter
-    if not is_superuser and site_admin_profile and site_admin_profile.site:
-        employees = employees.filter(site=site_admin_profile.site)
-        selected_site = str(site_admin_profile.site.id)
-        site_filter = selected_site
+    if not is_superuser and site_admin_profile:
+        assigned_sites = site_admin_profile.sites.all()
+        if site_filter != 'all':
+            try:
+                target_id = int(site_filter)
+                if not assigned_sites.filter(id=target_id).exists():
+                    employees = employees.none()
+                else:
+                    employees = employees.filter(site_id=target_id)
+            except (ValueError, TypeError):
+                pass
+        else:
+            employees = employees.filter(site__in=assigned_sites)
     elif site_filter != 'all':
         try:
             employees = employees.filter(site_id=int(site_filter))
@@ -1588,7 +1638,7 @@ def admin_user_face_view(request):
         "status_filter": status_filter,
         "search_query": search_query,
         "is_superuser": is_superuser,
-        "site_admin_site": site_admin_profile.site if site_admin_profile else None,
+        "site_admin_sites": site_admin_profile.sites.all() if site_admin_profile else None,
         "per_page": per_page,
     }
     
@@ -1649,12 +1699,11 @@ def admin_user_detail_view(request, user_id):
     if not request.user.is_superuser:
         try:
             profile = AdminProfile.objects.get(user=request.user)
-            # We'll re-check this inside the logic to ensure we don't leak info
-            site_admin_site_id = profile.site.id if profile.site else None
+            permission_sites = profile.sites.all() # Renamed for clarity
         except AdminProfile.DoesNotExist:
-            site_admin_site_id = None
+            permission_sites = Site.objects.none()
     else:
-        site_admin_site_id = None
+        permission_sites = Site.objects.all()
 
     # Handle AJAX Request for Data
     if request.headers.get('x-requested-with') == 'XMLHttpRequest':
@@ -1662,8 +1711,8 @@ def admin_user_detail_view(request, user_id):
             employee = Employee.objects.get(id=user_id)
             
             # Site Admin Permission Check
-            if not request.user.is_superuser and site_admin_site_id:
-                if not employee.site or employee.site.id != site_admin_site_id:
+            if not request.user.is_superuser:
+                if employee.site and not permission_sites.filter(id=employee.site.id).exists(): # Check if employee.site exists before filtering
                     return JsonResponse({'error': 'Permission Denied'}, status=403)
 
             filter_type = request.GET.get("filter", "daily")
@@ -2382,7 +2431,7 @@ def admin_site_admins_view(request):
         return redirect("admin-dashboard")
         
     if request.headers.get('x-requested-with') == 'XMLHttpRequest':
-        admins_qs = AdminProfile.objects.select_related('user', 'site').all()
+        admins_qs = AdminProfile.objects.select_related('user').prefetch_related('sites').all()
         
         # Search Filtering
         search_query = request.GET.get('search', '').strip()
@@ -2390,17 +2439,20 @@ def admin_site_admins_view(request):
             admins_qs = admins_qs.filter(
                 Q(user__username__icontains=search_query) |
                 Q(user__email__icontains=search_query) |
-                Q(site__name__icontains=search_query)
+                Q(sites__name__icontains=search_query)
             )
             
         admins_list = []
         for admin in admins_qs:
+            assigned_sites = admin.sites.all()
+            first_site = assigned_sites.first()
             admins_list.append({
                 'id': admin.user.id,
                 'username': admin.user.username,
                 'email': admin.user.email,
-                'site_id': admin.site.id if admin.site else '',
-                'site_name': admin.site.name if admin.site else 'No Site'
+                'site_id': first_site.id if first_site else '', # Kept for basic compat
+                'site_ids': list(assigned_sites.values_list('id', flat=True)),
+                'site_name': ", ".join([s.name for s in assigned_sites]) if assigned_sites.exists() else 'No Site'
             })
             
         return JsonResponse({
@@ -2424,9 +2476,9 @@ def admin_add_site_admin(request):
     username = request.POST.get("username")
     email = request.POST.get("email")
     password = request.POST.get("password")
-    site_id = request.POST.get("site")
+    site_ids = request.POST.getlist("sites")
     
-    if not (username and email and password and site_id):
+    if not (username and email and password and site_ids):
         return redirect("admin-site-admins")
         
     try:
@@ -2439,8 +2491,9 @@ def admin_add_site_admin(request):
             user.is_staff = True
             user.save()
             
-            site = Site.objects.get(id=site_id)
-            AdminProfile.objects.create(user=user, site=site)
+            sites = Site.objects.filter(id__in=site_ids)
+            profile = AdminProfile.objects.create(user=user)
+            profile.sites.set(sites)
             
         return redirect("admin-site-admins")
     except Exception as e:
@@ -2458,7 +2511,7 @@ def admin_edit_site_admin(request, admin_id):
     
     username = request.POST.get("username")
     email = request.POST.get("email")
-    site_id = request.POST.get("site")
+    site_ids = request.POST.getlist("sites")
     password = request.POST.get("password") # Optional
     
     try:
@@ -2470,9 +2523,9 @@ def admin_edit_site_admin(request, admin_id):
             user.save()
             
             # Update or create profile
-            site = Site.objects.get(id=site_id)
+            sites = Site.objects.filter(id__in=site_ids)
             profile, created = AdminProfile.objects.get_or_create(user=user)
-            profile.site = site
+            profile.sites.set(sites)
             profile.save()
             
         return redirect("admin-site-admins")
@@ -2538,7 +2591,7 @@ class ExportAttendanceView(APIView):
         if not request.user.is_superuser:
             try:
                 profile = AdminProfile.objects.get(user=request.user)
-                if profile.site and employee.site != profile.site:
+                if profile.sites.exists() and employee.site not in profile.sites.all():
                      return Response({'error': 'Unauthorized'}, status=403)
             except AdminProfile.DoesNotExist:
                 pass
@@ -2616,10 +2669,10 @@ def export_reports_view(request):
     is_superuser = request.user.is_superuser
     try:
         admin_profile = request.user.admin_profile
-        permission_site = admin_profile.site
+        permission_sites = admin_profile.sites.all()
     except AdminProfile.DoesNotExist:
         admin_profile = None
-        permission_site = None
+        permission_sites = Site.objects.none()
 
     if not is_superuser and not admin_profile:
         return HttpResponse("Permission Denied", status=403)
@@ -2643,8 +2696,8 @@ def export_reports_view(request):
     if is_superuser:
         if site_id and site_id != 'all':
             employees = employees.filter(site_id=site_id)
-    elif permission_site:
-        employees = employees.filter(site=permission_site)
+    elif permission_sites.exists():
+        employees = employees.filter(site__in=permission_sites)
     
     if position_filter and position_filter != 'all':
         employees = employees.filter(position=position_filter)
@@ -3005,10 +3058,10 @@ def monthly_report_view(request):
     is_superuser = request.user.is_superuser
     try:
         admin_profile = request.user.admin_profile
-        site_admin_site = admin_profile.site
+        site_admin_sites = admin_profile.sites.all()
     except AdminProfile.DoesNotExist:
         admin_profile = None
-        site_admin_site = None
+        site_admin_sites = Site.objects.none()
 
     if not is_superuser and not admin_profile:
         return render(request, 'dashboard.html', {'error': 'Permission Denied'})
@@ -3030,8 +3083,8 @@ def monthly_report_view(request):
                     selected_site = Site.objects.get(id=site_id)
                 except Site.DoesNotExist:
                     pass
-        elif site_admin_site:
-            selected_site = site_admin_site
+        elif site_admin_sites.exists():
+            employees = employees.filter(site__in=site_admin_sites)
         
         # Get employees for selected site
         employees = Employee.objects.all()
@@ -3158,10 +3211,10 @@ def export_monthly_report(request):
     is_superuser = request.user.is_superuser
     try:
         admin_profile = request.user.admin_profile
-        site_admin_site = admin_profile.site
+        site_admin_sites = admin_profile.sites.all()
     except AdminProfile.DoesNotExist:
         admin_profile = None
-        site_admin_site = None
+        site_admin_sites = Site.objects.none()
 
     if not is_superuser and not admin_profile:
         return HttpResponse("Permission Denied", status=403)
@@ -3178,8 +3231,8 @@ def export_monthly_report(request):
             selected_site = Site.objects.get(id=site_id)
         except Site.DoesNotExist:
             pass
-    elif site_admin_site:
-        selected_site = site_admin_site
+    elif site_admin_sites.exists():
+        employees = employees.filter(site__in=site_admin_sites)
     
     # Get employees
     employees = Employee.objects.all()
@@ -3264,7 +3317,7 @@ class AttendanceReportDataView(APIView):
         is_superuser = request.user.is_superuser
         try:
             admin_profile = request.user.admin_profile
-            permission_site = admin_profile.site
+            permission_sites = admin_profile.sites.all()
         except AdminProfile.DoesNotExist:
             admin_profile = None
             permission_site = None
@@ -3393,7 +3446,7 @@ class EmployeeAttendanceHistoryView(APIView):
             if not request.user.is_superuser:
                  try:
                      profile = AdminProfile.objects.get(user=request.user)
-                     if profile.site and emp.site != profile.site:
+                     if profile.sites.exists() and emp.site not in profile.sites.all():
                          return Response({'error': 'Permission Denied'}, status=403)
                  except AdminProfile.DoesNotExist:
                      pass

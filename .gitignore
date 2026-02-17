@@ -72,3 +72,4 @@ attendance/__pycache__/views.cpython-312.pyc
 attendance/migrations/00*.py
 .gitignore
 attendance_system/__pycache__/urls.cpython-312.pyc
+/rocketops/*
