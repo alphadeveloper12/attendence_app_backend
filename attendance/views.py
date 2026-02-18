@@ -55,7 +55,6 @@ from django.http import FileResponse, Http404
 
 class UploadBuildView(APIView):
     permission_classes = [IsAdminUser]
-    authentication_classes = [SessionAuthentication]
 
     def post(self, request):
         if not request.user.is_superuser:
@@ -121,7 +120,6 @@ class SiteListView(APIView):
 
 
 class ImportEmployeesView(APIView):
-    authentication_classes = [SessionAuthentication]
     permission_classes = [IsAdminUser]
 
     @transaction.atomic
@@ -416,7 +414,6 @@ class ImportEmployeesView(APIView):
 
 
 class DownloadEmployeeTemplateView(APIView):
-    authentication_classes = [SessionAuthentication]
     permission_classes = [IsAdminUser]
 
     def get(self, request):
@@ -481,7 +478,6 @@ class DownloadEmployeeTemplateView(APIView):
 
 
 class AdminAddEmployeeView(APIView):
-    authentication_classes = [SessionAuthentication]
     permission_classes = [IsAdminUser]
 
     def post(self, request):
@@ -654,7 +650,6 @@ class AdminEditEmployeeView(APIView):
 
 
 class AdminDeleteEmployeeView(APIView):
-    authentication_classes = [SessionAuthentication]
     permission_classes = [IsAdminUser]
 
     def delete(self, request, employee_id):
@@ -669,7 +664,6 @@ class AdminDeleteEmployeeView(APIView):
 
 
 class AdminBulkDeleteEmployeeView(APIView):
-    authentication_classes = [SessionAuthentication]
     permission_classes = [IsAdminUser]
 
     def post(self, request):
@@ -1193,7 +1187,6 @@ class AdminLoginView(APIView):
 
 class AttendanceStatsView(APIView):
     permission_classes = [IsAdminUser | IsSiteAdmin]
-    authentication_classes = [SessionAuthentication]
     
     def get(self, request):
         try:
@@ -1270,7 +1263,6 @@ class AttendanceStatsView(APIView):
 
 class AttendanceAlertsView(APIView):
     permission_classes = [IsAdminUser | IsSiteAdmin]
-    authentication_classes = [SessionAuthentication]
     
     def get(self, request):
         today = timezone.localdate()
@@ -1316,7 +1308,6 @@ class AttendanceAlertsView(APIView):
 @permission_classes([IsAdminUser | IsSiteAdmin])
 class EmployeeListView(APIView):
     permission_classes = [IsAdminUser | IsSiteAdmin]
-    authentication_classes = [SessionAuthentication]
     
     def get(self, request):
         employees = Employee.objects.select_related('site').all().order_by('name')
@@ -1970,7 +1961,6 @@ def admin_sites_view(request):
 
 class ImportSitesView(APIView):
     permission_classes = [IsAdminUser]
-    authentication_classes = [SessionAuthentication]
 
     def post(self, request):
         if 'file' not in request.FILES:
@@ -2021,7 +2011,6 @@ class ImportSitesView(APIView):
 
 class ImportSitesScheduleView(APIView):
     permission_classes = [IsAdminUser]
-    authentication_classes = [SessionAuthentication]
 
     def post(self, request):
         if 'file' not in request.FILES:
@@ -2106,7 +2095,6 @@ class ImportSitesScheduleView(APIView):
 
 class DownloadSiteScheduleTemplateView(APIView):
     permission_classes = [IsAdminUser]
-    authentication_classes = [SessionAuthentication]
 
     def get(self, request):
         import pandas as pd
@@ -2405,7 +2393,6 @@ def _get_sites_data():
 
 class AdminBulkDeleteSiteView(APIView):
     permission_classes = [IsAdminUser]
-    authentication_classes = [SessionAuthentication]
 
     def post(self, request):
         try:
@@ -2749,7 +2736,6 @@ def export_reports_view(request):
 
 class AdminSalaryReportView(APIView):
     permission_classes = [IsAdminUser]
-    authentication_classes = [SessionAuthentication]
 
     def get(self, request):
         if not request.user.is_superuser:
@@ -2881,7 +2867,6 @@ class AdminSalaryReportView(APIView):
 
 class DownloadSalarySlipView(APIView):
     permission_classes = [IsAdminUser]
-    authentication_classes = [SessionAuthentication]
 
     def get(self, request, employee_id, month, year):
         if not request.user.is_superuser:
