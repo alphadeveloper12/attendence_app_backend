@@ -252,6 +252,19 @@
                             class="ri-history-line"></i> All Sites</a></li>
             </ul>
         </div>
+
+        <!-- Category Filter -->
+        <div class="dropdown">
+            <button class="btn btn-white border shadow-sm dropdown-toggle rounded-3 px-3 py-2 fw-semibold" type="button"
+                id="categoryFilterBtn" data-bs-toggle="dropdown">
+                <i class="ri-user-settings-line me-1"></i> All Categories
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end shadow-lg border-0 rounded-4 dropdown-menu-scrollable"
+                id="categoryDropdown">
+                <li><a class="dropdown-item py-2" href="#" onclick="filterCategory('all', 'All Categories')"><i
+                            class="ri-history-line"></i> All Categories</a></li>
+            </ul>
+        </div>
         <button onclick="openAddModal()" class="btn btn-premium shadow-sm">
             <i class="ri-user-add-line"></i> <span>Add Employee</span>
         </button>
@@ -698,6 +711,7 @@
     // Parity State & Logic
     let currentSiteId = 'all';
     let currentStatus = 'all';
+    let currentCategory = 'all';
     let currentPage = 1;
     let rowsPerPage = 20;
     let searchTimer;
@@ -718,7 +732,7 @@
 
     async function loadStats() {
         try {
-            const res = await fetch(`/api/attendance/stats/?site=${currentSiteId}&status=${currentStatus}`);
+            const res = await fetch(`/api/attendance/stats/?site=${currentSiteId}&status=${currentStatus}&category=${currentCategory}`);
             const data = await res.json();
 
             document.getElementById('stat-total-employees').textContent = data.total_employees;
@@ -747,12 +761,21 @@
                     statusList.innerHTML += `<li><a class="dropdown-item" href="#" onclick="filterStatus('${s}', '${s}')"><i class="ri-filter-3-line text-secondary"></i> ${s}</a></li>`;
                 });
             }
+
+            // Load categories
+            const categoryList = document.getElementById('categoryDropdown');
+            categoryList.innerHTML = `<li><a class="dropdown-item" href="#" onclick="filterCategory('all', 'All Categories')"><i class="ri-history-line text-secondary"></i> All Categories</a></li>`;
+            if (data.categories) {
+                data.categories.forEach(c => {
+                    categoryList.innerHTML += `<li><a class="dropdown-item" href="#" onclick="filterCategory('${c}', '${c}')"><i class="ri-user-settings-line text-secondary"></i> ${c}</a></li>`;
+                });
+            }
         } catch (e) { console.error(e); }
     }
 
     async function loadAlerts() {
         try {
-            const res = await fetch(`/api/attendance/alerts/?site=${currentSiteId}&status=${currentStatus}`);
+            const res = await fetch(`/api/attendance/alerts/?site=${currentSiteId}&status=${currentStatus}&category=${currentCategory}`);
             const data = await res.json();
             const container = document.getElementById('alertsContainer');
             const wrapper = document.getElementById('alertsWrapper');
@@ -781,7 +804,7 @@
         tbody.innerHTML = '<tr><td colspan="13" class="text-center py-5"><div class="spinner-border spinner-border-sm text-primary"></div></td></tr>';
 
         try {
-            const res = await fetch(`/api/attendance/employees/?page=${currentPage}&site=${currentSiteId}&status=${currentStatus}&search=${query}&per_page=${rowsPerPage}`);
+            const res = await fetch(`/api/attendance/employees/?page=${currentPage}&site=${currentSiteId}&status=${currentStatus}&category=${currentCategory}&search=${query}&per_page=${rowsPerPage}`);
             const data = await res.json();
             const results = data.results || [];
             if (results.length === 0) {
@@ -848,6 +871,15 @@
         loadEmployees();
         loadAlerts();
     }
+
+    function filterCategory(category, label) {
+        currentCategory = category;
+        currentPage = 1;
+        document.getElementById('categoryFilterBtn').innerHTML = `<i class="ri-user-settings-line me-1"></i> ${label}`;
+        loadStats();
+        loadEmployees();
+        loadAlerts();
+    }
     function changeRowsPerPage() { rowsPerPage = document.getElementById('rowsPerPage').value; currentPage = 1; loadEmployees(); }
     function changePage(delta) { currentPage += delta; if (currentPage < 1) currentPage = 1; loadEmployees(); }
     function debounceSearch() { clearTimeout(searchTimer); searchTimer = setTimeout(() => { currentPage = 1; loadEmployees(); }, 300); }
@@ -863,64 +895,64 @@
             const data = await res.json();
             const emp = data.employee;
             modalLink.href = `/api/attendance/dashboard/user/${empId}/`;
-            const isSuperuser = {{ is_superuser|lower }};
-    const sections = [
-        {
-            title: "Status & Core",
-            fields: [
-                { label: 'Name', value: emp.name },
-                { label: 'Badge ID', value: emp.badge_number },
-                { label: 'Division', value: emp.department },
-                { label: 'Project / Site', value: emp.site },
-                { label: 'Status', value: emp.status }
-            ]
-        },
-        {
-            title: "Personal Details",
-            fields: [
-                { label: 'Nationality', value: emp.nationality },
-                { label: 'Gender', value: emp.gender },
-                { label: 'Marital Status', value: emp.marital_status },
-                { label: 'Religion', value: emp.religion },
-                { label: 'Date of Birth', value: emp.date_of_birth }
-            ]
-        },
-        {
-            title: "Employment Info",
-            fields: [
-                { label: 'Present Designation', value: emp.position },
-                { label: 'Category', value: isSuperuser ? emp.salary_grade : null },
-                { label: 'Employer', value: emp.employer },
-                { label: 'D.O.J.', value: emp.date_of_joining },
-                { label: 'Gross Salary', value: isSuperuser && emp.gross_salary ? `AED ${parseFloat(emp.gross_salary).toLocaleString()}` : null }
-            ].filter(f => f.value !== null)
-        },
-        {
-            title: "Identity & Documents",
-            fields: [
-                { label: 'Passport Nr.', value: emp.passport_number },
-                { label: 'PP Expiry Date', value: emp.passport_expiry },
-                { label: 'L.Card/CEC Nr.', value: emp.labor_card_number },
-                { label: 'Personal Nr.', value: emp.mol_id },
-                { label: 'Visa Details', value: emp.visa_details }
-            ]
-        },
-        {
-            title: "Contact & Logistics",
-            fields: [
-                { label: 'Phone', value: emp.phone },
-                { label: 'Email', value: emp.email },
-                { label: 'Housing Camp', value: emp.camp },
-                { label: 'Transportation', value: emp.transportation }
-            ]
-        }
-    ];
-    modalBody.innerHTML = sections.map(s => `
+            const isSuperuser = {% if is_superuser %}true{% else %} false{% endif %};
+        const sections = [
+            {
+                title: "Status & Core",
+                fields: [
+                    { label: 'Name', value: emp.name },
+                    { label: 'Badge ID', value: emp.badge_number },
+                    { label: 'Division', value: emp.department },
+                    { label: 'Project / Site', value: emp.site },
+                    { label: 'Status', value: emp.status }
+                ]
+            },
+            {
+                title: "Personal Details",
+                fields: [
+                    { label: 'Nationality', value: emp.nationality },
+                    { label: 'Gender', value: emp.gender },
+                    { label: 'Marital Status', value: emp.marital_status },
+                    { label: 'Religion', value: emp.religion },
+                    { label: 'Date of Birth', value: emp.date_of_birth }
+                ]
+            },
+            {
+                title: "Employment Info",
+                fields: [
+                    { label: 'Present Designation', value: emp.position },
+                    { label: 'Category', value: isSuperuser ? emp.salary_grade : null },
+                    { label: 'Employer', value: emp.employer },
+                    { label: 'D.O.J.', value: emp.date_of_joining },
+                    { label: 'Gross Salary', value: isSuperuser && emp.gross_salary ? `AED ${parseFloat(emp.gross_salary).toLocaleString()}` : null }
+                ].filter(f => f.value !== null)
+            },
+            {
+                title: "Identity & Documents",
+                fields: [
+                    { label: 'Passport Nr.', value: emp.passport_number },
+                    { label: 'PP Expiry Date', value: emp.passport_expiry },
+                    { label: 'L.Card/CEC Nr.', value: emp.labor_card_number },
+                    { label: 'Personal Nr.', value: emp.mol_id },
+                    { label: 'Visa Details', value: emp.visa_details }
+                ]
+            },
+            {
+                title: "Contact & Logistics",
+                fields: [
+                    { label: 'Phone', value: emp.phone },
+                    { label: 'Email', value: emp.email },
+                    { label: 'Housing Camp', value: emp.camp },
+                    { label: 'Transportation', value: emp.transportation }
+                ]
+            }
+        ];
+        modalBody.innerHTML = sections.map(s => `
                 <h6 class="fw-bold text-dark mb-3 border-bottom pb-2" style="font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em;">${s.title}</h6>
                 <div class="row g-2 mb-4">${s.fields.map(f => `
                     <div class="col-md-4 col-6"><div class="p-2 rounded bg-light border border-white h-100"><div class="text-secondary" style="font-size: 0.65rem; font-weight: 700; text-transform: uppercase;">${f.label}</div><div class="text-dark small fw-semibold overflow-hidden text-nowrap text-truncate">${f.value || '-'}</div></div></div>`).join('')}
                 </div>`).join('');
-        } catch (e) { modalBody.innerHTML = '<div class="text-center text-danger py-4">Error loading details.</div>'; }
+    } catch (e) { modalBody.innerHTML = '<div class="text-center text-danger py-4">Error loading details.</div>'; }
     }
 
     async function editEmployee(empId) {

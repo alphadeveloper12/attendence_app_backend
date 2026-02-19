@@ -1194,8 +1194,9 @@ class AttendanceStatsView(APIView):
             attendance = Attendance.objects.filter(date=timezone.localdate())
             all_sites = Site.objects.all()
 
-            # Filter by Site (Query Param or Admin Profile)
+            # Filter by Site/Category (Query Param or Admin Profile)
             site_id = request.GET.get('site')
+            category_filter = request.GET.get('category')
             status_filter = request.GET.get('status')
             
             if not request.user.is_superuser:
@@ -1220,11 +1221,35 @@ class AttendanceStatsView(APIView):
                 employees = employees.filter(site_id=site_id)
                 attendance = attendance.filter(user__site_id=site_id)
 
+            if category_filter and category_filter != 'all':
+                employees = employees.filter(
+                    Q(salary_grade__iexact=category_filter) | 
+                    (Q(salary_grade__in=['', None]) & Q(category__iexact=category_filter))
+                )
+                attendance = attendance.filter(
+                    Q(user__salary_grade__iexact=category_filter) | 
+                    (Q(user__salary_grade__in=['', None]) & Q(user__category__iexact=category_filter))
+                )
+
             if status_filter and status_filter != 'all':
                 employees = employees.filter(status__iexact=status_filter)
                 attendance = attendance.filter(user__status__iexact=status_filter)
 
-            # Get unique statuses for the filter dropdown
+            # Unique categories from both category and salary_grade
+            # Get union of both fields, strip, and unify case-insensitively
+            cats = set(Employee.objects.exclude(category__isnull=True).exclude(category='').values_list('category', flat=True))
+            grades = set(Employee.objects.exclude(salary_grade__isnull=True).exclude(salary_grade='').values_list('salary_grade', flat=True))
+            
+            unified_cats = {}
+            for c in (list(cats) + list(grades)):
+                if not c or not c.strip(): continue
+                c_strip = c.strip()
+                c_lower = c_strip.lower()
+                if c_lower not in unified_cats:
+                    unified_cats[c_lower] = c_strip.capitalize() # Standardize to Title Case
+            
+            unique_categories = sorted(list(unified_cats.values()))
+
             unique_statuses = Employee.objects.exclude(status__isnull=True).exclude(status='').values_list('status', flat=True).distinct()
             unique_statuses = sorted(list(unique_statuses))
 
@@ -1249,6 +1274,7 @@ class AttendanceStatsView(APIView):
                     "today_attendance_count": attendance.count(),
                     "total_sites": all_sites.count(),
                     "sites": [{"id": s.id, "name": s.name} for s in all_sites],
+                    "categories": unique_categories,
                     "statuses": unique_statuses,
                     "chart": {
                         "labels": chart_labels,
@@ -1334,6 +1360,15 @@ class EmployeeListView(APIView):
 
         if site_id and site_id != 'all':
             employees = employees.filter(site_id=site_id)
+
+        # Filter by category
+        category_filter = request.GET.get('category')
+
+        if category_filter and category_filter != 'all':
+            employees = employees.filter(
+                Q(salary_grade__iexact=category_filter) | 
+                (Q(salary_grade__in=['', None]) & Q(category__iexact=category_filter))
+            )
 
         # Filter by status
         status_filter = request.GET.get('status')
@@ -2669,6 +2704,7 @@ def export_reports_view(request):
     status_filter = request.GET.get('status')
     site_id = request.GET.get('site')
     position_filter = request.GET.get('position')
+    category_filter = request.GET.get('category')
 
     if date_str:
         try:
@@ -2688,6 +2724,12 @@ def export_reports_view(request):
     
     if position_filter and position_filter != 'all':
         employees = employees.filter(position__iexact=position_filter)
+    
+    if category_filter and category_filter != 'all':
+        employees = employees.filter(
+            Q(salary_grade__iexact=category_filter) | 
+            (Q(salary_grade__in=['', None]) & Q(category__iexact=category_filter))
+        )
 
     attendance_records = Attendance.objects.filter(
         date=selected_date,
@@ -3315,6 +3357,7 @@ class AttendanceReportDataView(APIView):
         site_id = request.GET.get('site')
         status_filter = request.GET.get('status')
         position_filter = request.GET.get('position')
+        category_filter = request.GET.get('category')
         page_num = request.GET.get('page', 1)
         per_page = int(request.GET.get('per_page', 20))
 
@@ -3337,8 +3380,8 @@ class AttendanceReportDataView(APIView):
             p_strip = p.strip()
             p_lower = p_strip.lower()
             if p_lower not in unified_positions:
-                unified_positions[p_lower] = p_strip
-        positions_list = sorted(list(unified_positions.values()), key=str.lower)
+                unified_positions[p_lower] = p_strip.capitalize()
+        positions_list = sorted(list(unified_positions.values()))
 
         if is_superuser:
             sites_list = list(Site.objects.all().values('id', 'name'))
@@ -3346,6 +3389,13 @@ class AttendanceReportDataView(APIView):
                 employees = employees.filter(site_id=site_id)
         elif permission_site:
             employees = employees.filter(site=permission_site)
+        
+        # Category Filter
+        if category_filter and category_filter != 'all':
+            employees = employees.filter(
+                Q(salary_grade__iexact=category_filter) | 
+                (Q(salary_grade__in=['', None]) & Q(category__iexact=category_filter))
+            )
         
         # Position Filter
         if position_filter and position_filter != 'all':
@@ -3417,6 +3467,7 @@ class AttendanceReportDataView(APIView):
             'stats': stats,
             'sites': sites_list,
             'positions': positions_list,
+            'categories': sorted(list({c.strip().capitalize(): c.strip().capitalize() for c in (list(Employee.objects.exclude(category__isnull=True).exclude(category='').values_list('category', flat=True)) + list(Employee.objects.exclude(salary_grade__isnull=True).exclude(salary_grade='').values_list('salary_grade', flat=True))) if c and c.strip()}.values())),
             'selected_site': site_id,
             'selected_date': selected_date.strftime('%Y-%m-%d'),
             'permissions': {'is_superuser': is_superuser},

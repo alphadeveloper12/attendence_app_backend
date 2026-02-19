@@ -320,6 +320,15 @@
             </select>
         </div>
 
+        <div class="col-md-3">
+            <label class="form-label small fw-bold text-secondary text-uppercase mb-2">
+                <i class="ri-user-settings-line me-1"></i> Category
+            </label>
+            <select id="filterCategory" class="form-select form-select-modern" onchange="loadData(1)">
+                <option value="all">All Categories</option>
+            </select>
+        </div>
+
         <div class="col-md-2">
             <label class="form-label small fw-bold text-secondary text-uppercase mb-2">
                 <i class="ri-list-check-2 me-1"></i> Entries
@@ -447,8 +456,9 @@
         const perPage = document.getElementById('filterPerPage').value;
         const status = document.getElementById('filterStatus').value;
         const position = document.getElementById('filterPosition').value;
+        const category = document.getElementById('filterCategory').value;
 
-        const params = new URLSearchParams({ page, per_page: perPage, date: date || '', site: site || 'all', status: status || '', position: position || 'all' });
+        const params = new URLSearchParams({ page, per_page: perPage, date: date || '', site: site || 'all', status: status || '', position: position || 'all', category: category || 'all' });
 
         try {
             const res = await fetch(`${API_URL}?${params}`);
@@ -482,6 +492,16 @@
                     const opt = document.createElement('option');
                     opt.value = p; opt.textContent = p;
                     posSelect.appendChild(opt);
+                });
+            }
+
+            // Category Filter Population
+            const catSelect = document.getElementById('filterCategory');
+            if (catSelect.options.length <= 1 && data.categories) {
+                data.categories.forEach(c => {
+                    const opt = document.createElement('option');
+                    opt.value = c; opt.textContent = c;
+                    catSelect.appendChild(opt);
                 });
             }
 
@@ -587,6 +607,7 @@
         document.getElementById('filterDate').value = new Date().toISOString().split('T')[0];
         document.getElementById('filterSite').value = 'all';
         document.getElementById('filterPosition').value = 'all';
+        document.getElementById('filterCategory').value = 'all';
         document.getElementById('filterStatus').value = '';
         document.getElementById('statusBadge').classList.add('d-none');
         loadData(1);
@@ -598,6 +619,7 @@
             site: document.getElementById('filterSite').value || 'all',
             status: document.getElementById('filterStatus').value || '',
             position: document.getElementById('filterPosition').value || 'all',
+            category: document.getElementById('filterCategory').value || 'all',
         });
         window.location.href = `${EXPORT_URL}?${params.toString()}`;
     }
