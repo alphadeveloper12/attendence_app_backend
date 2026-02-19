@@ -2687,8 +2687,14 @@ from django.http import HttpResponse
 
 @login_required
 def export_reports_view(request):
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+
     # Permission Check
     is_superuser = request.user.is_superuser
+    is_staff = request.user.is_staff
+    
     try:
         admin_profile = request.user.admin_profile
         permission_sites = admin_profile.sites.all()
@@ -2696,7 +2702,7 @@ def export_reports_view(request):
         admin_profile = None
         permission_sites = Site.objects.none()
 
-    if not is_superuser and not admin_profile:
+    if not is_superuser and not is_staff and not admin_profile:
         return HttpResponse("Permission Denied", status=403)
 
     # Filters
@@ -2714,13 +2720,23 @@ def export_reports_view(request):
     else:
         selected_date = timezone.localdate()
 
+    # Determine visibility for the report
     employees = Employee.objects.all()
-
-    if is_superuser:
+    if is_superuser or is_staff:
+        # Staff/Superuser can see everything or filter by site
         if site_id and site_id != 'all':
             employees = employees.filter(site_id=site_id)
-    elif permission_sites.exists():
+            all_sites_for_summary = Site.objects.filter(id=site_id)
+        else:
+            all_sites_for_summary = Site.objects.all().order_by('name')
+    elif admin_profile:
+        # Site admins see only their assigned sites
         employees = employees.filter(site__in=permission_sites)
+        if site_id and site_id != 'all':
+            employees = employees.filter(site_id=site_id)
+            all_sites_for_summary = permission_sites.filter(id=site_id)
+        else:
+            all_sites_for_summary = permission_sites.order_by('name')
     
     if position_filter and position_filter != 'all':
         employees = employees.filter(position__iexact=position_filter)
@@ -2737,12 +2753,14 @@ def export_reports_view(request):
     ).select_related('user', 'user__site')
     attendance_map = {att.user_id: att for att in attendance_records}
 
-    # Generate CSV
-    response = HttpResponse(content_type='text/csv')
-    response['Content-Disposition'] = f'attachment; filename="attendance_report_{selected_date}.csv"'
-
-    writer = csv.writer(response)
-    writer.writerow(['Employee Name', 'Badge ID', 'Grade', 'Department', 'Position', 'Site', 'Date', 'Status', 'Check In', 'Check Out'])
+    # Data Collection
+    detailed_data = []
+    summary_map = {} # (site_name, position) -> {present: 0, absent: 0}
+    
+    # Get all unique positions for the summary matrix
+    all_positions = sorted(list(set(Employee.objects.exclude(position__isnull=True).exclude(position='').values_list('position', flat=True))))
+    if not all_positions:
+        all_positions = ["-"]
 
     for emp in employees:
         att = attendance_map.get(emp.id)
@@ -2750,29 +2768,166 @@ def export_reports_view(request):
         check_in = '-'
         check_out = '-'
         site_name = emp.site.name if emp.site else '-'
+        position_name = emp.position or '-'
 
         if att:
             status = 'Present'
             check_in = timezone.localtime(att.check_in_time).strftime('%I:%M %p') if att.check_in_time else '-'
             check_out = timezone.localtime(att.check_out_time).strftime('%I:%M %p') if att.check_out_time else '-'
 
+        # Apply status filter for the detailed sheet
+        include_in_detailed = True
         if status_filter:
-            if status_filter.lower() == 'present' and status != 'Present': continue
-            if status_filter.lower() == 'absent' and status != 'Absent': continue
+            if status_filter.lower() == 'present' and status != 'Present': include_in_detailed = False
+            if status_filter.lower() == 'absent' and status != 'Absent': include_in_detailed = False
 
-        writer.writerow([
-            emp.name,
-            emp.badge_number,
-            emp.salary_grade,
-            emp.department,
-            emp.position,
-            site_name,
-            selected_date,
-            status,
-            check_in,
-            check_out
-        ])
+        if include_in_detailed:
+            detailed_data.append([
+                emp.name,
+                emp.badge_number,
+                emp.salary_grade,
+                emp.department,
+                position_name,
+                site_name,
+                selected_date,
+                status,
+                check_in,
+                check_out
+            ])
 
+        # Aggregate for summary (always aggregate even if filtered in detailed list?)
+        # User usually wants summary of the filtered set, but they said "all 45 sites"
+        # If they filtered a specific site, only that site should show.
+        # But if they filtered status "Absent", the summary should reflect that?
+        # Typically summary reflects the population. Let's respect status/category filters if applied.
+        
+        # Site/Position key
+        key = (site_name, position_name)
+        if key not in summary_map:
+            summary_map[key] = {'present': 0, 'absent': 0}
+        
+        if status == 'Present':
+            summary_map[key]['present'] += 1
+        else:
+            summary_map[key]['absent'] += 1
+
+    # Create XLSX
+    wb = openpyxl.Workbook()
+    
+    # --- Sheet 1: Detailed Data ---
+    ws_detailed = wb.active
+    ws_detailed.title = "Detailed Attendance"
+    
+    headers = ['Employee Name', 'Badge ID', 'Grade', 'Department', 'Position', 'Site', 'Date', 'Status', 'Check In', 'Check Out']
+    ws_detailed.append(headers)
+    
+    header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+    header_font = Font(bold=True, color="FFFFFF")
+    for col in range(1, len(headers) + 1):
+        cell = ws_detailed.cell(row=1, column=col)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center")
+    
+    for row in detailed_data:
+        ws_detailed.append(row)
+    
+    for i, column_cells in enumerate(ws_detailed.columns):
+        ws_detailed.column_dimensions[get_column_letter(i + 1)].width = 18
+
+    # --- Sheet 2: Summary Report (Pivot Matrix) ---
+    ws_summary = wb.create_sheet("Summary Report")
+    summary_header_fill = PatternFill(start_color="2E75B6", end_color="2E75B6", fill_type="solid")
+    
+    # Get Site Names for headers
+    site_names = [s.name for s in all_sites_for_summary]
+    if '-' not in site_names: site_names.append('-') # Handle unassigned
+    site_names = sorted(site_names)
+
+    # Header Row 1: Sites (Merged)
+    ws_summary.cell(row=1, column=1, value="Attendance summary").font = Font(bold=True, size=12)
+    current_col = 2
+    for site_name in site_names:
+        ws_summary.merge_cells(start_row=1, start_column=current_col, end_row=1, end_column=current_col + 1)
+        cell = ws_summary.cell(row=1, column=current_col, value=site_name)
+        cell.fill = summary_header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center")
+        current_col += 2
+    
+    # Grand Total Header (Merged)
+    ws_summary.merge_cells(start_row=1, start_column=current_col, end_row=1, end_column=current_col + 1)
+    cell = ws_summary.cell(row=1, column=current_col, value="GRAND TOTAL")
+    cell.fill = PatternFill(start_color="1F4E78", end_color="1F4E78", fill_type="solid")
+    cell.font = header_font
+    cell.alignment = Alignment(horizontal="center")
+
+    # Header Row 2: Labels
+    ws_summary.cell(row=2, column=1, value="Position").font = Font(bold=True)
+    ws_summary.cell(row=2, column=1).fill = header_fill
+    ws_summary.cell(row=2, column=1).font = header_font
+    
+    current_col = 2
+    sub_header_fill = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
+    sub_header_font = Font(bold=True)
+    
+    for _ in range(len(site_names) + 1): # +1 for Grand Total col
+        p_cell = ws_summary.cell(row=2, column=current_col, value="Present")
+        a_cell = ws_summary.cell(row=2, column=current_col + 1, value="Absent")
+        for cell in [p_cell, a_cell]:
+            cell.fill = sub_header_fill
+            cell.font = sub_header_font
+            cell.alignment = Alignment(horizontal="center")
+        current_col += 2
+
+    # Data Rows
+    current_row = 3
+    for pos in all_positions:
+        ws_summary.cell(row=current_row, column=1, value=pos)
+        
+        row_present_total = 0
+        row_absent_total = 0
+        
+        current_col = 2
+        for site_name in site_names:
+            counts = summary_map.get((site_name, pos), {'present': 0, 'absent': 0})
+            ws_summary.cell(row=current_row, column=current_col, value=counts['present'])
+            ws_summary.cell(row=current_row, column=current_col + 1, value=counts['absent'])
+            
+            row_present_total += counts['present']
+            row_absent_total += counts['absent']
+            current_col += 2
+            
+        # Row Totals
+        ws_summary.cell(row=current_row, column=current_col, value=row_present_total).font = Font(bold=True)
+        ws_summary.cell(row=current_row, column=current_col + 1, value=row_absent_total).font = Font(bold=True)
+        current_row += 1
+
+    # Final Total Row (Column-wise)
+    last_row = ws_summary.max_row + 1
+    ws_summary.cell(row=last_row, column=1, value="TOTAL").font = Font(bold=True)
+    ws_summary.cell(row=last_row, column=1).fill = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
+
+    for col in range(2, ws_summary.max_column + 1):
+        col_sum = 0
+        for r in range(3, last_row):
+            val = ws_summary.cell(row=r, column=col).value
+            if isinstance(val, (int, float)):
+                col_sum += val
+        cell = ws_summary.cell(row=last_row, column=col, value=col_sum)
+        cell.font = Font(bold=True)
+        cell.fill = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
+
+    ws_summary.column_dimensions['A'].width = 30
+    for col in range(2, ws_summary.max_column + 1):
+        ws_summary.column_dimensions[get_column_letter(col)].width = 12
+
+    # Output
+    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    filename = f"attendance_report_{selected_date}.xlsx"
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    
+    wb.save(response)
     return response
 
 
@@ -3342,14 +3497,16 @@ class AttendanceReportDataView(APIView):
 
     def get(self, request):
         is_superuser = request.user.is_superuser
+        is_staff = request.user.is_staff
+        
         try:
             admin_profile = request.user.admin_profile
             permission_sites = admin_profile.sites.all()
         except AdminProfile.DoesNotExist:
             admin_profile = None
-            permission_site = None
+            permission_sites = Site.objects.none()
 
-        if not is_superuser and not admin_profile:
+        if not is_superuser and not is_staff and not admin_profile:
              return Response({'error': 'Permission Denied'}, status=403)
 
         # Filters
@@ -3383,12 +3540,16 @@ class AttendanceReportDataView(APIView):
                 unified_positions[p_lower] = p_strip.capitalize()
         positions_list = sorted(list(unified_positions.values()))
 
-        if is_superuser:
-            sites_list = list(Site.objects.all().values('id', 'name'))
+        if is_superuser or is_staff:
+            sites_list = list(Site.objects.all().order_by('name').values('id', 'name'))
             if site_id and site_id != 'all':
                 employees = employees.filter(site_id=site_id)
-        elif permission_site:
-            employees = employees.filter(site=permission_site)
+        elif permission_sites.exists():
+            sites_list = list(permission_sites.order_by('name').values('id', 'name'))
+            if site_id and site_id != 'all':
+                employees = employees.filter(site_id=site_id)
+            else:
+                employees = employees.filter(site__in=permission_sites)
         
         # Category Filter
         if category_filter and category_filter != 'all':
