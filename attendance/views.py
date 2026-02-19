@@ -2687,7 +2687,7 @@ def export_reports_view(request):
         employees = employees.filter(site__in=permission_sites)
     
     if position_filter and position_filter != 'all':
-        employees = employees.filter(position=position_filter)
+        employees = employees.filter(position__iexact=position_filter)
 
     attendance_records = Attendance.objects.filter(
         date=selected_date,
@@ -3330,7 +3330,15 @@ class AttendanceReportDataView(APIView):
         # Build Querysets
         employees = Employee.objects.all()
         sites_list = []
-        positions_list = list(Employee.objects.exclude(position__isnull=True).exclude(position='').values_list('position', flat=True).distinct().order_by('position'))
+        raw_positions = Employee.objects.exclude(position__isnull=True).exclude(position='').values_list('position', flat=True)
+        unified_positions = {}
+        for p in raw_positions:
+            if not p: continue
+            p_strip = p.strip()
+            p_lower = p_strip.lower()
+            if p_lower not in unified_positions:
+                unified_positions[p_lower] = p_strip
+        positions_list = sorted(list(unified_positions.values()), key=str.lower)
 
         if is_superuser:
             sites_list = list(Site.objects.all().values('id', 'name'))
@@ -3341,7 +3349,7 @@ class AttendanceReportDataView(APIView):
         
         # Position Filter
         if position_filter and position_filter != 'all':
-            employees = employees.filter(position=position_filter)
+            employees = employees.filter(position__iexact=position_filter)
 
         # Attendance Fetch
         attendance_records = Attendance.objects.filter(
