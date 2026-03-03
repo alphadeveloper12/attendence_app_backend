@@ -33,7 +33,7 @@ class EmployeeSerializer(serializers.ModelSerializer):
             'id', 'name', 'email', 'phone', 'department', 'position', 'profile_picture_url', 'site', 'site_name',
             'job_description', 'salary_grade', 'badge_number', 'mol_id', 'labor_card_number', 'employer', 
             'nationality', 'gender', 'marital_status', 'religion', 'date_of_birth', 'date_of_joining', 
-            'passport_number', 'passport_expiry', 'visa_details', 'status', 'gross_salary', 'basic_salary', 'category', 'camp', 'transportation'
+            'passport_number', 'passport_expiry', 'visa_details', 'status', 'gross_salary', 'basic_salary', 'category', 'camp', 'transportation', 'face_embedding'
         ]
 
     def get_profile_picture_url(self, obj):
