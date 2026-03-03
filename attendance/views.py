@@ -1338,6 +1338,12 @@ class EmployeeListView(APIView):
     def get(self, request):
         employees = Employee.objects.select_related('site').all().order_by('name')
         
+        # Filter by face embedding presence
+        has_face = request.GET.get('has_face')
+        if has_face == 'true':
+            # Exclude null, empty strings, and empty lists from JSONField
+            employees = employees.filter(face_embedding__isnull=False).exclude(face_embedding="").exclude(face_embedding=[])
+        
         # Filter by site
         site_id = request.GET.get('site')
         if not request.user.is_superuser and request.user.is_authenticated: # Keep original condition for site admin check
