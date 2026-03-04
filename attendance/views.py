@@ -1107,12 +1107,18 @@ class MarkAttendanceView(APIView):
             else:
                 return Response({"error": "No match found."}, status=400)
 
-        # Winner found → mark attendance (keep your original slot logic)
+        # Winner found → mark attendance
         emp = Employee.objects.get(id=best_eid)
         
-        # Use provided timestamp or current server time
+        # Parse and convert to local time explicitly
         provided_timestamp = data.get("timestamp")
-        now = provided_timestamp if provided_timestamp else timezone.localtime()
+        if provided_timestamp:
+            # provided_timestamp is already parsed by Serializer into a datetime object
+            # Ensure it's converted to the server's local timezone (Asia/Dubai)
+            now = timezone.localtime(provided_timestamp)
+        else:
+            now = timezone.localtime()
+            
         today = now.date()
 
         # Check for existing attendance for today
@@ -1124,13 +1130,15 @@ class MarkAttendanceView(APIView):
         
         # Prevent duplicate markings for the same slot
         if slot == "office_in" and attendance.check_in_time and not created:
+            local_time_str = timezone.localtime(attendance.check_in_time).strftime('%I:%M %p')
             return Response(
-                {"error": f"Attendance 'office_in' already marked for {emp.name} today at {attendance.check_in_time.strftime('%I:%M %p')}."},
+                {"error": f"Attendance 'office_in' already marked for {emp.name} today at {local_time_str}."},
                 status=400,
             )
         if slot == "office_out" and attendance.check_out_time and not created:
+            local_time_str = timezone.localtime(attendance.check_out_time).strftime('%I:%M %p')
             return Response(
-                {"error": f"Attendance 'office_out' already marked for {emp.name} today at {attendance.check_out_time.strftime('%I:%M %p')}."},
+                {"error": f"Attendance 'office_out' already marked for {emp.name} today at {local_time_str}."},
                 status=400,
             )
 
