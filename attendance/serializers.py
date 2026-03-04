@@ -83,3 +83,5 @@ class VerifySerializer(serializers.Serializer):
     longitude = serializers.FloatField()
     image = serializers.ImageField()
     site_id = serializers.IntegerField(required=False, allow_null=True)
+    employee_id = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    timestamp = serializers.DateTimeField(required=False, allow_null=True)

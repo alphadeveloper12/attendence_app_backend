@@ -1058,57 +1058,82 @@ class MarkAttendanceView(APIView):
             )
 
         site_id = data.get("site_id")
+        employee_id_input = data.get("employee_id")
         
         # FAISS nearest neighbors (cosine similarity on L2-normalized vectors)
         # Returns list of (template_id, employee_id, score)
         results = ENGINE.search(v, k=10, site_id=site_id)
         
-        if not results:
-            return Response({"error": "No match found."}, status=400)
+        best_eid = None
+        best_sim = 0.0
+        second_sim = -1.0
 
-        # Aggregate to best per employee
-        per_emp = {}
-        for _, eid, sim in results:
-            if eid not in per_emp or sim > per_emp[eid]:
-                per_emp[eid] = sim
+        if results:
+            # Aggregate to best per employee
+            per_emp = {}
+            for _, eid, sim in results:
+                if eid not in per_emp or sim > per_emp[eid]:
+                    per_emp[eid] = sim
 
-        # Decide winner with threshold + margin
-        ranked = sorted(per_emp.items(), key=lambda kv: kv[1], reverse=True)
-        best_eid, best_sim = ranked[0]
-        print(f"Best employee ID: {best_eid}")
-        second_sim = ranked[1][1] if len(ranked) > 1 else -1.0
-        
-        print(f"Best Sim: {best_sim}, Second Sim: {second_sim}")
-        print(f"Threshold: {THRESH}, Margin: {MARGIN}")
-
-        solo = second_sim < 0
-        pass_thresh = best_sim >= THRESH
-        pass_margin = True if solo else (best_sim - second_sim) >= MARGIN
-        
-        print(f"Pass Thresh: {pass_thresh}, Pass Margin: {pass_margin}")
-
-        if not (pass_thresh and pass_margin):
-            print("Face recognition failed: Threshold or Margin not met")
-            return Response(
-                {
-                    "error": "Face not recognized. Try again or re-enroll with more images.",
-                    "best_sim": best_sim,
-                    "second_sim": second_sim,
-                    # "meta": meta
-                },
-                status=400,
-            )
+            # Decide winner with threshold + margin
+            ranked = sorted(per_emp.items(), key=lambda kv: kv[1], reverse=True)
+            best_eid, best_sim = ranked[0]
+            second_sim = ranked[1][1] if len(ranked) > 1 else -1.0
+            
+            solo = second_sim < 0
+            pass_thresh = best_sim >= THRESH
+            pass_margin = True if solo else (best_sim - second_sim) >= MARGIN
+            
+            if not (pass_thresh and pass_margin):
+                print("Face recognition failed: Threshold or Margin not met")
+                # IF we have an employee_id_input (from offline sync), we TRUST it
+                if employee_id_input:
+                    print(f"Trusting offline identification: {employee_id_input}")
+                    best_eid = employee_id_input
+                else:
+                    return Response(
+                        {
+                            "error": "Face not recognized. Try again or re-enroll with more images.",
+                            "best_sim": best_sim,
+                            "second_sim": second_sim,
+                        },
+                        status=400,
+                    )
+        else:
+            # No results from engine search
+            if employee_id_input:
+                print(f"No match found in engine, but using provided employee_id: {employee_id_input}")
+                best_eid = employee_id_input
+            else:
+                return Response({"error": "No match found."}, status=400)
 
         # Winner found → mark attendance (keep your original slot logic)
         emp = Employee.objects.get(id=best_eid)
-        now = timezone.localtime()
+        
+        # Use provided timestamp or current server time
+        provided_timestamp = data.get("timestamp")
+        now = provided_timestamp if provided_timestamp else timezone.localtime()
         today = now.date()
 
-        attendance, _created = Attendance.objects.get_or_create(
+        # Check for existing attendance for today
+        attendance, created = Attendance.objects.get_or_create(
             user=emp,
             date=today,
             defaults={"status": "present"},
         )
+        
+        # Prevent duplicate markings for the same slot
+        if slot == "office_in" and attendance.check_in_time and not created:
+            return Response(
+                {"error": f"Attendance 'office_in' already marked for {emp.name} today at {attendance.check_in_time.strftime('%I:%M %p')}."},
+                status=400,
+            )
+        if slot == "office_out" and attendance.check_out_time and not created:
+            return Response(
+                {"error": f"Attendance 'office_out' already marked for {emp.name} today at {attendance.check_out_time.strftime('%I:%M %p')}."},
+                status=400,
+            )
+
         # Update basic fields IMMEDIATELY
         attendance.latitude = latitude
         attendance.longitude = longitude
