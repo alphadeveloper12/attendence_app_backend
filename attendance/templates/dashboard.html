@@ -47,6 +47,16 @@
         background: #fbfbfb !important;
     }
 
+    .stat-card.active {
+        border: 2px solid #4f46e5 !important;
+        background: #f8fafc !important;
+    }
+
+    .stat-card.active .stat-icon-wrapper {
+        background: #4f46e5;
+        color: white;
+    }
+
     .stat-card .card-body {
         padding: 1.75rem;
         display: flex;
@@ -299,7 +309,7 @@
 <!-- Stats Grid -->
 <div class="row g-4 mb-5">
     <div class="col-12 col-md-6 col-xl-3">
-        <div class="stat-card">
+        <div class="stat-card" id="card-total" onclick="filterByCard('total')">
             <div class="card-body">
                 <div class="stat-icon-wrapper"><i class="ri-group-line"></i></div>
                 <div>
@@ -310,7 +320,7 @@
         </div>
     </div>
     <div class="col-12 col-md-6 col-xl-3">
-        <div class="stat-card">
+        <div class="stat-card" id="card-present" onclick="filterByCard('present')">
             <div class="card-body">
                 <div class="stat-icon-wrapper"><i class="ri-checkbox-circle-line"></i></div>
                 <div>
@@ -321,7 +331,7 @@
         </div>
     </div>
     <div class="col-12 col-md-6 col-xl-3">
-        <div class="stat-card">
+        <div class="stat-card" id="card-late" onclick="filterByCard('late')">
             <div class="card-body">
                 <div class="stat-icon-wrapper"><i class="ri-alarm-warning-line"></i></div>
                 <div>
@@ -332,7 +342,7 @@
         </div>
     </div>
     <div class="col-12 col-md-6 col-xl-3">
-        <div class="stat-card">
+        <div class="stat-card" id="card-sites">
             <div class="card-body">
                 <div class="stat-icon-wrapper"><i class="ri-building-2-line"></i></div>
                 <div>
@@ -370,6 +380,10 @@
                 <option value="20" selected>20 / Page</option>
                 <option value="50">50 / Page</option>
             </select>
+            <button class="btn btn-outline-primary btn-sm rounded-3 px-3 d-flex align-items-center gap-2"
+                onclick="exportFilteredEmployees()">
+                <i class="ri-download-2-line"></i> Export Filtered
+            </button>
         </div>
         <div class="search-box">
             <i class="ri-search-2-line search-icon"></i>
@@ -486,7 +500,8 @@
                                 <div class="col-md-3"><label
                                         class="form-label small fw-bold text-secondary text-uppercase"
                                         style="font-size: 0.65rem;">Status</label>
-                                    <select name="status" class="form-select form-select-modern">
+                                    <select name="status" id="employeeStatusSelect"
+                                        class="form-select form-select-modern">
                                         <option value="Active">Active</option>
                                         <option value="Leave">Leave</option>
                                         <option value="Terminated">Terminated</option>
@@ -712,6 +727,7 @@
     let currentSiteId = 'all';
     let currentStatus = 'all';
     let currentCategory = 'all';
+    let currentAttendanceFilter = 'total';
     let currentPage = 1;
     let rowsPerPage = 20;
     let searchTimer;
@@ -737,12 +753,14 @@
 
             document.getElementById('stat-total-employees').textContent = data.total_employees;
             document.getElementById('stat-today-attendance').textContent = data.today_attendance_count;
+            document.getElementById('stat-late').textContent = data.late_count !== undefined ? data.late_count : '0';
             document.getElementById('stat-total-sites').textContent = data.total_sites || '-';
 
             const list = document.getElementById('siteDropdown');
             const siteSelect = document.getElementById('employeeSiteSelect');
 
             list.innerHTML = `<li><a class="dropdown-item" href="#" onclick="filterSite('all', 'All Sites')"><i class="ri-history-line text-secondary"></i> All Sites</a></li>`;
+            if (siteSelect) siteSelect.innerHTML = '';
             data.sites.forEach(s => {
                 list.innerHTML += `<li><a class="dropdown-item" href="#" onclick="filterSite('${s.id}', '${s.name}')"><i class="ri-building-line text-secondary"></i> ${s.name}</a></li>`;
                 if (siteSelect) {
@@ -755,10 +773,20 @@
 
             // Load statuses
             const statusList = document.getElementById('statusDropdown');
+            const statusSelect = document.getElementById('employeeStatusSelect');
+
             statusList.innerHTML = `<li><a class="dropdown-item" href="#" onclick="filterStatus('all', 'All Statuses')"><i class="ri-history-line text-secondary"></i> All Statuses</a></li>`;
+
             if (data.statuses) {
+                if (statusSelect) statusSelect.innerHTML = ''; // Clear default options if dynamic ones are available
                 data.statuses.forEach(s => {
                     statusList.innerHTML += `<li><a class="dropdown-item" href="#" onclick="filterStatus('${s}', '${s}')"><i class="ri-filter-3-line text-secondary"></i> ${s}</a></li>`;
+                    if (statusSelect) {
+                        const option = document.createElement('option');
+                        option.value = s;
+                        option.textContent = s;
+                        statusSelect.appendChild(option);
+                    }
                 });
             }
 
@@ -804,7 +832,7 @@
         tbody.innerHTML = '<tr><td colspan="13" class="text-center py-5"><div class="spinner-border spinner-border-sm text-primary"></div></td></tr>';
 
         try {
-            const res = await fetch(`/api/attendance/employees/?page=${currentPage}&site=${currentSiteId}&status=${currentStatus}&category=${currentCategory}&search=${query}&per_page=${rowsPerPage}`);
+            const res = await fetch(`/api/attendance/employees/?page=${currentPage}&site=${currentSiteId}&status=${currentStatus}&category=${currentCategory}&search=${query}&per_page=${rowsPerPage}&attendance_filter=${currentAttendanceFilter}`);
             const data = await res.json();
             const results = data.results || [];
             if (results.length === 0) {
@@ -879,6 +907,24 @@
         loadStats();
         loadEmployees();
         loadAlerts();
+    }
+
+    function filterByCard(type) {
+        currentAttendanceFilter = type;
+        currentPage = 1;
+
+        // Update UI active state
+        document.querySelectorAll('.stat-card').forEach(card => card.classList.remove('active'));
+        const activeCard = document.getElementById(`card-${type}`);
+        if (activeCard) activeCard.classList.add('active');
+
+        loadEmployees();
+    }
+
+    function exportFilteredEmployees() {
+        const query = document.getElementById('tableSearch').value;
+        const url = `/api/attendance/employees/export-filtered/?site=${currentSiteId}&status=${currentStatus}&category=${currentCategory}&search=${query}&attendance_filter=${currentAttendanceFilter}`;
+        window.location.href = url;
     }
     function changeRowsPerPage() { rowsPerPage = document.getElementById('rowsPerPage').value; currentPage = 1; loadEmployees(); }
     function changePage(delta) { currentPage += delta; if (currentPage < 1) currentPage = 1; loadEmployees(); }
@@ -1028,14 +1074,21 @@
         xhr.addEventListener('load', () => {
             if (xhr.status >= 200 && xhr.status < 300) {
                 successCallback();
+            } else if (xhr.status === 502 || xhr.status === 504) {
+                alert('The server is still processing the file in the background (Gateway Timeout). Please wait a minute and then REFRESH the page to see the updated employee list.');
             } else {
-                alert(errorMsg || 'Upload Failed');
+                try {
+                    const resp = JSON.parse(xhr.responseText);
+                    alert(resp.error || errorMsg || 'Upload Failed');
+                } catch (e) {
+                    alert(errorMsg || 'Upload Failed');
+                }
             }
             resetUI();
         });
 
         xhr.addEventListener('error', () => {
-            alert('Network Error');
+            alert('A network error occurred. If the file was large, the server might still be processing it. Please refresh the page in a moment.');
             resetUI();
         });
 

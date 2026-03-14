@@ -239,153 +239,132 @@ class ImportEmployeesView(APIView):
             col_map['site'] = find_col_index(['Project', 'Site'], header_row_1)
 
             # Process data starting from row AFTER headers
-            # If we used header_row_index and header_row_index+1, data starts at header_row_index+2
             start_data_index = header_row_index + 2
             
+            # Helper to extract data from a specific row
+            def get_val_from_row(row_data, field):
+                idx = col_map.get(field)
+                if idx is not None and idx != -1:
+                    val = row_data.iloc[idx]
+                    return str(val).strip() if pd.notna(val) else None
+                return None
+
             success_count = 0
             errors = []
-            debug_info = []
             
-            # Cache sites to avoid redundant lookups
-            site_cache = {}
+            # --- OPTIMIZATION: BATCH LOOKUPS ---
+            # 1. Collect all potential identifiers from the sheet
+            data_df = df.iloc[start_data_index:]
+            all_badges = set()
+            all_mol_ids = set()
+            all_passports = set()
+            all_site_names = set()
+
+            for _, row in data_df.iterrows():
+                b = get_val_from_row(row, 'badge_number')
+                if b: all_badges.add(b)
+                m = get_val_from_row(row, 'mol_id')
+                if m: all_mol_ids.add(m)
+                p = get_val_from_row(row, 'passport_number')
+                if p: all_passports.add(p)
+                s = get_val_from_row(row, 'site')
+                if s: all_site_names.add(s.strip().lower())
+
+            # 2. Bulk fetch existing employees and sites
+            existing_emps_by_badge = {e.badge_number: e for e in Employee.objects.filter(badge_number__in=list(all_badges)).exclude(badge_number='') if e.badge_number}
+            existing_emps_by_mol = {e.mol_id: e for e in Employee.objects.filter(mol_id__in=list(all_mol_ids)).exclude(mol_id='') if e.mol_id}
+            existing_emps_by_passport = {e.passport_number: e for e in Employee.objects.filter(passport_number__in=list(all_passports)).exclude(passport_number='') if e.passport_number}
             
-            for index, row in df.iloc[start_data_index:].iterrows():
+            site_cache = {s.name.lower(): s for s in Site.objects.all()}
+            # -----------------------------------
+
+            for index, row in data_df.iterrows():
                 try:
-                    # Extract data using the map
-                    def get_val(field):
-                        idx = col_map.get(field)
-                        if idx is not None and idx != -1:
-                            val = row.iloc[idx]
-                            return str(val).strip() if pd.notna(val) else None
-                        return None
+                    name = get_val_from_row(row, 'name')
+                    if not name: continue 
 
-                    name = get_val('name')
-                    if not name: 
-                        debug_info.append(f"Row {index}: Skipped (No Name)")
-                        continue # Skip empty rows
-
-                    # Filter by Status (Removed as per user request to allow all statuses)
-                    status = get_val('status')
-
-                    badge = get_val('badge_number')
-                    nationality = get_val('nationality')
-                    # No auto-email generation
-                    email = None
+                    status = get_val_from_row(row, 'status')
+                    badge = get_val_from_row(row, 'badge_number')
+                    nationality = get_val_from_row(row, 'nationality')
                     
-                    # Check if exists based on multiple criteria
-                    emp = None
-                    
-                    # First, try to find by badge ID if provided
-                    if badge:
-                        emp = Employee.objects.filter(badge_number=badge).first()
-                    
-                    # Try by MOL ID
+                    # Optimized lookup using memory cache
+                    emp = existing_emps_by_badge.get(badge)
                     if not emp:
-                        mol_id = get_val('mol_id')
-                        if mol_id:
-                            emp = Employee.objects.filter(mol_id=mol_id).first()
-                    
-                    # Try by Passport Number
+                        mol_id = get_val_from_row(row, 'mol_id')
+                        emp = existing_emps_by_mol.get(mol_id)
                     if not emp:
-                        passport_number = get_val('passport_number')
-                        if passport_number:
-                            emp = Employee.objects.filter(passport_number=passport_number).first()
+                        passport_number = get_val_from_row(row, 'passport_number')
+                        emp = existing_emps_by_passport.get(passport_number)
                     
-                    # If not found by IDs, try to find by name + employer + nationality
                     if not emp and name and employer_name and nationality:
-                        emp = Employee.objects.filter(
-                            name=name,
-                            employer=employer_name,
-                            nationality=nationality
-                        ).first()
+                        # Fallback for name-based lookup (rarer, keep as query for now or expand cache)
+                        emp = Employee.objects.filter(name=name, employer=employer_name, nationality=nationality).first()
                     
-                    # If still not found, create new employee
                     if not emp:
                         emp = Employee()
 
                     emp.name = name
-                    # emp.email = email # Don't set email if it's None
-                    emp.department = get_val('department')
-                    emp.position = get_val('position')
+                    emp.department = get_val_from_row(row, 'department')
+                    emp.position = get_val_from_row(row, 'position')
                     emp.badge_number = badge
-                    emp.salary_grade = get_val('salary_grade')
-                    emp.job_description = get_val('job_description')
-                    emp.employer = employer_name # Set employer from sheet top
+                    emp.salary_grade = get_val_from_row(row, 'salary_grade')
+                    emp.job_description = get_val_from_row(row, 'job_description')
+                    emp.employer = employer_name
                     
-                    # Gross Salary
-                    gross_salary_val = get_val('gross_salary')
-                    if gross_salary_val:
+                    # Salaries
+                    def parse_float(val):
+                        if not val: return None
                         try:
-                            # Remove commas if any
-                            gross_salary_val = gross_salary_val.replace(',', '')
-                            emp.gross_salary = float(gross_salary_val)
+                            return float(str(val).replace(',', ''))
                         except:
-                            pass
-                    
-                    # Basic Salary
-                    basic_salary_val = get_val('basic_salary')
-                    if basic_salary_val:
-                        try:
-                            basic_salary_val = basic_salary_val.replace(',', '')
-                            emp.basic_salary = float(basic_salary_val)
-                        except:
-                            pass
-                    
+                            return None
+
+                    emp.gross_salary = parse_float(get_val_from_row(row, 'gross_salary'))
+                    emp.basic_salary = parse_float(get_val_from_row(row, 'basic_salary'))
                     if not emp.basic_salary and emp.gross_salary:
-                        # Fallback: if basic salary not in sheet, assume 60% of gross as a safe default or user defined
-                        # However, for now, let's just use gross if basic is missing
                         emp.basic_salary = emp.gross_salary
 
-                    # Category detection
-                    div = get_val('department') or ""
-                    cat = get_val('salary_grade') or ""
-                    if 'staff' in div.lower() or 'staff' in cat.lower() or 'office' in div.lower():
-                        emp.category = 'staff'
-                    else:
-                        emp.category = 'worker'
+                    # Category
+                    div = (emp.department or "").lower()
+                    cat = (emp.salary_grade or "").lower()
+                    emp.category = 'staff' if 'staff' in div or 'staff' in cat or 'office' in div else 'worker'
 
-                    emp.nationality = get_val('nationality')
-                    emp.gender = get_val('gender')
-                    emp.marital_status = get_val('marital_status')
-                    emp.religion = get_val('religion')
-                    emp.visa_details = get_val('visa_details')
-                    emp.labor_card_number = get_val('labor_card_number')
-                    emp.mol_id = get_val('mol_id')
-                    emp.passport_number = get_val('passport_number')
+                    emp.nationality = nationality
+                    emp.gender = get_val_from_row(row, 'gender')
+                    emp.marital_status = get_val_from_row(row, 'marital_status')
+                    emp.religion = get_val_from_row(row, 'religion')
+                    emp.visa_details = get_val_from_row(row, 'visa_details')
+                    emp.labor_card_number = get_val_from_row(row, 'labor_card_number')
+                    emp.mol_id = get_val_from_row(row, 'mol_id')
+                    emp.passport_number = get_val_from_row(row, 'passport_number')
                     emp.status = status
                     
-                    # Handle Site
-                    site_name = get_val('site')
+                    # Handle Site using cache
+                    site_name = get_val_from_row(row, 'site')
                     if site_name:
-                        # Map HO or Head Office to Head Office
-                        if site_name.strip().upper() in ['HO', 'HEAD OFFICE']:
-                            site_name = 'Head Office'
+                        site_name = site_name.strip()
+                        if site_name.upper() in ['HO', 'HEAD OFFICE']: site_name = 'Head Office'
                         
-                        site_name_lower = site_name.lower()
-                        if site_name_lower in site_cache:
-                            site_obj = site_cache[site_name_lower]
+                        site_key = site_name.lower()
+                        if site_key in site_cache:
+                            emp.site = site_cache[site_key]
                         else:
-                            site_obj = Site.objects.filter(name__iexact=site_name).first()
-                            if not site_obj:
-                                site_obj = Site.objects.create(name=site_name)
-                            site_cache[site_name_lower] = site_obj
-                        emp.site = site_obj
+                            site_obj = Site.objects.create(name=site_name)
+                            site_cache[site_key] = site_obj
+                            emp.site = site_obj
                     
                     # Handle Dates
                     def parse_date(date_str):
                         if not date_str: return None
                         try:
                             return pd.to_datetime(date_str).date()
-                        except:
-                            return None
+                        except: return None
 
-                    emp.date_of_birth = parse_date(get_val('dob'))
-                    emp.date_of_joining = parse_date(get_val('doj'))
-                    emp.passport_expiry = parse_date(get_val('passport_expiry'))
+                    emp.date_of_birth = parse_date(get_val_from_row(row, 'dob'))
+                    emp.date_of_joining = parse_date(get_val_from_row(row, 'doj'))
+                    emp.passport_expiry = parse_date(get_val_from_row(row, 'passport_expiry'))
                     
-                    # Phone is required, use dummy if missing
-                    if not emp.phone:
-                        emp.phone = "0000000000"
+                    if not emp.phone: emp.phone = "0000000000"
 
                     emp.save()
                     success_count += 1
@@ -393,21 +372,7 @@ class ImportEmployeesView(APIView):
                 except Exception as e:
                     errors.append(f"Row {index}: {str(e)}")
             
-            response_data = {
-                'success': True, 
-                'imported_count': success_count,
-                'errors': errors[:10] # Return first 10 errors
-            }
-            
-            if success_count == 0:
-                response_data['debug'] = {
-                    'col_map': col_map,
-                    'header_row_1': header_row_1,
-                    'header_row_2': header_row_2,
-                    'row_logs': debug_info[:10]
-                }
-                
-            return Response(response_data)
+            return Response({'success': True, 'imported_count': success_count, 'errors': errors[:10]})
 
         except Exception as e:
             return Response({'error': str(e)}, status=500)
@@ -1305,6 +1270,7 @@ class AttendanceStatsView(APIView):
                 {
                     "total_employees": employees.count(),
                     "today_attendance_count": attendance.count(),
+                    "late_count": attendance.filter(status='late').count(),
                     "total_sites": all_sites.count(),
                     "sites": [{"id": s.id, "name": s.name} for s in all_sites],
                     "categories": unique_categories,
@@ -1427,6 +1393,20 @@ class EmployeeListView(APIView):
         paginator = PageNumberPagination()
         # Default to a large number if not specified, but dashboard specifically sends per_page
         paginator.page_size = int(request.GET.get('per_page', 1000))
+
+        # Attendance Filter (Present/Late) - Apply after other filters but before pagination
+        attendance_filter = request.GET.get('attendance_filter')
+        if attendance_filter in ['present', 'late']:
+            today = timezone.localdate()
+            attendance_qs = Attendance.objects.filter(date=today)
+            if attendance_filter == 'late':
+                attendance_qs = attendance_qs.filter(status='late')
+            else:
+                attendance_qs = attendance_qs.filter(status='present')
+            
+            present_employee_ids = attendance_qs.values_list('user_id', flat=True)
+            employees = employees.filter(id__in=present_employee_ids)
+
         result_page = paginator.paginate_queryset(employees, request)
         
         serializer = EmployeeSerializer(
@@ -2672,6 +2652,13 @@ class ExportAttendanceView(APIView):
         ws = wb.active
         ws.title = f"Attendance - {employee.name}"
 
+        # Information Header
+        ws.append(['Employee Name:', employee.name])
+        ws.append(['Badge ID:', employee.badge_number or '-'])
+        ws.append(['Housing Camp:', employee.camp or '-'])
+        ws.append(['Transportation:', employee.transportation or '-'])
+        ws.append([]) # Empty row
+
         # Headers
         headers = ['Date', 'Status', 'Check In', 'Check Out', 'Late (min)', 'Early (min)', 'Location']
         ws.append(headers)
@@ -2698,6 +2685,195 @@ class ExportAttendanceView(APIView):
 
         response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
         response['Content-Disposition'] = f'attachment; filename=attendance_{employee.name}_{start_date}_{end_date}.xlsx'
+        
+        wb.save(response)
+        return response
+
+class ExportEmployeesView(APIView):
+    permission_classes = [IsAdminUser | IsSiteAdmin]
+
+    def get(self, request):
+        import openpyxl
+        from openpyxl.utils import get_column_letter
+        from django.http import HttpResponse
+
+        # Reuse filtering logic from EmployeeListView
+        employees = Employee.objects.select_related('site').all().order_by('name')
+        
+        # Site Filter
+        site_id = request.GET.get('site')
+        if not request.user.is_superuser:
+            try:
+                profile = AdminProfile.objects.get(user=request.user)
+                assigned_sites = profile.sites.all()
+                if site_id and site_id != 'all':
+                    if not assigned_sites.filter(id=site_id).exists():
+                         employees = Employee.objects.none()
+                    else:
+                        employees = employees.filter(site_id=site_id)
+                else:
+                    employees = employees.filter(site__in=assigned_sites)
+            except AdminProfile.DoesNotExist:
+                employees = Employee.objects.none()
+        elif site_id and site_id != 'all':
+            employees = employees.filter(site_id=site_id)
+
+        # Status Filter
+        status_filter = request.GET.get('status')
+        if status_filter and status_filter != 'all':
+            employees = employees.filter(status__iexact=status_filter)
+
+        # Category Filter
+        category_filter = request.GET.get('category')
+        if category_filter and category_filter != 'all':
+            employees = employees.filter(
+                Q(salary_grade__iexact=category_filter) | 
+                (Q(salary_grade__in=['', None]) & Q(category__iexact=category_filter))
+            )
+
+        # Search
+        search = request.GET.get('search')
+        if search:
+            employees = employees.filter(
+                Q(name__icontains=search) | 
+                Q(email__icontains=search) | 
+                Q(badge_number__icontains=search)
+            )
+
+        # Attendance Filter
+        attendance_filter = request.GET.get('attendance_filter')
+        if attendance_filter in ['present', 'late']:
+            today = timezone.localdate()
+            attendance_qs = Attendance.objects.filter(date=today)
+            if attendance_filter == 'late':
+                attendance_qs = attendance_qs.filter(status='late')
+            else:
+                attendance_qs = attendance_qs.filter(status='present')
+            
+            employee_ids = attendance_qs.values_list('user_id', flat=True)
+            employees = employees.filter(id__in=employee_ids)
+
+        # Create Workbook
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Selected Employees"
+
+        headers = ['Name', 'Badge ID', 'Site', 'Department', 'Position', 'Grade/Category', 'Status', 'Housing Camp', 'Transportation', 'Phone', 'Email']
+        ws.append(headers)
+
+        from openpyxl.styles import Font, PatternFill
+        header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+        header_font = Font(bold=True, color="FFFFFF")
+        for col in range(1, len(headers) + 1):
+            cell = ws.cell(row=1, column=col)
+            cell.fill = header_fill
+            cell.font = header_font
+
+        for emp in employees:
+            ws.append([
+                emp.name,
+                emp.badge_number or '-',
+                emp.site.name if emp.site else '-',
+                emp.department or '-',
+                emp.position or '-',
+                emp.salary_grade or (emp.category.capitalize() if emp.category else '-'),
+                emp.status or '-',
+                emp.camp or '-',
+                emp.transportation or '-',
+                emp.phone or '-',
+                emp.email or '-'
+            ])
+
+        for col in range(1, len(headers) + 1):
+            ws.column_dimensions[get_column_letter(col)].width = 20
+
+        response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        response['Content-Disposition'] = 'attachment; filename=employees_list.xlsx'
+        wb.save(response)
+        return response
+
+class ExportFaceEnrollmentView(APIView):
+    permission_classes = [IsAdminUser | IsSiteAdmin]
+
+    def get(self, request):
+        import openpyxl
+        from openpyxl.utils import get_column_letter
+        from django.http import HttpResponse
+
+        # Reuse filtering logic from admin_user_face_view
+        employees = Employee.objects.select_related("site").order_by('name')
+        
+        # Site Filter
+        site_id = request.GET.get('site', 'all')
+        if not request.user.is_superuser:
+            try:
+                profile = AdminProfile.objects.get(user=request.user)
+                assigned_sites = profile.sites.all()
+                if site_id != 'all':
+                    if not assigned_sites.filter(id=site_id).exists():
+                         employees = Employee.objects.none()
+                    else:
+                        employees = employees.filter(site_id=site_id)
+                else:
+                    employees = employees.filter(site__in=assigned_sites)
+            except AdminProfile.DoesNotExist:
+                employees = Employee.objects.none()
+        elif site_id != 'all':
+            try:
+                employees = employees.filter(site_id=int(site_id))
+            except (ValueError, TypeError):
+                pass
+
+        # Enrollment Status Filter
+        status_filter = request.GET.get('status', 'all')
+        if status_filter == 'enrolled':
+            employees = employees.filter(face_embedding__isnull=False)
+        elif status_filter == 'not_enrolled':
+            employees = employees.filter(face_embedding__isnull=True)
+
+        # Search
+        search = request.GET.get('search')
+        if search:
+            employees = employees.filter(
+                Q(name__icontains=search) | 
+                Q(badge_number__icontains=search)
+            )
+
+        # Create Workbook
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Face Enrollment Status"
+
+        headers = ['Name', 'Badge ID', 'Site', 'Enrollment Status', 'Position', 'Department', 'Housing Camp', 'Transportation']
+        ws.append(headers)
+
+        from openpyxl.styles import Font, PatternFill
+        header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+        header_font = Font(bold=True, color="FFFFFF")
+        for col in range(1, len(headers) + 1):
+            cell = ws.cell(row=1, column=col)
+            cell.fill = header_fill
+            cell.font = header_font
+
+        for emp in employees:
+            enrollment_status = "Enrolled" if emp.face_embedding else "Not Enrolled"
+            ws.append([
+                emp.name,
+                emp.badge_number or '-',
+                emp.site.name if emp.site else '-',
+                enrollment_status,
+                emp.position or '-',
+                emp.department or '-',
+                emp.camp or '-',
+                emp.transportation or '-'
+            ])
+
+        for col in range(1, len(headers) + 1):
+            ws.column_dimensions[get_column_letter(col)].width = 20
+
+        response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        filename = f"Face_Enrollment_{datetime.now().strftime('%Y%m%d')}.xlsx"
+        response['Content-Disposition'] = f'attachment; filename={filename}'
         
         wb.save(response)
         return response
@@ -2828,6 +3004,8 @@ def export_reports_view(request):
                 emp.department,
                 position_name,
                 site_name,
+                emp.camp or '-',
+                emp.transportation or '-',
                 selected_date,
                 status,
                 check_in,
@@ -2857,7 +3035,7 @@ def export_reports_view(request):
     ws_detailed = wb.active
     ws_detailed.title = "Detailed Attendance"
     
-    headers = ['Employee Name', 'Badge ID', 'Grade', 'Department', 'Position', 'Site', 'Date', 'Status', 'Check In', 'Check Out']
+    headers = ['Employee Name', 'Badge ID', 'Grade', 'Department', 'Position', 'Site', 'Housing Camp', 'Transportation', 'Date', 'Status', 'Check In', 'Check Out']
     ws_detailed.append(headers)
     
     header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
@@ -3486,6 +3664,8 @@ def export_monthly_report(request):
             'Badge ID': emp.badge_number or '-',
             'Department': emp.department or '-',
             'Site': emp.site.name if emp.site else '-',
+            'Housing Camp': emp.camp or '-',
+            'Transportation': emp.transportation or '-',
             'Total Days': num_days,
             'Days Present': days_present,
             'Days Absent': days_absent,

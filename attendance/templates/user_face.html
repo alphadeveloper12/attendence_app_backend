@@ -198,9 +198,15 @@
             </div>
         </div>
         <div class="col-md-2">
-            <button onclick="clearFilters()" class="btn btn-light border w-100 py-2 rounded-3 fw-semibold">
-                <i class="ri-restart-line me-1"></i> Clear
-            </button>
+            <div class="d-flex gap-2">
+                <button onclick="clearFilters()" class="btn btn-light border w-100 py-2 rounded-3 fw-semibold">
+                    <i class="ri-restart-line me-1"></i> Clear
+                </button>
+                <button onclick="exportEnrollmentData()"
+                    class="btn btn-white border w-100 py-2 rounded-3 fw-semibold shadow-sm">
+                    <i class="ri-file-excel-2-line text-success me-1"></i> Export
+                </button>
+            </div>
         </div>
     </div>
 </div>
@@ -378,6 +384,14 @@
         document.getElementById('statusFilter').value = 'all';
         document.getElementById('searchInput').value = '';
         loadData(1);
+    }
+
+    function exportEnrollmentData() {
+        const site = document.getElementById('siteFilter').value;
+        const status = document.getElementById('statusFilter').value;
+        const search = document.getElementById('searchInput').value;
+        const url = `/api/attendance/dashboard/user-face/export/?site=${site}&status=${status}&search=${search}`;
+        window.location.href = url;
     }
 
     function startTime() {

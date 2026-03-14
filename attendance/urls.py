@@ -16,12 +16,14 @@ urlpatterns = [
     path('employees/delete/<int:employee_id>/', AdminDeleteEmployeeView.as_view(), name='admin-delete-employee'),
     path('employees/delete/bulk/', AdminBulkDeleteEmployeeView.as_view(), name='admin-bulk-delete-employees'),
     path('employees/export/', ExportAttendanceView.as_view(), name='export-attendance'),
+    path('employees/export-filtered/', ExportEmployeesView.as_view(), name='export-filtered-employees'),
     path('sites/', SiteListView.as_view(), name='site-list'),
     
     # Admin Dashboard Template Views
     path('dashboard/login/', admin_login_view, name='admin-login'),
     path('dashboard/', admin_dashboard_view, name='admin-dashboard'),
     path('dashboard/user-face/', admin_user_face_view, name='admin-user-face'),
+    path('dashboard/user-face/export/', ExportFaceEnrollmentView.as_view(), name='export-face-enrollment'),
     path('dashboard/user/<int:user_id>/', admin_user_detail_view, name='admin-user-detail'),
     path('dashboard/logout/', admin_logout_view, name='admin-logout'),
     path('dashboard/downloads/', admin_downloads_view, name='admin-downloads'),
