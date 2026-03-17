@@ -303,71 +303,74 @@ class ImportEmployeesView(APIView):
                         # Fallback for name-based lookup (rarer, keep as query for now or expand cache)
                         emp = Employee.objects.filter(name=name, employer=employer_name, nationality=nationality).first()
                     
+                    is_new = not emp
                     if not emp:
                         emp = Employee()
 
-                    emp.name = name
-                    emp.department = get_val_from_row(row, 'department')
-                    emp.position = get_val_from_row(row, 'position')
-                    emp.badge_number = badge
-                    emp.salary_grade = get_val_from_row(row, 'salary_grade')
-                    emp.job_description = get_val_from_row(row, 'job_description')
+                    if is_new:
+                        emp.name = name
+                        emp.department = get_val_from_row(row, 'department')
+                        emp.position = get_val_from_row(row, 'position')
+                        emp.badge_number = badge
+                        emp.salary_grade = get_val_from_row(row, 'salary_grade')
+                        emp.job_description = get_val_from_row(row, 'job_description')
+                        emp.nationality = nationality
+                        emp.gender = get_val_from_row(row, 'gender')
+                        emp.marital_status = get_val_from_row(row, 'marital_status')
+                        emp.religion = get_val_from_row(row, 'religion')
+                        emp.labor_card_number = get_val_from_row(row, 'labor_card_number')
+                        emp.mol_id = get_val_from_row(row, 'mol_id')
+                        emp.passport_number = get_val_from_row(row, 'passport_number')
+                        emp.status = status
+
+                        # Salaries
+                        def parse_float(val):
+                            if not val: return None
+                            try:
+                                return float(str(val).replace(',', ''))
+                            except:
+                                return None
+
+                        emp.gross_salary = parse_float(get_val_from_row(row, 'gross_salary'))
+                        emp.basic_salary = parse_float(get_val_from_row(row, 'basic_salary'))
+                        if not emp.basic_salary and emp.gross_salary:
+                            emp.basic_salary = emp.gross_salary
+
+                        # Category
+                        div = (emp.department or "").lower()
+                        cat = (emp.salary_grade or "").lower()
+                        emp.category = 'staff' if 'staff' in div or 'staff' in cat or 'office' in div else 'worker'
+
+                        # Handle Site using cache
+                        site_name = get_val_from_row(row, 'site')
+                        if site_name:
+                            site_name = site_name.strip()
+                            if site_name.upper() in ['HO', 'HEAD OFFICE']: site_name = 'Head Office'
+
+                            site_key = site_name.lower()
+                            if site_key in site_cache:
+                                emp.site = site_cache[site_key]
+                            else:
+                                site_obj = Site.objects.create(name=site_name)
+                                site_cache[site_key] = site_obj
+                                emp.site = site_obj
+
+                        # Handle Dates
+                        def parse_date(date_str):
+                            if not date_str: return None
+                            try:
+                                return pd.to_datetime(date_str).date()
+                            except: return None
+
+                        emp.date_of_birth = parse_date(get_val_from_row(row, 'dob'))
+                        emp.date_of_joining = parse_date(get_val_from_row(row, 'doj'))
+                        emp.passport_expiry = parse_date(get_val_from_row(row, 'passport_expiry'))
+
+                        if not emp.phone: emp.phone = "0000000000"
+
+                    # Always update employer and visa_details (for both new and existing employees)
                     emp.employer = get_val_from_row(row, 'employer') or employer_name
-                    
-                    # Salaries
-                    def parse_float(val):
-                        if not val: return None
-                        try:
-                            return float(str(val).replace(',', ''))
-                        except:
-                            return None
-
-                    emp.gross_salary = parse_float(get_val_from_row(row, 'gross_salary'))
-                    emp.basic_salary = parse_float(get_val_from_row(row, 'basic_salary'))
-                    if not emp.basic_salary and emp.gross_salary:
-                        emp.basic_salary = emp.gross_salary
-
-                    # Category
-                    div = (emp.department or "").lower()
-                    cat = (emp.salary_grade or "").lower()
-                    emp.category = 'staff' if 'staff' in div or 'staff' in cat or 'office' in div else 'worker'
-
-                    emp.nationality = nationality
-                    emp.gender = get_val_from_row(row, 'gender')
-                    emp.marital_status = get_val_from_row(row, 'marital_status')
-                    emp.religion = get_val_from_row(row, 'religion')
                     emp.visa_details = get_val_from_row(row, 'visa_details')
-                    emp.labor_card_number = get_val_from_row(row, 'labor_card_number')
-                    emp.mol_id = get_val_from_row(row, 'mol_id')
-                    emp.passport_number = get_val_from_row(row, 'passport_number')
-                    emp.status = status
-                    
-                    # Handle Site using cache
-                    site_name = get_val_from_row(row, 'site')
-                    if site_name:
-                        site_name = site_name.strip()
-                        if site_name.upper() in ['HO', 'HEAD OFFICE']: site_name = 'Head Office'
-                        
-                        site_key = site_name.lower()
-                        if site_key in site_cache:
-                            emp.site = site_cache[site_key]
-                        else:
-                            site_obj = Site.objects.create(name=site_name)
-                            site_cache[site_key] = site_obj
-                            emp.site = site_obj
-                    
-                    # Handle Dates
-                    def parse_date(date_str):
-                        if not date_str: return None
-                        try:
-                            return pd.to_datetime(date_str).date()
-                        except: return None
-
-                    emp.date_of_birth = parse_date(get_val_from_row(row, 'dob'))
-                    emp.date_of_joining = parse_date(get_val_from_row(row, 'doj'))
-                    emp.passport_expiry = parse_date(get_val_from_row(row, 'passport_expiry'))
-                    
-                    if not emp.phone: emp.phone = "0000000000"
 
                     emp.save()
                     success_count += 1
