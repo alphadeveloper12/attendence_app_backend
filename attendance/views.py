@@ -211,8 +211,11 @@ class ImportEmployeesView(APIView):
             col_map['religion'] = find_col_index(['Religion'], header_row_1)
             if col_map['religion'] == -1: col_map['religion'] = find_col_index(['Religion'], header_row_2)
 
-            col_map['visa_details'] = find_col_index(['Visa Details'], header_row_1)
-            if col_map['visa_details'] == -1: col_map['visa_details'] = find_col_index(['Visa Details'], header_row_2)
+            col_map['employer'] = find_col_index(['Employer'], header_row_1)
+            if col_map['employer'] == -1: col_map['employer'] = find_col_index(['Employer'], header_row_2)
+
+            col_map['visa_details'] = find_col_index(['Visa Detail', 'Visa Details'], header_row_1)
+            if col_map['visa_details'] == -1: col_map['visa_details'] = find_col_index(['Visa Detail', 'Visa Details'], header_row_2)
             
             # Nested columns (Row 2) - usually under the main header
             # If header_row_2 is empty or useless, we might need to look at header_row_1 too or just rely on 2
@@ -309,7 +312,7 @@ class ImportEmployeesView(APIView):
                     emp.badge_number = badge
                     emp.salary_grade = get_val_from_row(row, 'salary_grade')
                     emp.job_description = get_val_from_row(row, 'job_description')
-                    emp.employer = employer_name
+                    emp.employer = get_val_from_row(row, 'employer') or employer_name
                     
                     # Salaries
                     def parse_float(val):
