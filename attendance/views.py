@@ -1000,6 +1000,15 @@ class MarkAttendanceView(APIView):
             meta.get("reason", ""),
         ).startswith("soft_blurry"):
             reason = str(meta.get("reason", ""))
+            logger.warning(
+                "mark-attendance 422 | quality_gate_failed | reason=%r | meta=%s | "
+                "employee_id=%r | site_id=%r | slot=%r",
+                reason,
+                meta,
+                data.get("employee_id"),
+                data.get("site_id"),
+                slot,
+            )
             if "too_dark" in reason:
                 return Response(
                     {"error": "Lighting too dim. Please brighten the environment."},
@@ -1020,6 +1029,12 @@ class MarkAttendanceView(APIView):
                     {"error": "Face not clear. Hold still and retry."},
                     status=422,
                 )
+            # reason didn't match any known pattern — log and fall through
+            logger.warning(
+                "mark-attendance 422 | unmatched_quality_reason=%r | meta=%s",
+                reason,
+                meta,
+            )
 
         # Gallery must exist
         if ENGINE.indices == {} and not ENGINE.ids: # Check if empty
