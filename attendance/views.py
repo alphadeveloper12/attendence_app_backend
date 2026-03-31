@@ -988,110 +988,134 @@ class MarkAttendanceView(APIView):
                 status=400,
             )
 
+        # Extract early so we can skip quality gate for offline-synced records
+        employee_id_input = data.get("employee_id")
+
         v, q, meta = ENGINE.embed_best_face(bgr)
         if v is None:
-            return Response(
-                {"error": "No face detected in image."},
-                status=400,
-            )
+            if employee_id_input:
+                # Offline sync: face match already done on device, no embedding needed
+                logger.info(
+                    "mark-attendance | no_face_detected but employee_id provided "
+                    "(offline sync) | employee_id=%r | site_id=%r | slot=%r",
+                    employee_id_input,
+                    data.get("site_id"),
+                    slot,
+                )
+                v = None  # will fall through to offline fallback below
+            else:
+                return Response(
+                    {"error": "No face detected in image."},
+                    status=400,
+                )
 
-        # Quality gates (soft blur passes; others return actionable messages)
-        if not meta.get("ok", False) and not str(
-            meta.get("reason", ""),
-        ).startswith("soft_blurry"):
-            reason = str(meta.get("reason", ""))
-            logger.warning(
-                "mark-attendance 422 | quality_gate_failed | reason=%r | meta=%s | "
-                "employee_id=%r | site_id=%r | slot=%r",
-                reason,
-                meta,
-                data.get("employee_id"),
-                data.get("site_id"),
-                slot,
-            )
-            if "too_dark" in reason:
-                return Response(
-                    {"error": "Lighting too dim. Please brighten the environment."},
-                    status=422,
+        # Quality gates — skipped for offline sync (employee already matched on device)
+        if v is not None and not employee_id_input:
+            if not meta.get("ok", False) and not str(
+                meta.get("reason", ""),
+            ).startswith("soft_blurry"):
+                reason = str(meta.get("reason", ""))
+                logger.warning(
+                    "mark-attendance 422 | quality_gate_failed | reason=%r | meta=%s | "
+                    "site_id=%r | slot=%r",
+                    reason,
+                    meta,
+                    data.get("site_id"),
+                    slot,
                 )
-            if "too_bright" in reason:
-                return Response(
-                    {"error": "Image too bright. Avoid direct glare."},
-                    status=422,
+                if "too_dark" in reason:
+                    return Response(
+                        {"error": "Lighting too dim. Please brighten the environment."},
+                        status=422,
+                    )
+                if "too_bright" in reason:
+                    return Response(
+                        {"error": "Image too bright. Avoid direct glare."},
+                        status=422,
+                    )
+                if "face_too_small" in reason:
+                    return Response(
+                        {"error": "Move closer to the camera."},
+                        status=422,
+                    )
+                if "det_score" in reason or "blurry" in reason:
+                    return Response(
+                        {"error": "Face not clear. Hold still and retry."},
+                        status=422,
+                    )
+                # reason didn't match any known pattern — log and fall through
+                logger.warning(
+                    "mark-attendance 422 | unmatched_quality_reason=%r | meta=%s",
+                    reason,
+                    meta,
                 )
-            if "face_too_small" in reason:
-                return Response(
-                    {"error": "Move closer to the camera."},
-                    status=422,
-                )
-            if "det_score" in reason or "blurry" in reason:
-                return Response(
-                    {"error": "Face not clear. Hold still and retry."},
-                    status=422,
-                )
-            # reason didn't match any known pattern — log and fall through
-            logger.warning(
-                "mark-attendance 422 | unmatched_quality_reason=%r | meta=%s",
-                reason,
-                meta,
-            )
 
-        # Gallery must exist
-        if ENGINE.indices == {} and not ENGINE.ids: # Check if empty
+        # Gallery must exist (skip check for offline sync — not using gallery)
+        if not employee_id_input and ENGINE.indices == {} and not ENGINE.ids:
              return Response(
                 {"error": "No enrolled employees in gallery."},
                 status=400,
             )
 
         site_id = data.get("site_id")
-        employee_id_input = data.get("employee_id")
-        
-        # FAISS nearest neighbors (cosine similarity on L2-normalized vectors)
-        # Returns list of (template_id, employee_id, score)
-        results = ENGINE.search(v, k=10, site_id=site_id)
-        
+        # employee_id_input already assigned above (before quality gate)
+
         best_eid = None
         best_sim = 0.0
         second_sim = -1.0
 
-        if results:
-            # Aggregate to best per employee
-            per_emp = {}
-            for _, eid, sim in results:
-                if eid not in per_emp or sim > per_emp[eid]:
-                    per_emp[eid] = sim
+        if v is None and employee_id_input:
+            # Offline sync: face undetectable but match already done on device — trust it
+            logger.info(
+                "mark-attendance | offline_sync_no_face | employee_id=%r | site_id=%r | slot=%r",
+                employee_id_input, site_id, slot,
+            )
+            best_eid = employee_id_input
+            best_sim = 1.0
+        else:
+            # FAISS nearest neighbors (cosine similarity on L2-normalized vectors)
+            results = ENGINE.search(v, k=10, site_id=site_id)
 
-            # Decide winner with threshold + margin
-            ranked = sorted(per_emp.items(), key=lambda kv: kv[1], reverse=True)
-            best_eid, best_sim = ranked[0]
-            second_sim = ranked[1][1] if len(ranked) > 1 else -1.0
-            
-            solo = second_sim < 0
-            pass_thresh = best_sim >= THRESH
-            pass_margin = True if solo else (best_sim - second_sim) >= MARGIN
-            
-            if not (pass_thresh and pass_margin):
-                print("Face recognition failed: Threshold or Margin not met")
-                # IF we have an employee_id_input (from offline sync), we TRUST it
+        if best_eid is None:
+            # Run FAISS recognition (live path — v is guaranteed non-None here)
+            if results:
+                # Aggregate to best per employee
+                per_emp = {}
+                for _, eid, sim in results:
+                    if eid not in per_emp or sim > per_emp[eid]:
+                        per_emp[eid] = sim
+
+                # Decide winner with threshold + margin
+                ranked = sorted(per_emp.items(), key=lambda kv: kv[1], reverse=True)
+                best_eid, best_sim = ranked[0]
+                second_sim = ranked[1][1] if len(ranked) > 1 else -1.0
+
+                solo = second_sim < 0
+                pass_thresh = best_sim >= THRESH
+                pass_margin = True if solo else (best_sim - second_sim) >= MARGIN
+
+                if not (pass_thresh and pass_margin):
+                    print("Face recognition failed: Threshold or Margin not met")
+                    # IF we have an employee_id_input (from offline sync), we TRUST it
+                    if employee_id_input:
+                        print(f"Trusting offline identification: {employee_id_input}")
+                        best_eid = employee_id_input
+                    else:
+                        return Response(
+                            {
+                                "error": "Face not recognized. Try again or re-enroll with more images.",
+                                "best_sim": best_sim,
+                                "second_sim": second_sim,
+                            },
+                            status=400,
+                        )
+            else:
+                # No results from engine search
                 if employee_id_input:
-                    print(f"Trusting offline identification: {employee_id_input}")
+                    print(f"No match found in engine, but using provided employee_id: {employee_id_input}")
                     best_eid = employee_id_input
                 else:
-                    return Response(
-                        {
-                            "error": "Face not recognized. Try again or re-enroll with more images.",
-                            "best_sim": best_sim,
-                            "second_sim": second_sim,
-                        },
-                        status=400,
-                    )
-        else:
-            # No results from engine search
-            if employee_id_input:
-                print(f"No match found in engine, but using provided employee_id: {employee_id_input}")
-                best_eid = employee_id_input
-            else:
-                return Response({"error": "No match found."}, status=400)
+                    return Response({"error": "No match found."}, status=400)
 
         # Winner found → mark attendance
         emp = Employee.objects.get(id=best_eid)
