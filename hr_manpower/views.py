@@ -700,7 +700,10 @@ class OnboardingView(APIView):
         except Employee.DoesNotExist:
             return Response({'error': 'Employee not found'}, status=status.HTTP_404_NOT_FOUND)
 
-        serializer = EmployeeHRProfileSerializer(data=request.data)
+        # Build data dict: serializer expects 'employee' (PK), not 'employee_id'
+        profile_data = {k: v for k, v in request.data.items() if k != 'step'}
+        profile_data['employee'] = employee_id
+        serializer = EmployeeHRProfileSerializer(data=profile_data)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         profile, _ = EmployeeHRProfile.objects.update_or_create(

@@ -166,6 +166,10 @@ class ProjectAssignmentSerializer(serializers.ModelSerializer):
         start_date = data.get('start_date')
         end_date = data.get('end_date')
 
+        # On PATCH requests not all fields are sent — skip heavy validation
+        if employee is None or start_date is None:
+            return data
+
         # Overlap check: employee cannot be 100% assigned to 2 projects at the same time
         qs = ProjectAssignment.objects.filter(
             employee=employee,
@@ -308,8 +312,12 @@ class CampAllocationSerializer(serializers.ModelSerializer):
         start_date = data.get('start_date')
         end_date = data.get('end_date')
 
+        # On PATCH requests not all fields are sent — skip heavy validation
+        if room is None or bed_number is None or start_date is None:
+            return data
+
         # Bed capacity check
-        if room and room.available_beds <= 0:
+        if room.available_beds <= 0:
             raise serializers.ValidationError(
                 f'Room {room.room_number} in {room.camp.name} has no available beds.'
             )
