@@ -15,4 +15,5 @@ urlpatterns = [
     path('', root_redirect),
     path('admin/', admin.site.urls),
     path('api/attendance/', include('attendance.urls')),
+    path('api/hr/', include('hr_manpower.urls')),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

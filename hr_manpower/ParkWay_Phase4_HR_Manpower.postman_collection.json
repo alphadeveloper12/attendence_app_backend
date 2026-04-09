@@ -1,0 +1,987 @@
+{
+  "info": {
+    "name": "ParkWay Phase 4 – HR, Manpower & Camp APIs",
+    "description": "Complete API collection for Phase 4: HR Administration, Camp Management, Attendance & Manpower Planning. Base URL: http://127.0.0.1:8001/api/hr/",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://127.0.0.1:8001", "type": "string" },
+    { "key": "token", "value": "YOUR_JWT_ACCESS_TOKEN_HERE", "type": "string" }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+  },
+  "item": [
+
+    {
+      "name": "0. Auth – Get Token",
+      "item": [
+        {
+          "name": "Admin Login (Get JWT Token)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@parkway.com\",\n  \"password\": \"yourpassword\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/attendance/admin/login/", "host": ["{{base_url}}"], "path": ["api", "attendance", "admin", "login", ""] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "1. Trade & Skill Library",
+      "item": [
+        {
+          "name": "List All Trades",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/hr/trades/",
+              "host": ["{{base_url}}"], "path": ["api", "hr", "trades", ""],
+              "query": [
+                { "key": "category", "value": "Civil", "disabled": true, "description": "Filter by Civil / MEP / Factory / General" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Trade",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"trade_name\": \"Steel Fixer\",\n  \"category\": \"Civil\",\n  \"productivity_norms\": {\n    \"units_per_day\": 40,\n    \"units_per_hour\": 5,\n    \"unit\": \"kg\"\n  }\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/hr/trades/", "host": ["{{base_url}}"], "path": ["api", "hr", "trades", ""] }
+          }
+        },
+        {
+          "name": "Get Trade Detail",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/hr/trades/1/", "host": ["{{base_url}}"], "path": ["api", "hr", "trades", "1", ""] }
+          }
+        },
+        {
+          "name": "Update Trade",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"trade_name\": \"Steel Fixer\",\n  \"category\": \"Civil\",\n  \"productivity_norms\": {\n    \"units_per_day\": 45,\n    \"units_per_hour\": 5.6,\n    \"unit\": \"kg\"\n  }\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/hr/trades/1/", "host": ["{{base_url}}"], "path": ["api", "hr", "trades", "1", ""] }
+          }
+        },
+        {
+          "name": "Delete Trade",
+          "request": {
+            "method": "DELETE",
+            "url": { "raw": "{{base_url}}/api/hr/trades/1/", "host": ["{{base_url}}"], "path": ["api", "hr", "trades", "1", ""] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "2. Employee HR Profile",
+      "item": [
+        {
+          "name": "List HR Profiles",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/hr/hr-profiles/",
+              "host": ["{{base_url}}"], "path": ["api", "hr", "hr-profiles", ""],
+              "query": [
+                { "key": "trade_id", "value": "1", "disabled": true },
+                { "key": "skill_level", "value": "Foreman", "disabled": true, "description": "Helper / Skilled / Foreman / Supervisor" },
+                { "key": "employment_type", "value": "Direct", "disabled": true, "description": "Direct / Subcontract" },
+                { "key": "documents_valid", "value": "true", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create HR Profile (Onboarding Step 1 – Trade & Rate)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"employee\": 1,\n  \"employee_code\": \"PIC-2024-001\",\n  \"trade\": 1,\n  \"skill_level\": \"Skilled\",\n  \"employment_type\": \"Direct\",\n  \"basic_rate\": 85.00,\n  \"overtime_rate_multiplier\": 1.50,\n  \"cost_center_default\": \"LABOR-CIVIL-001\",\n  \"documents_dms_ids\": [],\n  \"documents_valid\": false\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/hr/hr-profiles/", "host": ["{{base_url}}"], "path": ["api", "hr", "hr-profiles", ""] }
+          }
+        },
+        {
+          "name": "Get HR Profile Detail",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/hr/hr-profiles/1/", "host": ["{{base_url}}"], "path": ["api", "hr", "hr-profiles", "1", ""] }
+          }
+        },
+        {
+          "name": "Update HR Profile",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"basic_rate\": 90.00,\n  \"skill_level\": \"Foreman\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/hr/hr-profiles/1/", "host": ["{{base_url}}"], "path": ["api", "hr", "hr-profiles", "1", ""] }
+          }
+        },
+        {
+          "name": "Validate Employee Documents",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/hr/hr-profiles/1/validate_documents/", "host": ["{{base_url}}"], "path": ["api", "hr", "hr-profiles", "1", "validate_documents", ""] }
+          }
+        },
+        {
+          "name": "Invalidate Employee Documents",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/hr/hr-profiles/1/invalidate_documents/", "host": ["{{base_url}}"], "path": ["api", "hr", "hr-profiles", "1", "invalidate_documents", ""] }
+          }
+        },
+        {
+          "name": "List Employees with HR Profile (Enriched)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/hr/employees/hr/",
+              "host": ["{{base_url}}"], "path": ["api", "hr", "employees", "hr", ""],
+              "query": [
+                { "key": "name", "value": "Ahmad", "disabled": true },
+                { "key": "status", "value": "Active", "disabled": true },
+                { "key": "trade_id", "value": "1", "disabled": true }
+              ]
+            }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "3. Projects",
+      "item": [
+        {
+          "name": "List Projects",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/hr/projects/",
+              "host": ["{{base_url}}"], "path": ["api", "hr", "projects", ""],
+              "query": [
+                { "key": "status", "value": "Active", "disabled": true, "description": "Planning / Active / On Hold / Completed / Cancelled" },
+                { "key": "site_id", "value": "1", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Project",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"project_code\": \"PIC-2024-PRJ-001\",\n  \"project_name\": \"Al Barsha Tower – Structural Works\",\n  \"site\": 1,\n  \"client_name\": \"Parkway International Contracting\",\n  \"start_date\": \"2024-04-01\",\n  \"end_date\": \"2025-03-31\",\n  \"status\": \"Active\",\n  \"description\": \"Structural civil works for Al Barsha Tower\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/hr/projects/", "host": ["{{base_url}}"], "path": ["api", "hr", "projects", ""] }
+          }
+        },
+        {
+          "name": "Get Project Detail (with Activities)",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/hr/projects/1/", "host": ["{{base_url}}"], "path": ["api", "hr", "projects", "1", ""] }
+          }
+        },
+        {
+          "name": "Update Project",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"Active\",\n  \"end_date\": \"2025-06-30\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/hr/projects/1/", "host": ["{{base_url}}"], "path": ["api", "hr", "projects", "1", ""] }
+          }
+        },
+        {
+          "name": "Delete Project",
+          "request": {
+            "method": "DELETE",
+            "url": { "raw": "{{base_url}}/api/hr/projects/1/", "host": ["{{base_url}}"], "path": ["api", "hr", "projects", "1", ""] }
+          }
+        },
+        {
+          "name": "Dashboard – Demand vs Supply",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/hr/projects/1/demand_vs_supply/", "host": ["{{base_url}}"], "path": ["api", "hr", "projects", "1", "demand_vs_supply", ""] }
+          }
+        },
+        {
+          "name": "Dashboard – Labor Cost Summary (Finance)",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/hr/projects/1/labor_cost_summary/", "host": ["{{base_url}}"], "path": ["api", "hr", "projects", "1", "labor_cost_summary", ""] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "4. Activities",
+      "item": [
+        {
+          "name": "List Activities",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/hr/activities/",
+              "host": ["{{base_url}}"], "path": ["api", "hr", "activities", ""],
+              "query": [
+                { "key": "project_id", "value": "1", "disabled": false },
+                { "key": "trade_id", "value": "1", "disabled": true },
+                { "key": "status", "value": "In Progress", "disabled": true, "description": "Not Started / In Progress / Completed / On Hold" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Activity",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"project\": 1,\n  \"activity_code\": \"ACT-001\",\n  \"activity_name\": \"Foundation Slab – Zone A\",\n  \"trade\": 1,\n  \"start_date\": \"2024-04-01\",\n  \"end_date\": \"2024-04-30\",\n  \"planned_qty\": 500.00,\n  \"qty_unit\": \"m3\",\n  \"status\": \"Not Started\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/hr/activities/", "host": ["{{base_url}}"], "path": ["api", "hr", "activities", ""] }
+          }
+        },
+        {
+          "name": "Get Activity Detail",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/hr/activities/1/", "host": ["{{base_url}}"], "path": ["api", "hr", "activities", "1", ""] }
+          }
+        },
+        {
+          "name": "Update Activity",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"In Progress\",\n  \"end_date\": \"2024-05-15\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/hr/activities/1/", "host": ["{{base_url}}"], "path": ["api", "hr", "activities", "1", ""] }
+          }
+        },
+        {
+          "name": "Delete Activity",
+          "request": {
+            "method": "DELETE",
+            "url": { "raw": "{{base_url}}/api/hr/activities/1/", "host": ["{{base_url}}"], "path": ["api", "hr", "activities", "1", ""] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "5. Manpower Demand (Planning → HR)",
+      "item": [
+        {
+          "name": "List Manpower Demands",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/hr/manpower-demands/",
+              "host": ["{{base_url}}"], "path": ["api", "hr", "manpower-demands", ""],
+              "query": [
+                { "key": "project_id", "value": "1", "disabled": false },
+                { "key": "trade_id", "value": "1", "disabled": true },
+                { "key": "source", "value": "planning", "disabled": true, "description": "planning / manual" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Manpower Demand (Manual)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"project\": 1,\n  \"activity\": 1,\n  \"trade\": 1,\n  \"required_qty\": 10,\n  \"required_start_date\": \"2024-04-01\",\n  \"required_end_date\": \"2024-04-30\",\n  \"source\": \"manual\",\n  \"notes\": \"Required for foundation slab works\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/hr/manpower-demands/", "host": ["{{base_url}}"], "path": ["api", "hr", "manpower-demands", ""] }
+          }
+        },
+        {
+          "name": "Get Demand Detail",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/hr/manpower-demands/1/", "host": ["{{base_url}}"], "path": ["api", "hr", "manpower-demands", "1", ""] }
+          }
+        },
+        {
+          "name": "Update Demand",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"required_qty\": 12,\n  \"notes\": \"Updated crew size after re-estimation\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/hr/manpower-demands/1/", "host": ["{{base_url}}"], "path": ["api", "hr", "manpower-demands", "1", ""] }
+          }
+        },
+        {
+          "name": "Delete Demand",
+          "request": {
+            "method": "DELETE",
+            "url": { "raw": "{{base_url}}/api/hr/manpower-demands/1/", "host": ["{{base_url}}"], "path": ["api", "hr", "manpower-demands", "1", ""] }
+          }
+        },
+        {
+          "name": "Auto-Generate Demand from Activities (Planning Trigger)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"activity_ids\": [1, 2, 3]\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/hr/manpower-demands/generate_from_activity/", "host": ["{{base_url}}"], "path": ["api", "hr", "manpower-demands", "generate_from_activity", ""] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "6. Project Assignments (Allocation)",
+      "item": [
+        {
+          "name": "List Assignments",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/hr/assignments/",
+              "host": ["{{base_url}}"], "path": ["api", "hr", "assignments", ""],
+              "query": [
+                { "key": "project_id", "value": "1", "disabled": false },
+                { "key": "employee_id", "value": "1", "disabled": true },
+                { "key": "status", "value": "Active", "disabled": true, "description": "Planned / Active / Released" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Assignment",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"employee\": 5,\n  \"project\": 1,\n  \"activity\": 1,\n  \"start_date\": \"2024-04-01\",\n  \"end_date\": \"2024-04-30\",\n  \"allocation_percent\": 100,\n  \"notes\": \"Assigned to foundation slab – Zone A\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/hr/assignments/", "host": ["{{base_url}}"], "path": ["api", "hr", "assignments", ""] }
+          }
+        },
+        {
+          "name": "Get Assignment Detail",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/hr/assignments/1/", "host": ["{{base_url}}"], "path": ["api", "hr", "assignments", "1", ""] }
+          }
+        },
+        {
+          "name": "Update Assignment",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"end_date\": \"2024-05-15\",\n  \"notes\": \"Extended due to scope change\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/hr/assignments/1/", "host": ["{{base_url}}"], "path": ["api", "hr", "assignments", "1", ""] }
+          }
+        },
+        {
+          "name": "Activate Assignment (Planned → Active)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/hr/assignments/1/activate/", "host": ["{{base_url}}"], "path": ["api", "hr", "assignments", "1", "activate", ""] }
+          }
+        },
+        {
+          "name": "Release Assignment",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/hr/assignments/1/release/", "host": ["{{base_url}}"], "path": ["api", "hr", "assignments", "1", "release", ""] }
+          }
+        },
+        {
+          "name": "Available Employees (Not Assigned)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/hr/assignments/available_employees/",
+              "host": ["{{base_url}}"], "path": ["api", "hr", "assignments", "available_employees", ""],
+              "query": [
+                { "key": "trade_id", "value": "1", "disabled": false },
+                { "key": "skill_level", "value": "Skilled", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete Assignment",
+          "request": {
+            "method": "DELETE",
+            "url": { "raw": "{{base_url}}/api/hr/assignments/1/", "host": ["{{base_url}}"], "path": ["api", "hr", "assignments", "1", ""] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "7. Attendance Extension (Draft → Approve → Cost)",
+      "item": [
+        {
+          "name": "List Attendance Extensions",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/hr/attendance-extensions/",
+              "host": ["{{base_url}}"], "path": ["api", "hr", "attendance-extensions", ""],
+              "query": [
+                { "key": "project_id", "value": "1", "disabled": false },
+                { "key": "approval_status", "value": "Draft", "disabled": true, "description": "Draft / Approved / Rejected" },
+                { "key": "date", "value": "2024-04-09", "disabled": true },
+                { "key": "employee_id", "value": "1", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Attendance Extension (Single)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"attendance\": 1,\n  \"project\": 1,\n  \"activity\": 1,\n  \"total_hours\": 8.0,\n  \"source\": \"manual\",\n  \"approval_status\": \"Draft\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/hr/attendance-extensions/", "host": ["{{base_url}}"], "path": ["api", "hr", "attendance-extensions", ""] }
+          }
+        },
+        {
+          "name": "Foreman – Bulk Daily Attendance Entry",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"project\": 1,\n  \"activity\": 1,\n  \"date\": \"2024-04-09\",\n  \"source\": \"manual\",\n  \"entries\": [\n    { \"attendance_id\": 1, \"total_hours\": 8.0 },\n    { \"attendance_id\": 2, \"total_hours\": 8.5 },\n    { \"attendance_id\": 3, \"total_hours\": 7.0 },\n    { \"attendance_id\": 4, \"total_hours\": 8.0 }\n  ]\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/hr/attendance-extensions/bulk_create/", "host": ["{{base_url}}"], "path": ["api", "hr", "attendance-extensions", "bulk_create", ""] }
+          }
+        },
+        {
+          "name": "Get Attendance Extension Detail",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/hr/attendance-extensions/1/", "host": ["{{base_url}}"], "path": ["api", "hr", "attendance-extensions", "1", ""] }
+          }
+        },
+        {
+          "name": "Approve Attendance Extension (Triggers Cost Post)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/hr/attendance-extensions/1/approve/", "host": ["{{base_url}}"], "path": ["api", "hr", "attendance-extensions", "1", "approve", ""] }
+          }
+        },
+        {
+          "name": "Reject Attendance Extension",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Incorrect hours – employee was on site only half day\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/hr/attendance-extensions/1/reject/", "host": ["{{base_url}}"], "path": ["api", "hr", "attendance-extensions", "1", "reject", ""] }
+          }
+        },
+        {
+          "name": "Bulk Approve Attendance (Approval Queue)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ids\": [1, 2, 3, 4, 5]\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/hr/attendance-extensions/bulk_approve/", "host": ["{{base_url}}"], "path": ["api", "hr", "attendance-extensions", "bulk_approve", ""] }
+          }
+        },
+        {
+          "name": "Update Attendance Extension",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"total_hours\": 9.0,\n  \"activity\": 2\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/hr/attendance-extensions/1/", "host": ["{{base_url}}"], "path": ["api", "hr", "attendance-extensions", "1", ""] }
+          }
+        },
+        {
+          "name": "Delete Attendance Extension",
+          "request": {
+            "method": "DELETE",
+            "url": { "raw": "{{base_url}}/api/hr/attendance-extensions/1/", "host": ["{{base_url}}"], "path": ["api", "hr", "attendance-extensions", "1", ""] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "8. Labor Cost (Finance – Read Only)",
+      "item": [
+        {
+          "name": "List Actual Costs",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/hr/actual-costs/",
+              "host": ["{{base_url}}"], "path": ["api", "hr", "actual-costs", ""],
+              "query": [
+                { "key": "project_id", "value": "1", "disabled": false },
+                { "key": "employee_id", "value": "1", "disabled": true },
+                { "key": "date_from", "value": "2024-04-01", "disabled": true },
+                { "key": "date_to", "value": "2024-04-30", "disabled": true },
+                { "key": "cbs_code", "value": "LABOR-CIVIL-001", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Cost Record Detail",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/hr/actual-costs/1/", "host": ["{{base_url}}"], "path": ["api", "hr", "actual-costs", "1", ""] }
+          }
+        },
+        {
+          "name": "Labor Cost Summary – By Project",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/hr/actual-costs/summary_by_project/", "host": ["{{base_url}}"], "path": ["api", "hr", "actual-costs", "summary_by_project", ""] }
+          }
+        },
+        {
+          "name": "Labor Cost Summary – By Trade",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/hr/actual-costs/summary_by_trade/",
+              "host": ["{{base_url}}"], "path": ["api", "hr", "actual-costs", "summary_by_trade", ""],
+              "query": [
+                { "key": "project_id", "value": "1", "disabled": false }
+              ]
+            }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "9. Productivity",
+      "item": [
+        {
+          "name": "List Productivity Records",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/hr/productivity/",
+              "host": ["{{base_url}}"], "path": ["api", "hr", "productivity", ""],
+              "query": [
+                { "key": "project_id", "value": "1", "disabled": false },
+                { "key": "activity_id", "value": "1", "disabled": true },
+                { "key": "trade_id", "value": "1", "disabled": true },
+                { "key": "date_from", "value": "2024-04-01", "disabled": true },
+                { "key": "date_to", "value": "2024-04-30", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Productivity Record",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"project\": 1,\n  \"activity\": 1,\n  \"trade\": 1,\n  \"record_date\": \"2024-04-09\",\n  \"man_hours_used\": 80.0,\n  \"quantity_executed\": 45.5,\n  \"qty_unit\": \"m3\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/hr/productivity/", "host": ["{{base_url}}"], "path": ["api", "hr", "productivity", ""] }
+          }
+        },
+        {
+          "name": "Get Productivity Record Detail",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/hr/productivity/1/", "host": ["{{base_url}}"], "path": ["api", "hr", "productivity", "1", ""] }
+          }
+        },
+        {
+          "name": "Update Productivity Record",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"quantity_executed\": 48.0\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/hr/productivity/1/", "host": ["{{base_url}}"], "path": ["api", "hr", "productivity", "1", ""] }
+          }
+        },
+        {
+          "name": "Delete Productivity Record",
+          "request": {
+            "method": "DELETE",
+            "url": { "raw": "{{base_url}}/api/hr/productivity/1/", "host": ["{{base_url}}"], "path": ["api", "hr", "productivity", "1", ""] }
+          }
+        },
+        {
+          "name": "Productivity KPIs – Project Dashboard",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/hr/productivity/kpis/",
+              "host": ["{{base_url}}"], "path": ["api", "hr", "productivity", "kpis", ""],
+              "query": [
+                { "key": "project_id", "value": "1", "disabled": false }
+              ]
+            }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "10. Camp Management",
+      "item": [
+        {
+          "name": "10a. Camps",
+          "item": [
+            {
+              "name": "List Camps",
+              "request": {
+                "method": "GET",
+                "url": { "raw": "{{base_url}}/api/hr/camps/", "host": ["{{base_url}}"], "path": ["api", "hr", "camps", ""] }
+              }
+            },
+            {
+              "name": "Create Camp",
+              "request": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Camp Alpha – Al Quoz\",\n  \"location\": \"Al Quoz Industrial Area 3, Dubai\",\n  \"capacity\": 200,\n  \"is_active\": true\n}"
+                },
+                "url": { "raw": "{{base_url}}/api/hr/camps/", "host": ["{{base_url}}"], "path": ["api", "hr", "camps", ""] }
+              }
+            },
+            {
+              "name": "Get Camp Detail (with Rooms)",
+              "request": {
+                "method": "GET",
+                "url": { "raw": "{{base_url}}/api/hr/camps/1/", "host": ["{{base_url}}"], "path": ["api", "hr", "camps", "1", ""] }
+              }
+            },
+            {
+              "name": "Update Camp",
+              "request": {
+                "method": "PATCH",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"capacity\": 250\n}"
+                },
+                "url": { "raw": "{{base_url}}/api/hr/camps/1/", "host": ["{{base_url}}"], "path": ["api", "hr", "camps", "1", ""] }
+              }
+            },
+            {
+              "name": "Delete Camp",
+              "request": {
+                "method": "DELETE",
+                "url": { "raw": "{{base_url}}/api/hr/camps/1/", "host": ["{{base_url}}"], "path": ["api", "hr", "camps", "1", ""] }
+              }
+            },
+            {
+              "name": "Camp Occupancy Dashboard (Heatmap Data)",
+              "request": {
+                "method": "GET",
+                "url": { "raw": "{{base_url}}/api/hr/camps/occupancy_dashboard/", "host": ["{{base_url}}"], "path": ["api", "hr", "camps", "occupancy_dashboard", ""] }
+              }
+            }
+          ]
+        },
+        {
+          "name": "10b. Camp Rooms",
+          "item": [
+            {
+              "name": "List Rooms (filter by Camp)",
+              "request": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{base_url}}/api/hr/camp-rooms/",
+                  "host": ["{{base_url}}"], "path": ["api", "hr", "camp-rooms", ""],
+                  "query": [
+                    { "key": "camp_id", "value": "1", "disabled": false }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Create Room",
+              "request": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"camp\": 1,\n  \"room_number\": \"A-101\",\n  \"bed_count\": 4\n}"
+                },
+                "url": { "raw": "{{base_url}}/api/hr/camp-rooms/", "host": ["{{base_url}}"], "path": ["api", "hr", "camp-rooms", ""] }
+              }
+            },
+            {
+              "name": "Get Room Detail (with Allocations)",
+              "request": {
+                "method": "GET",
+                "url": { "raw": "{{base_url}}/api/hr/camp-rooms/1/", "host": ["{{base_url}}"], "path": ["api", "hr", "camp-rooms", "1", ""] }
+              }
+            },
+            {
+              "name": "Update Room",
+              "request": {
+                "method": "PATCH",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"bed_count\": 6\n}"
+                },
+                "url": { "raw": "{{base_url}}/api/hr/camp-rooms/1/", "host": ["{{base_url}}"], "path": ["api", "hr", "camp-rooms", "1", ""] }
+              }
+            },
+            {
+              "name": "Delete Room",
+              "request": {
+                "method": "DELETE",
+                "url": { "raw": "{{base_url}}/api/hr/camp-rooms/1/", "host": ["{{base_url}}"], "path": ["api", "hr", "camp-rooms", "1", ""] }
+              }
+            }
+          ]
+        },
+        {
+          "name": "10c. Camp Allocations (Bed Assignments)",
+          "item": [
+            {
+              "name": "List Camp Allocations",
+              "request": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{base_url}}/api/hr/camp-allocations/",
+                  "host": ["{{base_url}}"], "path": ["api", "hr", "camp-allocations", ""],
+                  "query": [
+                    { "key": "camp_id", "value": "1", "disabled": true },
+                    { "key": "employee_id", "value": "1", "disabled": true },
+                    { "key": "status", "value": "Active", "disabled": false, "description": "Active / Released" }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Allocate Bed to Employee",
+              "request": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"employee\": 5,\n  \"room\": 1,\n  \"bed_number\": \"A1\",\n  \"start_date\": \"2024-04-01\",\n  \"end_date\": null,\n  \"notes\": \"Assigned during onboarding\"\n}"
+                },
+                "url": { "raw": "{{base_url}}/api/hr/camp-allocations/", "host": ["{{base_url}}"], "path": ["api", "hr", "camp-allocations", ""] }
+              }
+            },
+            {
+              "name": "Get Allocation Detail",
+              "request": {
+                "method": "GET",
+                "url": { "raw": "{{base_url}}/api/hr/camp-allocations/1/", "host": ["{{base_url}}"], "path": ["api", "hr", "camp-allocations", "1", ""] }
+              }
+            },
+            {
+              "name": "Update Allocation",
+              "request": {
+                "method": "PATCH",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"bed_number\": \"B2\",\n  \"notes\": \"Moved to different room\"\n}"
+                },
+                "url": { "raw": "{{base_url}}/api/hr/camp-allocations/1/", "host": ["{{base_url}}"], "path": ["api", "hr", "camp-allocations", "1", ""] }
+              }
+            },
+            {
+              "name": "Release Bed",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": { "raw": "{{base_url}}/api/hr/camp-allocations/1/release/", "host": ["{{base_url}}"], "path": ["api", "hr", "camp-allocations", "1", "release", ""] }
+              }
+            },
+            {
+              "name": "Delete Allocation",
+              "request": {
+                "method": "DELETE",
+                "url": { "raw": "{{base_url}}/api/hr/camp-allocations/1/", "host": ["{{base_url}}"], "path": ["api", "hr", "camp-allocations", "1", ""] }
+              }
+            }
+          ]
+        }
+      ]
+    },
+
+    {
+      "name": "11. HR Workflows",
+      "item": [
+        {
+          "name": "11a. Onboarding Wizard",
+          "item": [
+            {
+              "name": "Step 1 – Create HR Profile",
+              "request": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"step\": \"create_profile\",\n  \"employee_id\": 1,\n  \"employee_code\": \"PIC-2024-001\",\n  \"employment_type\": \"Direct\",\n  \"basic_rate\": 85.00,\n  \"overtime_rate_multiplier\": 1.50,\n  \"cost_center_default\": \"LABOR-CIVIL-001\"\n}"
+                },
+                "url": { "raw": "{{base_url}}/api/hr/onboarding/", "host": ["{{base_url}}"], "path": ["api", "hr", "onboarding", ""] }
+              }
+            },
+            {
+              "name": "Step 2 – Assign Trade & Skill Level",
+              "request": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"step\": \"assign_trade\",\n  \"employee_id\": 1,\n  \"trade_id\": 1,\n  \"skill_level\": \"Skilled\"\n}"
+                },
+                "url": { "raw": "{{base_url}}/api/hr/onboarding/", "host": ["{{base_url}}"], "path": ["api", "hr", "onboarding", ""] }
+              }
+            },
+            {
+              "name": "Step 3 – Upload & Validate Documents (DMS)",
+              "request": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"step\": \"validate_documents\",\n  \"employee_id\": 1,\n  \"dms_document_ids\": [\n    \"doc-passport-001\",\n    \"doc-visa-001\",\n    \"doc-contract-001\",\n    \"doc-medical-001\"\n  ]\n}"
+                },
+                "url": { "raw": "{{base_url}}/api/hr/onboarding/", "host": ["{{base_url}}"], "path": ["api", "hr", "onboarding", ""] }
+              }
+            },
+            {
+              "name": "Step 4 – Allocate Camp Bed",
+              "request": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"step\": \"allocate_camp\",\n  \"employee_id\": 1,\n  \"room_id\": 1,\n  \"bed_number\": \"A1\",\n  \"start_date\": \"2024-04-01\"\n}"
+                },
+                "url": { "raw": "{{base_url}}/api/hr/onboarding/", "host": ["{{base_url}}"], "path": ["api", "hr", "onboarding", ""] }
+              }
+            },
+            {
+              "name": "Step 5 – Assign to Project",
+              "request": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"step\": \"assign_project\",\n  \"employee_id\": 1,\n  \"project_id\": 1,\n  \"activity_id\": 1,\n  \"start_date\": \"2024-04-01\",\n  \"end_date\": \"2024-06-30\"\n}"
+                },
+                "url": { "raw": "{{base_url}}/api/hr/onboarding/", "host": ["{{base_url}}"], "path": ["api", "hr", "onboarding", ""] }
+              }
+            }
+          ]
+        },
+        {
+          "name": "11b. Offboarding",
+          "item": [
+            {
+              "name": "Offboard Employee (Full Workflow)",
+              "request": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"employee_id\": 1\n}"
+                },
+                "url": { "raw": "{{base_url}}/api/hr/offboarding/", "host": ["{{base_url}}"], "path": ["api", "hr", "offboarding", ""] }
+              }
+            }
+          ]
+        },
+        {
+          "name": "11c. Project Transfer",
+          "item": [
+            {
+              "name": "Transfer Employee Between Projects",
+              "request": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"employee_id\": 1,\n  \"new_project_id\": 2,\n  \"new_activity_id\": 3,\n  \"new_start_date\": \"2024-05-01\",\n  \"new_end_date\": \"2024-07-31\"\n}"
+                },
+                "url": { "raw": "{{base_url}}/api/hr/transfer/", "host": ["{{base_url}}"], "path": ["api", "hr", "transfer", ""] }
+              }
+            }
+          ]
+        }
+      ]
+    }
+
+  ]
+}
