@@ -600,43 +600,8 @@ class AdminEditEmployeeView(APIView):
         try:
             emp = Employee.objects.get(id=employee_id)
             data = request.data
-            
-            emp.name = data.get('name', emp.name)
-            emp.email = data.get('email') or None
-            emp.phone = data.get('phone')
-            emp.department = data.get('department')
-            emp.position = data.get('position')
-            emp.badge_number = data.get('badge_number')
-            emp.salary_grade = data.get('salary_grade')
-            new_status = data.get('status')
-            new_resumption = parse_date(data.get('resumption_date'))
-            if new_status == 'Leave' and not new_resumption:
-                return Response({'error': 'Resumption date is required when status is Leave.'}, status=400)
-            emp.status = new_status
-            emp.resumption_date = new_resumption
-            emp.nationality = data.get('nationality')
-            emp.gender = data.get('gender')
-            emp.marital_status = data.get('marital_status')
-            emp.religion = data.get('religion')
-            emp.passport_number = data.get('passport_number')
-            emp.visa_details = data.get('visa_details')
-            emp.labor_card_number = data.get('labor_card_number')
-            # gross_salary handled below with parse_decimal
-            emp.camp = data.get('camp')
-            emp.transportation = data.get('transportation')
-            emp.mol_id = data.get('mol_id')
-            emp.job_description = data.get('job_description')
-            emp.employer = data.get('employer')
-            
-            site_id = data.get('site')
-            if site_id:
-                try:
-                    emp.site = Site.objects.get(id=site_id)
-                except Site.DoesNotExist:
-                    emp.site = None
-            else:
-                emp.site = None
-            
+
+            # Define helpers first — must be before any usage
             def parse_date(d): return d if d else None
             def parse_decimal(d):
                 if not d or str(d).strip() == '':
@@ -646,15 +611,52 @@ class AdminEditEmployeeView(APIView):
                 except:
                     return None
 
+            # Validate resumption date before saving
+            new_status = data.get('status')
+            new_resumption = parse_date(data.get('resumption_date'))
+            if new_status == 'Leave' and not new_resumption:
+                return Response({'error': 'Resumption date is required when status is Leave.'}, status=400)
+
+            emp.name = data.get('name', emp.name)
+            emp.email = data.get('email') or None
+            emp.phone = data.get('phone')
+            emp.department = data.get('department')
+            emp.position = data.get('position')
+            emp.badge_number = data.get('badge_number')
+            emp.salary_grade = data.get('salary_grade')
+            emp.status = new_status
+            emp.resumption_date = new_resumption
+            emp.nationality = data.get('nationality')
+            emp.gender = data.get('gender')
+            emp.marital_status = data.get('marital_status')
+            emp.religion = data.get('religion')
+            emp.passport_number = data.get('passport_number')
+            emp.visa_details = data.get('visa_details')
+            emp.labor_card_number = data.get('labor_card_number')
+            emp.camp = data.get('camp')
+            emp.transportation = data.get('transportation')
+            emp.mol_id = data.get('mol_id')
+            emp.job_description = data.get('job_description')
+            emp.employer = data.get('employer')
+
+            site_id = data.get('site')
+            if site_id:
+                try:
+                    emp.site = Site.objects.get(id=site_id)
+                except Site.DoesNotExist:
+                    emp.site = None
+            else:
+                emp.site = None
+
             emp.date_of_birth = parse_date(data.get('date_of_birth'))
             emp.date_of_joining = parse_date(data.get('date_of_joining'))
             emp.passport_expiry = parse_date(data.get('passport_expiry'))
-            
+
             if request.user.is_superuser:
                 emp.gross_salary = parse_decimal(data.get('gross_salary'))
                 emp.basic_salary = parse_decimal(data.get('basic_salary'))
                 emp.salary_grade = data.get('salary_grade', emp.salary_grade)
-            
+
             emp.save()
             return Response({'success': True, 'message': 'Employee updated successfully'})
         except Employee.DoesNotExist:
