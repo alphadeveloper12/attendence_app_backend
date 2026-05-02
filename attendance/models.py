@@ -64,7 +64,8 @@ class Employee(models.Model):
     passport_expiry = models.DateField(null=True, blank=True)
     visa_details = models.CharField(max_length=100, null=True, blank=True)
     status = models.CharField(max_length=50, null=True, blank=True)  # Active, Leave, etc.
-    
+    resumption_date = models.DateField(null=True, blank=True)  # Required when status = Leave
+
     # Additional fields
     gross_salary = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     camp = models.CharField(max_length=100, null=True, blank=True)

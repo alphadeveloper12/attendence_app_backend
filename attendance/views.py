@@ -513,6 +513,11 @@ class AdminAddEmployeeView(APIView):
                 except:
                     return None
 
+            status = data.get('status')
+            resumption_date = parse_date(data.get('resumption_date'))
+            if status == 'Leave' and not resumption_date:
+                return Response({'error': 'Resumption date is required when status is Leave.'}, status=400)
+
             Employee.objects.create(
                 name=name,
                 email=email or None,
@@ -521,7 +526,8 @@ class AdminAddEmployeeView(APIView):
                 position=data.get('position'),
                 badge_number=badge,
                 salary_grade=data.get('salary_grade'),
-                status=data.get('status'),
+                status=status,
+                resumption_date=resumption_date,
                 nationality=data.get('nationality'),
                 gender=data.get('gender'),
                 marital_status=data.get('marital_status'),
@@ -564,6 +570,7 @@ class AdminEditEmployeeView(APIView):
                 'badge_number': emp.badge_number,
                 'salary_grade': emp.salary_grade,
                 'status': emp.status,
+                'resumption_date': str(emp.resumption_date) if emp.resumption_date else '',
                 'nationality': emp.nationality,
                 'gender': emp.gender,
                 'marital_status': emp.marital_status,
@@ -601,7 +608,12 @@ class AdminEditEmployeeView(APIView):
             emp.position = data.get('position')
             emp.badge_number = data.get('badge_number')
             emp.salary_grade = data.get('salary_grade')
-            emp.status = data.get('status')
+            new_status = data.get('status')
+            new_resumption = parse_date(data.get('resumption_date'))
+            if new_status == 'Leave' and not new_resumption:
+                return Response({'error': 'Resumption date is required when status is Leave.'}, status=400)
+            emp.status = new_status
+            emp.resumption_date = new_resumption
             emp.nationality = data.get('nationality')
             emp.gender = data.get('gender')
             emp.marital_status = data.get('marital_status')
@@ -1389,8 +1401,12 @@ class AttendanceStatsView(APIView):
             
             unique_categories = sorted(list(unified_cats.values()))
 
-            unique_statuses = Employee.objects.exclude(status__isnull=True).exclude(status='').values_list('status', flat=True).distinct()
-            unique_statuses = sorted(list(unique_statuses))
+            # Master list — always present regardless of whether any employee has that status
+            MASTER_STATUSES = ['Active', 'Leave', 'Offboarded', 'Resigned', 'No Renewal', 'Terminated', 'Other']
+            db_statuses = Employee.objects.exclude(status__isnull=True).exclude(status='').values_list('status', flat=True).distinct()
+            # Merge: master list first, then any custom values added via import
+            merged = list(dict.fromkeys(MASTER_STATUSES + sorted(set(db_statuses) - set(MASTER_STATUSES))))
+            unique_statuses = merged
 
             # Chart Data (Last 7 Days)
             today = timezone.localdate()
@@ -1962,6 +1978,7 @@ def admin_user_detail_view(request, user_id):
                     'site': employee.site.name if employee.site else None,
                     'site_id': employee.site.id if employee.site else None,
                     'status': employee.status,
+                    'resumption_date': str(employee.resumption_date) if employee.resumption_date else None,
                     'profile_picture': employee.profile_picture.url if employee.profile_picture else None,
                     # Expanded Fields
                     'job_description': employee.job_description,

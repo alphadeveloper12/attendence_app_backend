@@ -501,11 +501,29 @@
                                         class="form-label small fw-bold text-secondary text-uppercase"
                                         style="font-size: 0.65rem;">Status</label>
                                     <select name="status" id="employeeStatusSelect"
-                                        class="form-select form-select-modern">
+                                        class="form-select form-select-modern"
+                                        onchange="toggleResumptionDate(this.value)">
                                         <option value="Active">Active</option>
                                         <option value="Leave">Leave</option>
+                                        <option value="Offboarded">Offboarded</option>
+                                        <option value="Resigned">Resigned</option>
+                                        <option value="No Renewal">No Renewal</option>
                                         <option value="Terminated">Terminated</option>
+                                        <option value="Other">Other</option>
                                     </select>
+                                </div>
+                                <!-- Resumption Date — shown only when Status = Leave -->
+                                <div class="col-md-3" id="resumptionDateWrapper" style="display:none;">
+                                    <label class="form-label small fw-bold text-uppercase"
+                                        style="font-size:0.65rem;color:#dc2626;">
+                                        Resumption Date <span style="color:#dc2626;">*</span>
+                                    </label>
+                                    <input type="date" name="resumption_date" id="resumptionDateInput"
+                                        class="form-control form-control-modern"
+                                        style="border-color:#dc2626;">
+                                    <div class="text-danger" style="font-size:0.7rem;margin-top:3px;">
+                                        Required when on Leave
+                                    </div>
                                 </div>
                                 <div class="col-md-6"><label
                                         class="form-label small fw-bold text-secondary text-uppercase"
@@ -1001,6 +1019,20 @@
     } catch (e) { modalBody.innerHTML = '<div class="text-center text-danger py-4">Error loading details.</div>'; }
     }
 
+    // Show/hide resumption date based on status
+    function toggleResumptionDate(status) {
+        const wrapper = document.getElementById('resumptionDateWrapper');
+        const input   = document.getElementById('resumptionDateInput');
+        if (status === 'Leave') {
+            wrapper.style.display = '';
+            input.required = true;
+        } else {
+            wrapper.style.display = 'none';
+            input.required = false;
+            input.value = '';
+        }
+    }
+
     async function editEmployee(empId) {
         document.getElementById('addModalTitle').textContent = 'Edit Employee';
         document.getElementById('saveEmployeeBtn').textContent = 'Update Employee';
@@ -1014,11 +1046,23 @@
                 const el = f.querySelector(`[name="${key}"]`);
                 if (el) el.value = data[key] || '';
             });
+            // Trigger show/hide after populating
+            toggleResumptionDate(data.status || '');
         } catch (e) { alert("Failed to load employee data."); }
     }
 
     async function saveEmployee() {
         const form = document.getElementById('addEmployeeForm');
+        const status = document.getElementById('employeeStatusSelect').value;
+        const resumption = document.getElementById('resumptionDateInput').value;
+
+        // Client-side validation
+        if (status === 'Leave' && !resumption) {
+            document.getElementById('resumptionDateInput').focus();
+            alert('Resumption date is required when status is Leave.');
+            return;
+        }
+
         const formData = new FormData(form);
         const data = Object.fromEntries(formData.entries());
         const empId = document.getElementById('editEmployeeId').value;
@@ -1030,7 +1074,9 @@
                 headers: { 'Content-Type': 'application/json', 'X-CSRFToken': data.csrfmiddlewaretoken },
                 body: JSON.stringify(data)
             });
-            if (res.ok) { addModal.hide(); loadEmployees(); loadStats(); } else { alert('Operation failed'); }
+            const result = await res.json();
+            if (res.ok) { addModal.hide(); loadEmployees(); loadStats(); }
+            else { alert(result.error || 'Operation failed'); }
         } catch (e) { alert('Network Error'); } finally { btn.disabled = false; }
     }
 
@@ -1039,6 +1085,7 @@
         document.getElementById('saveEmployeeBtn').textContent = 'Save Employee';
         document.getElementById('addEmployeeForm').reset();
         document.getElementById('editEmployeeId').value = '';
+        toggleResumptionDate('Active'); // Reset — hide resumption date
         addModal.show();
     }
 
