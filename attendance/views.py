@@ -964,34 +964,54 @@ class MarkAttendanceView(APIView):
 
         # File MUST come from request.FILES (avoid serializer coercion)
         img = request.FILES.get("image") or request.FILES.get("image[]")
-        if not img:
-            return Response(
-                {"error": "No image uploaded. Use form-data with key 'image'."},
-                status=400,
-            )
 
-        # Read bytes exactly once
-        img.seek(0)
-        raw = img.read()
-        if not raw:
-            return Response(
-                {"error": "Uploaded image is empty."},
-                status=400,
-            )
-
-        # Convert to BGR ndarray and embed
-        try:
-            bgr = pil_to_bgr_array_from_bytes(raw)
-        except Exception as e:  # noqa: BLE001
-            return Response(
-                {"error": f"Invalid image file. {e}"},
-                status=400,
-            )
-
-        # Extract early so we can skip quality gate for offline-synced records
+        # Extract employee_id early — offline sync already matched on device
         employee_id_input = data.get("employee_id")
 
-        v, q, meta = ENGINE.embed_best_face(bgr)
+        # Image is optional when employee_id is provided (offline sync with deleted cache)
+        if not img:
+            if employee_id_input:
+                # Offline sync — face already matched on device, skip all image processing
+                logger.info(
+                    "mark-attendance | no_image offline_sync | employee_id=%r | site_id=%r | slot=%r",
+                    employee_id_input, data.get("site_id"), slot,
+                )
+                bgr = None
+                raw = None
+                v = None
+                q = 0.0
+                meta = {"ok": True, "reason": "offline_no_image"}
+            else:
+                return Response(
+                    {"error": "No image uploaded. Use form-data with key 'image'."},
+                    status=400,
+                )
+        else:
+            # Read bytes exactly once
+            img.seek(0)
+            raw = img.read()
+            if not raw:
+                if employee_id_input:
+                    bgr = None
+                    v = None
+                    q = 0.0
+                    meta = {"ok": True, "reason": "offline_empty_image"}
+                else:
+                    return Response({"error": "Uploaded image is empty."}, status=400)
+            else:
+                # Convert to BGR ndarray and embed
+                try:
+                    bgr = pil_to_bgr_array_from_bytes(raw)
+                except Exception as e:  # noqa: BLE001
+                    if employee_id_input:
+                        bgr = None
+                        v = None
+                        q = 0.0
+                        meta = {"ok": True, "reason": "offline_invalid_image"}
+                    else:
+                        return Response({"error": f"Invalid image file. {e}"}, status=400)
+                else:
+                    v, _q, meta = ENGINE.embed_best_face(bgr)
         if v is None:
             if employee_id_input:
                 # Offline sync: face match already done on device, no embedding needed
