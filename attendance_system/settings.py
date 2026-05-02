@@ -38,6 +38,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'attendance.apps.AttendanceConfig',
+    'hr_manpower.apps.HrManpowerConfig',
     'corsheaders',
     'rest_framework',
     'rest_framework.authtoken',
@@ -52,6 +53,7 @@ REST_FRAMEWORK = {
     ],
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'hr_manpower.authentication.CsrfExemptSessionAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
@@ -60,8 +62,10 @@ REST_FRAMEWORK = {
 
 from datetime import timedelta
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
+    'ACCESS_TOKEN_LIFETIME': timedelta(hours=8),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
+    'ROTATE_REFRESH_TOKENS': True,
+    'BLACKLIST_AFTER_ROTATION': True,
 }
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -99,12 +103,12 @@ WSGI_APPLICATION = 'attendance_system.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.sqlite3',
-#         'NAME': BASE_DIR / 'db.sqlite3',
-#     }
-# }
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
+    }
+}
 # DATABASES = {
 #     'default': {
 #         'ENGINE': 'django.db.backends.postgresql',
@@ -115,16 +119,16 @@ WSGI_APPLICATION = 'attendance_system.wsgi.application'
 #         'PORT': '5432',
 #     }
 # }
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'db_attendance2',
-        'USER': 'dev_attendance',
-        'PASSWORD': 'RocketOps#wnLi$',
-        'HOST': "127.0.0.1",
-        'PORT': '5432',
-    }
-}
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.postgresql',
+#         'NAME': 'db_attendance2',
+#         'USER': 'dev_attendance',
+#         'PASSWORD': 'RocketOps#wnLi$',
+#         'HOST': "127.0.0.1",
+#         'PORT': '5432',
+#     }
+# }
 
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
@@ -174,4 +178,34 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')  # This is the directory where medi
 STATIC_ROOT = os.path.join(BASE_DIR, 'static')  # This is the directory where media files will be saved
 os.environ.setdefault("OMP_NUM_THREADS", "4")
 os.environ.setdefault("MKL_NUM_THREADS", "4")
+
+# ── Logging — visible in gunicorn/systemd journal ──────────────────────────
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'detailed': {
+            'format': '[%(asctime)s] %(levelname)s %(name)s: %(message)s',
+            'datefmt': '%Y-%m-%d %H:%M:%S',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'detailed',
+        },
+    },
+    'loggers': {
+        'attendance': {          # covers attendance.views, attendance.models, etc.
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'django.request': {      # 4xx / 5xx request errors
+            'handlers': ['console'],
+            'level': 'WARNING',
+            'propagate': False,
+        },
+    },
+}
 os.environ.setdefault("OMP_WAIT_POLICY", "ACTIVE")
