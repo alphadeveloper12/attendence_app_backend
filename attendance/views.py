@@ -104,6 +104,37 @@ class DownloadBuildView(APIView):
 
 logger = logging.getLogger(__name__)
 
+# ── Simple in-memory rate limiter for 401 floods ─────────────────────────────
+# Blocks a token (or IP) that causes > 10 consecutive 401s within 60 seconds.
+import time as _time
+from collections import defaultdict as _defaultdict
+_rate_limit_store: dict = _defaultdict(lambda: {"count": 0, "first_seen": 0.0, "blocked_until": 0.0})
+_RATE_LIMIT_MAX   = 10   # max consecutive 401s
+_RATE_LIMIT_WINDOW = 60  # seconds before counter resets
+_RATE_LIMIT_BLOCK  = 300 # block for 5 minutes after exceeding
+
+def _check_rate_limit(key: str) -> bool:
+    """Returns True if the key should be blocked."""
+    now = _time.time()
+    state = _rate_limit_store[key]
+    if now < state["blocked_until"]:
+        return True
+    if now - state["first_seen"] > _RATE_LIMIT_WINDOW:
+        state["count"] = 0
+        state["first_seen"] = now
+    state["count"] += 1
+    if state["count"] > _RATE_LIMIT_MAX:
+        state["blocked_until"] = now + _RATE_LIMIT_BLOCK
+        logger.warning("[RATE-LIMIT] BLOCKED key=%r after %d hits", key, state["count"])
+        return True
+    return False
+
+def _reset_rate_limit(key: str) -> None:
+    """Call on successful auth to clear the counter."""
+    if key in _rate_limit_store:
+        _rate_limit_store[key] = {"count": 0, "first_seen": 0.0, "blocked_until": 0.0}
+# ─────────────────────────────────────────────────────────────────────────────
+
 # ------------------ Sites API ------------------
 
 
