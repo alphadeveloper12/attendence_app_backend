@@ -947,9 +947,27 @@ class MarkAttendanceView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
+        # ── DEBUG: log every incoming request ──────────────────────────────
+        req_employee_id = request.data.get("employee_id", "NONE")
+        req_slot        = request.data.get("slot", "NONE")
+        req_site_id     = request.data.get("site_id", "NONE")
+        req_timestamp   = request.data.get("timestamp", "NONE")
+        req_lat         = request.data.get("latitude", "NONE")
+        req_lng         = request.data.get("longitude", "NONE")
+        req_has_image   = bool(request.FILES.get("image") or request.FILES.get("image[]"))
+        logger.info(
+            "[MARK-ATTENDANCE] INCOMING | employee_id=%r slot=%r site=%r "
+            "timestamp=%r lat=%r lng=%r has_image=%r",
+            req_employee_id, req_slot, req_site_id,
+            req_timestamp, req_lat, req_lng, req_has_image,
+        )
+        # ────────────────────────────────────────────────────────────────────
+
         # Validate non-file fields first (slot/lat/long)
         s = VerifySerializer(data=request.data)
-        s.is_valid(raise_exception=True)
+        if not s.is_valid():
+            logger.warning("[MARK-ATTENDANCE] SERIALIZER FAIL | errors=%r | data=%r", s.errors, request.data)
+            raise Exception(s.errors)
         data = s.validated_data
 
         slot = data["slot"]
@@ -957,6 +975,7 @@ class MarkAttendanceView(APIView):
         longitude = data["longitude"]
 
         if slot not in ["office_in", "office_out"]:
+            logger.warning("[MARK-ATTENDANCE] INVALID SLOT | slot=%r", slot)
             return Response(
                 {"error": "Invalid slot. Must be 'office_in' or 'office_out'."},
                 status=400,
@@ -1138,17 +1157,22 @@ class MarkAttendanceView(APIView):
                     return Response({"error": "No match found."}, status=400)
 
         # Winner found → mark attendance
-        emp = Employee.objects.get(id=best_eid)
-        
+        try:
+            emp = Employee.objects.get(id=best_eid)
+            logger.info("[MARK-ATTENDANCE] EMPLOYEE FOUND | id=%r name=%r site=%r", emp.id, emp.name, emp.site_id)
+        except Employee.DoesNotExist:
+            logger.error("[MARK-ATTENDANCE] EMPLOYEE NOT FOUND | best_eid=%r employee_id_input=%r", best_eid, employee_id_input)
+            return Response({"error": f"Employee {best_eid} not found."}, status=400)
+
         # Parse and convert to local time explicitly
         provided_timestamp = data.get("timestamp")
         if provided_timestamp:
-            # provided_timestamp is already parsed by Serializer into a datetime object
-            # Ensure it's converted to the server's local timezone (Asia/Dubai)
             now = timezone.localtime(provided_timestamp)
+            logger.info("[MARK-ATTENDANCE] TIMESTAMP | provided=%r → local=%r", provided_timestamp, now)
         else:
             now = timezone.localtime()
-            
+            logger.info("[MARK-ATTENDANCE] TIMESTAMP | none provided, using now=%r", now)
+
         today = now.date()
 
         # Check for existing attendance for today
@@ -1157,16 +1181,30 @@ class MarkAttendanceView(APIView):
             date=today,
             defaults={"status": "present"},
         )
-        
+        logger.info(
+            "[MARK-ATTENDANCE] ATTENDANCE RECORD | emp=%r date=%r created=%r "
+            "check_in=%r check_out=%r",
+            emp.id, today, created,
+            attendance.check_in_time, attendance.check_out_time,
+        )
+
         # Prevent duplicate markings for the same slot
         if slot == "office_in" and attendance.check_in_time and not created:
             local_time_str = timezone.localtime(attendance.check_in_time).strftime('%I:%M %p')
+            logger.warning(
+                "[MARK-ATTENDANCE] DUPLICATE | emp=%r slot=office_in already=%r",
+                emp.id, local_time_str,
+            )
             return Response(
                 {"error": f"Attendance 'office_in' already marked for {emp.name} today at {local_time_str}."},
                 status=400,
             )
         if slot == "office_out" and attendance.check_out_time and not created:
             local_time_str = timezone.localtime(attendance.check_out_time).strftime('%I:%M %p')
+            logger.warning(
+                "[MARK-ATTENDANCE] DUPLICATE | emp=%r slot=office_out already=%r",
+                emp.id, local_time_str,
+            )
             return Response(
                 {"error": f"Attendance 'office_out' already marked for {emp.name} today at {local_time_str}."},
                 status=400,
@@ -1176,16 +1214,24 @@ class MarkAttendanceView(APIView):
         attendance.latitude = latitude
         attendance.longitude = longitude
         attendance.slot = slot
-        
+
         # Update slot timestamps
         if slot == "office_in":
             attendance.check_in_time = now
         elif slot == "office_out":
             attendance.check_out_time = now
-        
+
         # Basic Save (Fast)
-        attendance.save()
-        
+        try:
+            attendance.save()
+            logger.info(
+                "[MARK-ATTENDANCE] SUCCESS | emp=%r name=%r slot=%r time=%r",
+                emp.id, emp.name, slot, now.strftime("%I:%M %p"),
+            )
+        except Exception as db_err:
+            logger.error("[MARK-ATTENDANCE] DB SAVE FAILED | emp=%r slot=%r error=%r", emp.id, slot, str(db_err))
+            return Response({"error": f"Database save failed: {db_err}"}, status=500)
+
         # Offload Heavy Logic (Geofence + Late/Early Calc) to Background Thread
         t = threading.Thread(
             target=process_background_tasks,
@@ -1200,7 +1246,6 @@ class MarkAttendanceView(APIView):
                 "employee": {"id": emp.id, "name": emp.name, "email": emp.email},
                 "time": now.strftime("%I:%M %p"),
                 "confidence": best_sim,
-                # "meta": meta  # includes detector score, blur, brightness, attempt etc.
             },
             status=200,
         )
