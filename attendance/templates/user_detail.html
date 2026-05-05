@@ -258,9 +258,9 @@
                 </div>
                 <div class="col-auto" id="resumption-date-wrapper" style="display:none;">
                     <span class="badge rounded-pill px-3 py-2 fw-semibold"
-                          style="background:rgba(220,38,38,0.1);color:#dc2626;border:1px solid rgba(220,38,38,0.3);">
+                          style="background:rgba(37,99,235,0.1);color:#2563eb;border:1px solid rgba(37,99,235,0.3);">
                         <i class="ri-calendar-check-line me-1"></i>
-                        Returns: <span id="emp-resumption-date">—</span>
+                        Resumed on: <span id="emp-resumption-date">—</span>
                     </span>
                 </div>
             </div>
@@ -427,7 +427,7 @@
         document.getElementById('emp-pos').innerHTML = `<i class="ri-briefcase-line me-1"></i> ${emp.position || 'N/A'}`;
         document.getElementById('emp-site').innerHTML = `<i class="ri-building-line me-1"></i> ${emp.site || 'N/A'}`;
 
-        // Status badge + resumption date
+        // Status badge + resumption date (last return from leave)
         const statusBadge = document.getElementById('emp-status-badge');
         statusBadge.textContent = emp.status || 'Active';
         const statusColors = {
@@ -439,9 +439,11 @@
             'Offboarded': 'bg-secondary bg-opacity-10 text-secondary',
         };
         statusBadge.className = `badge rounded-pill px-3 py-2 fw-semibold ${statusColors[emp.status] || 'bg-secondary bg-opacity-10 text-secondary'}`;
-        // Show resumption date only for Leave status
+
+        // Show resumption date whenever it exists — this is the historical date the employee
+        // last returned from leave, regardless of current status
         const resumptionWrapper = document.getElementById('resumption-date-wrapper');
-        if (emp.status === 'Leave' && emp.resumption_date) {
+        if (emp.resumption_date) {
             document.getElementById('emp-resumption-date').textContent = emp.resumption_date;
             resumptionWrapper.style.display = '';
         } else {
@@ -477,7 +479,7 @@
                 { label: 'Category', value: isSuperuser ? emp.salary_grade : null },
                 { label: 'Employer', value: emp.employer },
                 { label: 'D.O.J.', value: emp.date_of_joining },
-                emp.status === 'Leave' ? { label: '📅 Resumption Date', value: emp.resumption_date || '—' } : null,
+                emp.resumption_date ? { label: '📅 Last Resumption Date', value: emp.resumption_date } : null,
             ].filter(f => f !== null && f.value !== null)
         },
         {
