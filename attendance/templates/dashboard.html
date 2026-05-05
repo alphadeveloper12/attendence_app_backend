@@ -512,7 +512,7 @@
                                         <option value="Other">Other</option>
                                     </select>
                                 </div>
-                                <!-- Resumption Date — shown only when Status = Leave -->
+                                <!-- Resumption Date — shown only when bringing employee BACK from Leave to Active -->
                                 <div class="col-md-3" id="resumptionDateWrapper" style="display:none;">
                                     <label class="form-label small fw-bold text-uppercase"
                                         style="font-size:0.65rem;color:#dc2626;">
@@ -522,7 +522,7 @@
                                         class="form-control form-control-modern"
                                         style="border-color:#dc2626;">
                                     <div class="text-danger" style="font-size:0.7rem;margin-top:3px;">
-                                        Required when on Leave
+                                        Required when returning from Leave
                                     </div>
                                 </div>
                                 <div class="col-md-6"><label
@@ -1019,17 +1019,21 @@
     } catch (e) { modalBody.innerHTML = '<div class="text-center text-danger py-4">Error loading details.</div>'; }
     }
 
-    // Show/hide resumption date based on status
-    function toggleResumptionDate(status) {
+    // Track original status when editing — needed to detect Leave → Active transition
+    let originalEmployeeStatus = null;
+
+    // Show resumption date field only when bringing employee back from Leave → Active
+    function toggleResumptionDate(newStatus) {
         const wrapper = document.getElementById('resumptionDateWrapper');
         const input   = document.getElementById('resumptionDateInput');
-        if (status === 'Leave') {
+        const isResuming = (originalEmployeeStatus === 'Leave' && newStatus === 'Active');
+        if (isResuming) {
             wrapper.style.display = '';
             input.required = true;
         } else {
             wrapper.style.display = 'none';
             input.required = false;
-            input.value = '';
+            // Don't clear input — keep value if user already entered it then changed mind
         }
     }
 
@@ -1046,20 +1050,23 @@
                 const el = f.querySelector(`[name="${key}"]`);
                 if (el) el.value = data[key] || '';
             });
-            // Trigger show/hide after populating
+            // Remember original status — needed to detect Leave → Active transition
+            originalEmployeeStatus = data.status || null;
+            // Initially hide; will appear only if user changes Leave → Active
             toggleResumptionDate(data.status || '');
         } catch (e) { alert("Failed to load employee data."); }
     }
 
     async function saveEmployee() {
         const form = document.getElementById('addEmployeeForm');
-        const status = document.getElementById('employeeStatusSelect').value;
+        const newStatus  = document.getElementById('employeeStatusSelect').value;
         const resumption = document.getElementById('resumptionDateInput').value;
 
-        // Client-side validation
-        if (status === 'Leave' && !resumption) {
+        // Client-side validation: only when bringing back from Leave to Active
+        const isResuming = (originalEmployeeStatus === 'Leave' && newStatus === 'Active');
+        if (isResuming && !resumption) {
             document.getElementById('resumptionDateInput').focus();
-            alert('Resumption date is required when status is Leave.');
+            alert('Please provide the resumption date — the date the employee returned from leave.');
             return;
         }
 
@@ -1085,7 +1092,8 @@
         document.getElementById('saveEmployeeBtn').textContent = 'Save Employee';
         document.getElementById('addEmployeeForm').reset();
         document.getElementById('editEmployeeId').value = '';
-        toggleResumptionDate('Active'); // Reset — hide resumption date
+        originalEmployeeStatus = null; // No original — adding new employee
+        toggleResumptionDate('Active'); // Always hidden when adding new
         addModal.show();
     }
 

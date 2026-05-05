@@ -515,8 +515,8 @@ class AdminAddEmployeeView(APIView):
 
             status = data.get('status')
             resumption_date = parse_date(data.get('resumption_date'))
-            if status == 'Leave' and not resumption_date:
-                return Response({'error': 'Resumption date is required when status is Leave.'}, status=400)
+            # Note: when adding a new employee, no resumption date validation
+            # (resumption is only relevant when an existing leave-employee returns to active)
 
             Employee.objects.create(
                 name=name,
@@ -611,11 +611,18 @@ class AdminEditEmployeeView(APIView):
                 except:
                     return None
 
-            # Validate resumption date before saving
-            new_status = data.get('status')
+            # Resumption date logic:
+            # Only required when transitioning Leave → Active
+            # (i.e., when an employee on Leave is being marked as resumed)
+            new_status     = data.get('status')
             new_resumption = parse_date(data.get('resumption_date'))
-            if new_status == 'Leave' and not new_resumption:
-                return Response({'error': 'Resumption date is required when status is Leave.'}, status=400)
+            old_status     = emp.status
+            is_resuming    = (old_status == 'Leave' and new_status == 'Active')
+            if is_resuming and not new_resumption:
+                return Response(
+                    {'error': 'Resumption date is required when bringing an employee back from Leave to Active.'},
+                    status=400,
+                )
 
             emp.name = data.get('name', emp.name)
             emp.email = data.get('email') or None
