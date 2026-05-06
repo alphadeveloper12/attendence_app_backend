@@ -263,6 +263,13 @@
                         Resumed on: <span id="emp-resumption-date">—</span>
                     </span>
                 </div>
+                <div class="col-auto" id="last-working-date-wrapper" style="display:none;">
+                    <span class="badge rounded-pill px-3 py-2 fw-semibold"
+                          style="background:rgba(220,38,38,0.1);color:#dc2626;border:1px solid rgba(220,38,38,0.3);">
+                        <i class="ri-calendar-close-line me-1"></i>
+                        Last Working: <span id="emp-last-working-date">—</span>
+                    </span>
+                </div>
             </div>
         </div>
         <div class="col-lg-4">
@@ -440,14 +447,22 @@
         };
         statusBadge.className = `badge rounded-pill px-3 py-2 fw-semibold ${statusColors[emp.status] || 'bg-secondary bg-opacity-10 text-secondary'}`;
 
-        // Show resumption date whenever it exists — this is the historical date the employee
-        // last returned from leave, regardless of current status
+        // Show resumption date whenever it exists — historical record of last return from leave
         const resumptionWrapper = document.getElementById('resumption-date-wrapper');
         if (emp.resumption_date) {
             document.getElementById('emp-resumption-date').textContent = emp.resumption_date;
             resumptionWrapper.style.display = '';
         } else {
             resumptionWrapper.style.display = 'none';
+        }
+
+        // Show last working date whenever it exists — date employee left
+        const lastWorkingWrapper = document.getElementById('last-working-date-wrapper');
+        if (emp.last_working_date) {
+            document.getElementById('emp-last-working-date').textContent = emp.last_working_date;
+            lastWorkingWrapper.style.display = '';
+        } else {
+            lastWorkingWrapper.style.display = 'none';
         }
 
         const avatarCont = document.getElementById('profile-picture-container');
@@ -479,7 +494,8 @@
                 { label: 'Category', value: isSuperuser ? emp.salary_grade : null },
                 { label: 'Employer', value: emp.employer },
                 { label: 'D.O.J.', value: emp.date_of_joining },
-                emp.resumption_date ? { label: '📅 Last Resumption Date', value: emp.resumption_date } : null,
+                emp.resumption_date ? { label: '✅ Last Resumption Date', value: emp.resumption_date } : null,
+                emp.last_working_date ? { label: '🚪 Last Working Date', value: emp.last_working_date } : null,
             ].filter(f => f !== null && f.value !== null)
         },
         {

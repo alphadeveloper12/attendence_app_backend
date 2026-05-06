@@ -515,8 +515,16 @@ class AdminAddEmployeeView(APIView):
 
             status = data.get('status')
             resumption_date = parse_date(data.get('resumption_date'))
-            # Note: when adding a new employee, no resumption date validation
-            # (resumption is only relevant when an existing leave-employee returns to active)
+            last_working_date = parse_date(data.get('last_working_date'))
+
+            # Validate last_working_date for terminal statuses (when adding a new employee
+            # who is already in a terminal state — uncommon but possible for historical imports)
+            TERMINAL_STATUSES = {'Resigned', 'Terminated', 'No Renewal', 'Absconding'}
+            if status in TERMINAL_STATUSES and not last_working_date:
+                return Response(
+                    {'error': f'Last working date is required when status is {status}.'},
+                    status=400,
+                )
 
             Employee.objects.create(
                 name=name,
@@ -528,6 +536,7 @@ class AdminAddEmployeeView(APIView):
                 salary_grade=data.get('salary_grade'),
                 status=status,
                 resumption_date=resumption_date,
+                last_working_date=last_working_date,
                 nationality=data.get('nationality'),
                 gender=data.get('gender'),
                 marital_status=data.get('marital_status'),
@@ -571,6 +580,7 @@ class AdminEditEmployeeView(APIView):
                 'salary_grade': emp.salary_grade,
                 'status': emp.status,
                 'resumption_date': str(emp.resumption_date) if emp.resumption_date else '',
+                'last_working_date': str(emp.last_working_date) if emp.last_working_date else '',
                 'nationality': emp.nationality,
                 'gender': emp.gender,
                 'marital_status': emp.marital_status,
@@ -611,16 +621,26 @@ class AdminEditEmployeeView(APIView):
                 except:
                     return None
 
-            # Resumption date logic:
-            # Only required when transitioning Leave → Active
-            # (i.e., when an employee on Leave is being marked as resumed)
-            new_status     = data.get('status')
-            new_resumption = parse_date(data.get('resumption_date'))
-            old_status     = emp.status
-            is_resuming    = (old_status == 'Leave' and new_status == 'Active')
+            # ── Status transition logic ─────────────────────────────────────────
+            new_status         = data.get('status')
+            new_resumption     = parse_date(data.get('resumption_date'))
+            new_last_working   = parse_date(data.get('last_working_date'))
+            old_status         = emp.status
+
+            # Resumption date — required when bringing employee back from Leave to Active
+            is_resuming = (old_status == 'Leave' and new_status == 'Active')
             if is_resuming and not new_resumption:
                 return Response(
                     {'error': 'Resumption date is required when bringing an employee back from Leave to Active.'},
+                    status=400,
+                )
+
+            # Last working date — required when transitioning INTO a terminal status
+            TERMINAL_STATUSES = {'Resigned', 'Terminated', 'No Renewal', 'Absconding'}
+            is_terminating = (old_status not in TERMINAL_STATUSES and new_status in TERMINAL_STATUSES)
+            if is_terminating and not new_last_working:
+                return Response(
+                    {'error': f'Last working date is required when status changes to {new_status}.'},
                     status=400,
                 )
 
@@ -633,6 +653,7 @@ class AdminEditEmployeeView(APIView):
             emp.salary_grade = data.get('salary_grade')
             emp.status = new_status
             emp.resumption_date = new_resumption
+            emp.last_working_date = new_last_working
             emp.nationality = data.get('nationality')
             emp.gender = data.get('gender')
             emp.marital_status = data.get('marital_status')
@@ -1411,7 +1432,7 @@ class AttendanceStatsView(APIView):
             unique_categories = sorted(list(unified_cats.values()))
 
             # Master list — always present regardless of whether any employee has that status
-            MASTER_STATUSES = ['Active', 'Leave', 'Offboarded', 'Resigned', 'No Renewal', 'Terminated', 'Other']
+            MASTER_STATUSES = ['Active', 'Leave', 'Resigned', 'Terminated', 'No Renewal', 'Absconding', 'Other']
             db_statuses = Employee.objects.exclude(status__isnull=True).exclude(status='').values_list('status', flat=True).distinct()
             # Merge: master list first, then any custom values added via import
             merged = list(dict.fromkeys(MASTER_STATUSES + sorted(set(db_statuses) - set(MASTER_STATUSES))))
@@ -1988,6 +2009,7 @@ def admin_user_detail_view(request, user_id):
                     'site_id': employee.site.id if employee.site else None,
                     'status': employee.status,
                     'resumption_date': str(employee.resumption_date) if employee.resumption_date else None,
+                    'last_working_date': str(employee.last_working_date) if employee.last_working_date else None,
                     'profile_picture': employee.profile_picture.url if employee.profile_picture else None,
                     # Expanded Fields
                     'job_description': employee.job_description,

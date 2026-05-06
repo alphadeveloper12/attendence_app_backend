@@ -505,10 +505,10 @@
                                         onchange="toggleResumptionDate(this.value)">
                                         <option value="Active">Active</option>
                                         <option value="Leave">Leave</option>
-                                        <option value="Offboarded">Offboarded</option>
                                         <option value="Resigned">Resigned</option>
-                                        <option value="No Renewal">No Renewal</option>
                                         <option value="Terminated">Terminated</option>
+                                        <option value="No Renewal">No Renewal</option>
+                                        <option value="Absconding">Absconding</option>
                                         <option value="Other">Other</option>
                                     </select>
                                 </div>
@@ -523,6 +523,19 @@
                                         style="border-color:#dc2626;">
                                     <div class="text-danger" style="font-size:0.7rem;margin-top:3px;">
                                         Required when returning from Leave
+                                    </div>
+                                </div>
+                                <!-- Last Working Date — shown only when status changes to Resigned/Terminated/No Renewal/Absconding -->
+                                <div class="col-md-3" id="lastWorkingDateWrapper" style="display:none;">
+                                    <label class="form-label small fw-bold text-uppercase"
+                                        style="font-size:0.65rem;color:#dc2626;">
+                                        Last Working Date <span style="color:#dc2626;">*</span>
+                                    </label>
+                                    <input type="date" name="last_working_date" id="lastWorkingDateInput"
+                                        class="form-control form-control-modern"
+                                        style="border-color:#dc2626;">
+                                    <div class="text-danger" style="font-size:0.7rem;margin-top:3px;">
+                                        Date employee left
                                     </div>
                                 </div>
                                 <div class="col-md-6"><label
@@ -1019,22 +1032,28 @@
     } catch (e) { modalBody.innerHTML = '<div class="text-center text-danger py-4">Error loading details.</div>'; }
     }
 
-    // Track original status when editing — needed to detect Leave → Active transition
+    // Track original status when editing — needed to detect transitions
     let originalEmployeeStatus = null;
 
-    // Show resumption date field only when bringing employee back from Leave → Active
+    const TERMINAL_STATUSES = ['Resigned', 'Terminated', 'No Renewal', 'Absconding'];
+
+    // Show contextual date fields based on status transition
     function toggleResumptionDate(newStatus) {
-        const wrapper = document.getElementById('resumptionDateWrapper');
-        const input   = document.getElementById('resumptionDateInput');
+        const resWrapper  = document.getElementById('resumptionDateWrapper');
+        const resInput    = document.getElementById('resumptionDateInput');
+        const lastWrapper = document.getElementById('lastWorkingDateWrapper');
+        const lastInput   = document.getElementById('lastWorkingDateInput');
+
+        // Resumption Date — only when bringing back from Leave to Active
         const isResuming = (originalEmployeeStatus === 'Leave' && newStatus === 'Active');
-        if (isResuming) {
-            wrapper.style.display = '';
-            input.required = true;
-        } else {
-            wrapper.style.display = 'none';
-            input.required = false;
-            // Don't clear input — keep value if user already entered it then changed mind
-        }
+        resWrapper.style.display = isResuming ? '' : 'none';
+        resInput.required = isResuming;
+
+        // Last Working Date — only when transitioning INTO a terminal status
+        const wasNotTerminal = !TERMINAL_STATUSES.includes(originalEmployeeStatus);
+        const isTerminating  = (wasNotTerminal && TERMINAL_STATUSES.includes(newStatus));
+        lastWrapper.style.display = isTerminating ? '' : 'none';
+        lastInput.required = isTerminating;
     }
 
     async function editEmployee(empId) {
@@ -1061,12 +1080,22 @@
         const form = document.getElementById('addEmployeeForm');
         const newStatus  = document.getElementById('employeeStatusSelect').value;
         const resumption = document.getElementById('resumptionDateInput').value;
+        const lastWorking = document.getElementById('lastWorkingDateInput').value;
 
-        // Client-side validation: only when bringing back from Leave to Active
+        // Resumption date validation — required when bringing back from Leave to Active
         const isResuming = (originalEmployeeStatus === 'Leave' && newStatus === 'Active');
         if (isResuming && !resumption) {
             document.getElementById('resumptionDateInput').focus();
             alert('Please provide the resumption date — the date the employee returned from leave.');
+            return;
+        }
+
+        // Last working date validation — required when transitioning to a terminal status
+        const wasNotTerminal = !TERMINAL_STATUSES.includes(originalEmployeeStatus);
+        const isTerminating  = (wasNotTerminal && TERMINAL_STATUSES.includes(newStatus));
+        if (isTerminating && !lastWorking) {
+            document.getElementById('lastWorkingDateInput').focus();
+            alert(`Please provide the last working date — the date the employee left as ${newStatus}.`);
             return;
         }
 
