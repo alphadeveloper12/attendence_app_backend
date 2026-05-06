@@ -225,6 +225,9 @@
         <p class="text-secondary small font-monospace mb-0" id="top-time">loading...</p>
     </div>
     <div class="d-flex gap-3">
+        <button onclick="editEmployee(USER_ID)" class="btn btn-pro shadow-sm">
+            <i class="ri-edit-line me-2"></i>Edit Profile
+        </button>
         <a href="{% url 'admin-dashboard' %}" class="btn btn-pro shadow-sm">
             <i class="ri-arrow-left-line me-2"></i>Dashboard
         </a>
@@ -390,6 +393,266 @@
     </div>
 </div>
 
+<!-- Unified Add/Edit Form Modal -->
+<div class="modal fade" id="addModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow-2xl" style="border-radius: 1.5rem;">
+            <div class="modal-header border-0 p-4 pb-0">
+                <div>
+                    <h4 class="modal-title fw-bold text-dark" id="addModalTitle">Add New Employee</h4>
+                    <p class="text-secondary small mb-0" id="addModalSubtitle">Complete all required information fields.
+                    </p>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <ul class="nav nav-pills mb-4 bg-light p-1 rounded-3 flex-wrap" id="employeeTabs" role="tablist">
+                    <li class="nav-item flex-fill"><button class="nav-link active w-100 py-2" data-bs-toggle="pill"
+                            data-bs-target="#basic">1. Employment</button></li>
+                    <li class="nav-item flex-fill"><button class="nav-link w-100 py-2" data-bs-toggle="pill"
+                            data-bs-target="#personal">2. Personal</button></li>
+                    <li class="nav-item flex-fill"><button class="nav-link w-100 py-2" data-bs-toggle="pill"
+                            data-bs-target="#docs">3. Documents</button></li>
+                    {% if is_superuser %}
+                    <li class="nav-item flex-fill"><button class="nav-link w-100 py-2" data-bs-toggle="pill"
+                            data-bs-target="#salary">4. Salary</button></li>
+                    {% endif %}
+                    <li class="nav-item flex-fill"><button class="nav-link w-100 py-2" data-bs-toggle="pill"
+                            data-bs-target="#leaveMgmt">5. Leave Management</button></li>
+                </ul>
+
+                <form id="addEmployeeForm">
+                    <input type="hidden" name="id" id="editEmployeeId">
+                    {% csrf_token %}
+                    <div class="tab-content">
+                        <div class="tab-pane fade show active" id="basic">
+                            <div class="row g-3">
+                                <div class="col-md-6"><label
+                                        class="form-label small fw-bold text-secondary text-uppercase"
+                                        style="font-size: 0.65rem;">Full Name*</label><input type="text" name="name"
+                                        required class="form-control form-control-modern"></div>
+                                <div class="col-md-3"><label
+                                        class="form-label small fw-bold text-secondary text-uppercase"
+                                        style="font-size: 0.65rem;">Badge ID</label><input type="text"
+                                        name="badge_number" class="form-control form-control-modern"></div>
+                                <div class="col-md-3"><label
+                                        class="form-label small fw-bold text-secondary text-uppercase"
+                                        style="font-size: 0.65rem;">Status</label>
+                                    <select name="status" id="employeeStatusSelect"
+                                        class="form-select form-select-modern"
+                                        onchange="toggleResumptionDate(this.value)">
+                                        <option value="Active">Active</option>
+                                        <option value="Leave">Leave</option>
+                                        <option value="Resigned">Resigned</option>
+                                        <option value="Terminated">Terminated</option>
+                                        <option value="No Renewal">No Renewal</option>
+                                        <option value="Absconding">Absconding</option>
+                                        <option value="Other">Other</option>
+                                    </select>
+                                </div>
+                                <!-- Resumption Date — shown only when bringing employee BACK from Leave to Active -->
+                                <div class="col-md-3" id="resumptionDateWrapper" style="display:none;">
+                                    <label class="form-label small fw-bold text-uppercase"
+                                        style="font-size:0.65rem;color:#dc2626;">
+                                        Resumption Date <span style="color:#dc2626;">*</span>
+                                    </label>
+                                    <input type="date" name="resumption_date" id="resumptionDateInput"
+                                        class="form-control form-control-modern"
+                                        style="border-color:#dc2626;">
+                                    <div class="text-danger" style="font-size:0.7rem;margin-top:3px;">
+                                        Required when returning from Leave
+                                    </div>
+                                </div>
+                                <!-- Last Working Date — shown only when status changes to Resigned/Terminated/No Renewal/Absconding -->
+                                <div class="col-md-3" id="lastWorkingDateWrapper" style="display:none;">
+                                    <label class="form-label small fw-bold text-uppercase"
+                                        style="font-size:0.65rem;color:#dc2626;">
+                                        Last Working Date <span style="color:#dc2626;">*</span>
+                                    </label>
+                                    <input type="date" name="last_working_date" id="lastWorkingDateInput"
+                                        class="form-control form-control-modern"
+                                        style="border-color:#dc2626;">
+                                    <div class="text-danger" style="font-size:0.7rem;margin-top:3px;">
+                                        Date employee left
+                                    </div>
+                                </div>
+                                <!-- Leave Dates — shown only when status is being set to Leave -->
+                                <div class="col-md-3 leave-date-field" id="leaveApprovalDateWrapper" style="display:none;">
+                                    <label class="form-label small fw-bold text-uppercase"
+                                        style="font-size:0.65rem;color:#d97706;">
+                                        Leave Approval Date <span style="color:#dc2626;">*</span>
+                                    </label>
+                                    <input type="date" name="leave_approval_date" id="leaveApprovalDateInput"
+                                        class="form-control form-control-modern"
+                                        style="border-color:#d97706;">
+                                </div>
+                                <div class="col-md-3 leave-date-field" id="leaveStartDateWrapper" style="display:none;">
+                                    <label class="form-label small fw-bold text-uppercase"
+                                        style="font-size:0.65rem;color:#d97706;">
+                                        Leave Start Date <span style="color:#dc2626;">*</span>
+                                    </label>
+                                    <input type="date" name="leave_start_date" id="leaveStartDateInput"
+                                        class="form-control form-control-modern"
+                                        style="border-color:#d97706;">
+                                </div>
+                                <div class="col-md-3 leave-date-field" id="leaveEndDateWrapper" style="display:none;">
+                                    <label class="form-label small fw-bold text-uppercase"
+                                        style="font-size:0.65rem;color:#d97706;">
+                                        Leave End Date <span style="color:#dc2626;">*</span>
+                                    </label>
+                                    <input type="date" name="leave_end_date" id="leaveEndDateInput"
+                                        class="form-control form-control-modern"
+                                        style="border-color:#d97706;">
+                                </div>
+                                <div class="col-md-6"><label
+                                        class="form-label small fw-bold text-secondary text-uppercase"
+                                        style="font-size: 0.65rem;">Division (Department)</label><input type="text"
+                                        name="department" class="form-control form-control-modern"></div>
+                                <div class="col-md-6"><label
+                                        class="form-label small fw-bold text-secondary text-uppercase"
+                                        style="font-size: 0.65rem;">Present Designation (Position)</label><input
+                                        type="text" name="position" class="form-control form-control-modern"></div>
+                                <div class="col-md-4"><label
+                                        class="form-label small fw-bold text-secondary text-uppercase"
+                                        style="font-size: 0.65rem;">Category</label><input type="text"
+                                        name="salary_grade" class="form-control form-control-modern"></div>
+                                <div class="col-md-4"><label
+                                        class="form-label small fw-bold text-secondary text-uppercase"
+                                        style="font-size: 0.65rem;">Project / Site</label><select name="site"
+                                        id="employeeSiteSelect" class="form-select form-select-modern"></select></div>
+                                <div class="col-md-4"><label
+                                        class="form-label small fw-bold text-secondary text-uppercase"
+                                        style="font-size: 0.65rem;">Employer</label><input type="text" name="employer"
+                                        class="form-control form-control-modern"></div>
+                                <div class="col-md-6"><label
+                                        class="form-label small fw-bold text-secondary text-uppercase"
+                                        style="font-size: 0.65rem;">Email</label><input type="email" name="email"
+                                        class="form-control form-control-modern"></div>
+                                <div class="col-md-6"><label
+                                        class="form-label small fw-bold text-secondary text-uppercase"
+                                        style="font-size: 0.65rem;">Phone</label><input type="text" name="phone"
+                                        class="form-control form-control-modern"></div>
+                                <div class="col-12"><label
+                                        class="form-label small fw-bold text-secondary text-uppercase"
+                                        style="font-size: 0.65rem;">Job Description</label><input type="text"
+                                        name="job_description" class="form-control form-control-modern"></div>
+                            </div>
+                        </div>
+                        <div class="tab-pane fade" id="personal">
+                            <div class="row g-3">
+                                <div class="col-md-6"><label
+                                        class="form-label small fw-bold text-secondary text-uppercase"
+                                        style="font-size: 0.65rem;">Date of Birth (dd/mm/yyyy)</label><input type="date"
+                                        name="date_of_birth" class="form-control form-control-modern"></div>
+                                <div class="col-md-6"><label
+                                        class="form-label small fw-bold text-secondary text-uppercase"
+                                        style="font-size: 0.65rem;">Nationality</label><input type="text"
+                                        name="nationality" class="form-control form-control-modern"></div>
+                                <div class="col-md-4"><label
+                                        class="form-label small fw-bold text-secondary text-uppercase"
+                                        style="font-size: 0.65rem;">Gender</label>
+                                    <select name="gender" class="form-select form-select-modern">
+                                        <option value="Male">Male</option>
+                                        <option value="Female">Female</option>
+                                        <option value="Other">Other</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-4"><label
+                                        class="form-label small fw-bold text-secondary text-uppercase"
+                                        style="font-size: 0.65rem;">Marital Status</label>
+                                    <select name="marital_status" class="form-select form-select-modern">
+                                        <option value="Single">Single</option>
+                                        <option value="Married">Married</option>
+                                        <option value="Divorced">Divorced</option>
+                                        <option value="Widowed">Widowed</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-4"><label
+                                        class="form-label small fw-bold text-secondary text-uppercase"
+                                        style="font-size: 0.65rem;">Religion</label><input type="text" name="religion"
+                                        class="form-control form-control-modern"></div>
+                                <div class="col-md-6"><label
+                                        class="form-label small fw-bold text-secondary text-uppercase"
+                                        style="font-size: 0.65rem;">Housing Camp</label><input type="text" name="camp"
+                                        class="form-control form-control-modern"></div>
+                                <div class="col-md-6"><label
+                                        class="form-label small fw-bold text-secondary text-uppercase"
+                                        style="font-size: 0.65rem;">Transportation</label><input type="text"
+                                        name="transportation" class="form-control form-control-modern"></div>
+                            </div>
+                        </div>
+                        <div class="tab-pane fade" id="docs">
+                            <div class="row g-3">
+                                <div class="col-md-12">
+                                    <h6 class="fw-bold small text-primary text-uppercase">Passport Details</h6>
+                                </div>
+                                <div class="col-md-6"><label
+                                        class="form-label small fw-bold text-secondary text-uppercase"
+                                        style="font-size: 0.65rem;">Passport Number</label><input type="text"
+                                        name="passport_number" class="form-control form-control-modern"></div>
+                                <div class="col-md-6"><label
+                                        class="form-label small fw-bold text-secondary text-uppercase"
+                                        style="font-size: 0.65rem;">Passport Expiry Date</label><input type="date"
+                                        name="passport_expiry" class="form-control form-control-modern"></div>
+                                <div class="col-md-12"><label
+                                        class="form-label small fw-bold text-secondary text-uppercase"
+                                        style="font-size: 0.65rem;">Visa Details</label><textarea name="visa_details"
+                                        class="form-control form-control-modern" rows="2"></textarea></div>
+
+                                <div class="col-md-12 mt-4">
+                                    <h6 class="fw-bold small text-primary text-uppercase">Labour Card Details</h6>
+                                </div>
+                                <div class="col-md-6"><label
+                                        class="form-label small fw-bold text-secondary text-uppercase"
+                                        style="font-size: 0.65rem;">L.Card/CEC Nr.</label><input type="text"
+                                        name="labor_card_number" class="form-control form-control-modern"></div>
+                                <div class="col-md-6"><label
+                                        class="form-label small fw-bold text-secondary text-uppercase"
+                                        style="font-size: 0.65rem;">Personal Nr. (MOL ID)</label><input type="text"
+                                        name="mol_id" class="form-control form-control-modern"></div>
+                            </div>
+                        </div>
+                        {% if is_superuser %}
+                        <div class="tab-pane fade" id="salary">
+                            <div class="row g-3">
+                                <div class="col-md-6"><label
+                                        class="form-label small fw-bold text-secondary text-uppercase"
+                                        style="font-size: 0.65rem;">Joining Date (D.O.J.)</label><input type="date"
+                                        name="date_of_joining" class="form-control form-control-modern"></div>
+                                <div class="col-md-6"><label
+                                        class="form-label small fw-bold text-secondary text-uppercase"
+                                        style="font-size: 0.65rem;">Gross Salary</label><input type="number" step="0.01"
+                                        name="gross_salary" class="form-control form-control-modern" placeholder="0.00">
+                                </div>
+                                <div class="col-md-12">
+                                    <p class="text-muted small">Note: Other salary components can be viewed in the full reports.</p>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        <!-- 5. Leave Management — placeholder, content to be added later -->
+                        <div class="tab-pane fade" id="leaveMgmt">
+                            <div class="text-center py-5">
+                                <div style="font-size:3rem;opacity:0.3;">🏖️</div>
+                                <h5 class="fw-bold text-secondary mt-3">Leave Management</h5>
+                                <p class="text-muted small mb-0">
+                                    Leave history, balance, and approvals will appear here soon.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer border-0 p-4 pt-0">
+                <button type="button" class="btn btn-light px-4" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" onclick="saveEmployee()" class="btn btn-primary px-5 fw-bold"
+                    id="saveEmployeeBtn">Save Employee</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
@@ -400,11 +663,17 @@
     let currentFilter = 'daily';
     let siteBoundary = [];
 
+    let addModal;
+    let originalEmployeeStatus = null;
+    const TERMINAL_STATUSES = ['Resigned', 'Terminated', 'No Renewal', 'Absconding'];
+
     document.addEventListener('DOMContentLoaded', () => {
         const today = new Date().toISOString().split('T')[0];
         document.getElementById('main-date').value = today;
         document.getElementById('start-date').value = today;
         document.getElementById('end-date').value = today;
+
+        addModal = new bootstrap.Modal(document.getElementById('addModal'));
 
         startTime();
         loadAllData();
@@ -743,6 +1012,118 @@
         };
         setInterval(update, 1000);
         update();
+    }
+
+    // --- Modal Logic (Edit, Save) ---
+    function toggleResumptionDate(newStatus) {
+        const resWrapper  = document.getElementById('resumptionDateWrapper');
+        const resInput    = document.getElementById('resumptionDateInput');
+        const lastWrapper = document.getElementById('lastWorkingDateWrapper');
+        const lastInput   = document.getElementById('lastWorkingDateInput');
+
+        const isResuming = (originalEmployeeStatus === 'Leave' && newStatus === 'Active');
+        resWrapper.style.display = isResuming ? '' : 'none';
+        resInput.required = isResuming;
+
+        const wasNotTerminal = !TERMINAL_STATUSES.includes(originalEmployeeStatus);
+        const isTerminating  = (wasNotTerminal && TERMINAL_STATUSES.includes(newStatus));
+        lastWrapper.style.display = isTerminating ? '' : 'none';
+        lastInput.required = isTerminating;
+
+        const isStartingLeave = (originalEmployeeStatus !== 'Leave' && newStatus === 'Leave');
+        const leaveFields = ['leaveApprovalDateWrapper', 'leaveStartDateWrapper', 'leaveEndDateWrapper'];
+        const leaveInputs = ['leaveApprovalDateInput', 'leaveStartDateInput', 'leaveEndDateInput'];
+        leaveFields.forEach(id => {
+            document.getElementById(id).style.display = isStartingLeave ? '' : 'none';
+        });
+        leaveInputs.forEach(id => {
+            document.getElementById(id).required = isStartingLeave;
+        });
+    }
+
+    async function editEmployee(empId) {
+        document.getElementById('addModalTitle').textContent = 'Edit Employee';
+        document.getElementById('saveEmployeeBtn').textContent = 'Update Employee';
+        document.getElementById('editEmployeeId').value = empId;
+        addModal.show();
+        try {
+            const res = await fetch(`/api/attendance/employees/edit/${empId}/`);
+            const data = await res.json();
+            const f = document.querySelector('#addEmployeeForm');
+            
+            // Populate sites dropdown
+            const siteSelect = document.getElementById('employeeSiteSelect');
+            if (siteSelect && siteSelect.options.length === 0) {
+                const sitesRes = await fetch('/api/attendance/stats/');
+                const statsData = await sitesRes.json();
+                statsData.sites.forEach(s => {
+                    const option = document.createElement('option');
+                    option.value = s.id;
+                    option.textContent = s.name;
+                    siteSelect.appendChild(option);
+                });
+            }
+
+            Object.keys(data).forEach(key => {
+                const el = f.querySelector(`[name="${key}"]`);
+                if (el) el.value = data[key] || '';
+            });
+            originalEmployeeStatus = data.status || null;
+            toggleResumptionDate(data.status || '');
+        } catch (e) { alert("Failed to load employee data."); }
+    }
+
+    async function saveEmployee() {
+        const form = document.getElementById('addEmployeeForm');
+        const newStatus  = document.getElementById('employeeStatusSelect').value;
+        const resumption = document.getElementById('resumptionDateInput').value;
+        const lastWorking = document.getElementById('lastWorkingDateInput').value;
+
+        const isResuming = (originalEmployeeStatus === 'Leave' && newStatus === 'Active');
+        if (isResuming && !resumption) {
+            document.getElementById('resumptionDateInput').focus();
+            alert('Please provide the resumption date.');
+            return;
+        }
+
+        const wasNotTerminal = !TERMINAL_STATUSES.includes(originalEmployeeStatus);
+        const isTerminating  = (wasNotTerminal && TERMINAL_STATUSES.includes(newStatus));
+        if (isTerminating && !lastWorking) {
+            document.getElementById('lastWorkingDateInput').focus();
+            alert(`Please provide the last working date.`);
+            return;
+        }
+
+        const isStartingLeave = (originalEmployeeStatus !== 'Leave' && newStatus === 'Leave');
+        if (isStartingLeave) {
+            const approval = document.getElementById('leaveApprovalDateInput').value;
+            const start    = document.getElementById('leaveStartDateInput').value;
+            const end      = document.getElementById('leaveEndDateInput').value;
+            if (!approval || !start || !end) {
+                alert(`Required when going on Leave: Approval Date, Start Date, End Date`);
+                return;
+            }
+        }
+
+        const formData = new FormData(form);
+        const data = Object.fromEntries(formData.entries());
+        const empId = document.getElementById('editEmployeeId').value;
+        const btn = document.getElementById('saveEmployeeBtn');
+        btn.disabled = true;
+        try {
+            const res = await fetch(`/api/attendance/employees/edit/${empId}/`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': data.csrfmiddlewaretoken },
+                body: JSON.stringify(data)
+            });
+            const result = await res.json();
+            if (res.ok) { 
+                addModal.hide(); 
+                loadAllData(); 
+            } else { 
+                alert(result.error || 'Operation failed'); 
+            }
+        } catch (e) { alert('Network Error'); } finally { btn.disabled = false; }
     }
 </script>
 {% endblock %}
