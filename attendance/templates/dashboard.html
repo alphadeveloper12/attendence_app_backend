@@ -479,8 +479,10 @@
                             data-bs-target="#docs">3. Documents</button></li>
                     {% if is_superuser %}
                     <li class="nav-item flex-fill"><button class="nav-link w-100 py-2" data-bs-toggle="pill"
-                            data-bs-target="#salary">4. Salary & Leave</button></li>
+                            data-bs-target="#salary">4. Salary</button></li>
                     {% endif %}
+                    <li class="nav-item flex-fill"><button class="nav-link w-100 py-2" data-bs-toggle="pill"
+                            data-bs-target="#leaveMgmt">5. Leave Management</button></li>
                 </ul>
 
                 <form id="addEmployeeForm">
@@ -687,12 +689,22 @@
                                         name="gross_salary" class="form-control form-control-modern" placeholder="0.00">
                                 </div>
                                 <div class="col-md-12">
-                                    <p class="text-muted small">Note: Other salary components and leave entitlement
-                                        details can be viewed in the full reports.</p>
+                                    <p class="text-muted small">Note: Other salary components can be viewed in the full reports.</p>
                                 </div>
                             </div>
                         </div>
                         {% endif %}
+
+                        <!-- 5. Leave Management — placeholder, content to be added later -->
+                        <div class="tab-pane fade" id="leaveMgmt">
+                            <div class="text-center py-5">
+                                <div style="font-size:3rem;opacity:0.3;">🏖️</div>
+                                <h5 class="fw-bold text-secondary mt-3">Leave Management</h5>
+                                <p class="text-muted small mb-0">
+                                    Leave history, balance, and approvals will appear here soon.
+                                </p>
+                            </div>
+                        </div>
                     </div>
                 </form>
             </div>
