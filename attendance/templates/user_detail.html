@@ -270,6 +270,25 @@
                         Last Working: <span id="emp-last-working-date">—</span>
                     </span>
                 </div>
+                <div class="col-12" id="leave-dates-wrapper" style="display:none;">
+                    <div class="d-flex flex-wrap gap-2 mt-2">
+                        <span class="badge rounded-pill px-3 py-2 fw-semibold"
+                              style="background:rgba(217,119,6,0.1);color:#d97706;border:1px solid rgba(217,119,6,0.3);">
+                            <i class="ri-check-double-line me-1"></i>
+                            Approved: <span id="emp-leave-approval">—</span>
+                        </span>
+                        <span class="badge rounded-pill px-3 py-2 fw-semibold"
+                              style="background:rgba(217,119,6,0.1);color:#d97706;border:1px solid rgba(217,119,6,0.3);">
+                            <i class="ri-flight-takeoff-line me-1"></i>
+                            From: <span id="emp-leave-start">—</span>
+                        </span>
+                        <span class="badge rounded-pill px-3 py-2 fw-semibold"
+                              style="background:rgba(217,119,6,0.1);color:#d97706;border:1px solid rgba(217,119,6,0.3);">
+                            <i class="ri-flight-land-line me-1"></i>
+                            Until: <span id="emp-leave-end">—</span>
+                        </span>
+                    </div>
+                </div>
             </div>
         </div>
         <div class="col-lg-4">
@@ -465,6 +484,17 @@
             lastWorkingWrapper.style.display = 'none';
         }
 
+        // Show leave dates — only when employee is currently on Leave
+        const leaveWrapper = document.getElementById('leave-dates-wrapper');
+        if (emp.status === 'Leave' && (emp.leave_approval_date || emp.leave_start_date || emp.leave_end_date)) {
+            document.getElementById('emp-leave-approval').textContent = emp.leave_approval_date || '—';
+            document.getElementById('emp-leave-start').textContent    = emp.leave_start_date || '—';
+            document.getElementById('emp-leave-end').textContent      = emp.leave_end_date || '—';
+            leaveWrapper.style.display = '';
+        } else {
+            leaveWrapper.style.display = 'none';
+        }
+
         const avatarCont = document.getElementById('profile-picture-container');
         if (emp.profile_picture) {
             avatarCont.innerHTML = `<img src="${emp.profile_picture}" class="profile-avatar shadow-sm">`;
@@ -496,6 +526,9 @@
                 { label: 'D.O.J.', value: emp.date_of_joining },
                 emp.resumption_date ? { label: '✅ Last Resumption Date', value: emp.resumption_date } : null,
                 emp.last_working_date ? { label: '🚪 Last Working Date', value: emp.last_working_date } : null,
+                (emp.status === 'Leave' && emp.leave_approval_date) ? { label: '📋 Leave Approval Date', value: emp.leave_approval_date } : null,
+                (emp.status === 'Leave' && emp.leave_start_date)    ? { label: '✈️ Leave Start Date',    value: emp.leave_start_date }    : null,
+                (emp.status === 'Leave' && emp.leave_end_date)      ? { label: '🏁 Leave End Date',      value: emp.leave_end_date }      : null,
             ].filter(f => f !== null && f.value !== null)
         },
         {

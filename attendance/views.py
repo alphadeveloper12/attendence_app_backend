@@ -513,18 +513,38 @@ class AdminAddEmployeeView(APIView):
                 except:
                     return None
 
-            status = data.get('status')
-            resumption_date = parse_date(data.get('resumption_date'))
-            last_working_date = parse_date(data.get('last_working_date'))
+            status              = data.get('status')
+            resumption_date     = parse_date(data.get('resumption_date'))
+            last_working_date   = parse_date(data.get('last_working_date'))
+            leave_approval_date = parse_date(data.get('leave_approval_date'))
+            leave_start_date    = parse_date(data.get('leave_start_date'))
+            leave_end_date      = parse_date(data.get('leave_end_date'))
 
-            # Validate last_working_date for terminal statuses (when adding a new employee
-            # who is already in a terminal state — uncommon but possible for historical imports)
+            # Validate last_working_date for terminal statuses
             TERMINAL_STATUSES = {'Resigned', 'Terminated', 'No Renewal', 'Absconding'}
             if status in TERMINAL_STATUSES and not last_working_date:
                 return Response(
                     {'error': f'Last working date is required when status is {status}.'},
                     status=400,
                 )
+
+            # Validate leave dates when status is Leave
+            if status == 'Leave':
+                missing = [n for n, v in [
+                    ('Leave Approval Date', leave_approval_date),
+                    ('Leave Start Date', leave_start_date),
+                    ('Leave End Date', leave_end_date),
+                ] if not v]
+                if missing:
+                    return Response(
+                        {'error': f"Required for Leave status: {', '.join(missing)}."},
+                        status=400,
+                    )
+                if leave_start_date and leave_end_date and leave_end_date < leave_start_date:
+                    return Response(
+                        {'error': 'Leave end date cannot be before leave start date.'},
+                        status=400,
+                    )
 
             Employee.objects.create(
                 name=name,
@@ -537,6 +557,9 @@ class AdminAddEmployeeView(APIView):
                 status=status,
                 resumption_date=resumption_date,
                 last_working_date=last_working_date,
+                leave_approval_date=leave_approval_date,
+                leave_start_date=leave_start_date,
+                leave_end_date=leave_end_date,
                 nationality=data.get('nationality'),
                 gender=data.get('gender'),
                 marital_status=data.get('marital_status'),
@@ -581,6 +604,9 @@ class AdminEditEmployeeView(APIView):
                 'status': emp.status,
                 'resumption_date': str(emp.resumption_date) if emp.resumption_date else '',
                 'last_working_date': str(emp.last_working_date) if emp.last_working_date else '',
+                'leave_approval_date': str(emp.leave_approval_date) if emp.leave_approval_date else '',
+                'leave_start_date': str(emp.leave_start_date) if emp.leave_start_date else '',
+                'leave_end_date': str(emp.leave_end_date) if emp.leave_end_date else '',
                 'nationality': emp.nationality,
                 'gender': emp.gender,
                 'marital_status': emp.marital_status,
@@ -622,10 +648,13 @@ class AdminEditEmployeeView(APIView):
                     return None
 
             # ── Status transition logic ─────────────────────────────────────────
-            new_status         = data.get('status')
-            new_resumption     = parse_date(data.get('resumption_date'))
-            new_last_working   = parse_date(data.get('last_working_date'))
-            old_status         = emp.status
+            new_status           = data.get('status')
+            new_resumption       = parse_date(data.get('resumption_date'))
+            new_last_working     = parse_date(data.get('last_working_date'))
+            new_leave_approval   = parse_date(data.get('leave_approval_date'))
+            new_leave_start      = parse_date(data.get('leave_start_date'))
+            new_leave_end        = parse_date(data.get('leave_end_date'))
+            old_status           = emp.status
 
             # Resumption date — required when bringing employee back from Leave to Active
             is_resuming = (old_status == 'Leave' and new_status == 'Active')
@@ -644,6 +673,25 @@ class AdminEditEmployeeView(APIView):
                     status=400,
                 )
 
+            # Leave dates — required when transitioning INTO Leave
+            is_starting_leave = (old_status != 'Leave' and new_status == 'Leave')
+            if is_starting_leave:
+                missing = [n for n, v in [
+                    ('Leave Approval Date', new_leave_approval),
+                    ('Leave Start Date', new_leave_start),
+                    ('Leave End Date', new_leave_end),
+                ] if not v]
+                if missing:
+                    return Response(
+                        {'error': f"Required when going on Leave: {', '.join(missing)}."},
+                        status=400,
+                    )
+                if new_leave_start and new_leave_end and new_leave_end < new_leave_start:
+                    return Response(
+                        {'error': 'Leave end date cannot be before leave start date.'},
+                        status=400,
+                    )
+
             emp.name = data.get('name', emp.name)
             emp.email = data.get('email') or None
             emp.phone = data.get('phone')
@@ -654,6 +702,9 @@ class AdminEditEmployeeView(APIView):
             emp.status = new_status
             emp.resumption_date = new_resumption
             emp.last_working_date = new_last_working
+            emp.leave_approval_date = new_leave_approval
+            emp.leave_start_date    = new_leave_start
+            emp.leave_end_date      = new_leave_end
             emp.nationality = data.get('nationality')
             emp.gender = data.get('gender')
             emp.marital_status = data.get('marital_status')
@@ -2010,6 +2061,9 @@ def admin_user_detail_view(request, user_id):
                     'status': employee.status,
                     'resumption_date': str(employee.resumption_date) if employee.resumption_date else None,
                     'last_working_date': str(employee.last_working_date) if employee.last_working_date else None,
+                    'leave_approval_date': str(employee.leave_approval_date) if employee.leave_approval_date else None,
+                    'leave_start_date': str(employee.leave_start_date) if employee.leave_start_date else None,
+                    'leave_end_date': str(employee.leave_end_date) if employee.leave_end_date else None,
                     'profile_picture': employee.profile_picture.url if employee.profile_picture else None,
                     # Expanded Fields
                     'job_description': employee.job_description,

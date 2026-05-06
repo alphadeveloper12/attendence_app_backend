@@ -538,6 +538,34 @@
                                         Date employee left
                                     </div>
                                 </div>
+                                <!-- Leave Dates — shown only when status is being set to Leave -->
+                                <div class="col-md-3 leave-date-field" id="leaveApprovalDateWrapper" style="display:none;">
+                                    <label class="form-label small fw-bold text-uppercase"
+                                        style="font-size:0.65rem;color:#d97706;">
+                                        Leave Approval Date <span style="color:#dc2626;">*</span>
+                                    </label>
+                                    <input type="date" name="leave_approval_date" id="leaveApprovalDateInput"
+                                        class="form-control form-control-modern"
+                                        style="border-color:#d97706;">
+                                </div>
+                                <div class="col-md-3 leave-date-field" id="leaveStartDateWrapper" style="display:none;">
+                                    <label class="form-label small fw-bold text-uppercase"
+                                        style="font-size:0.65rem;color:#d97706;">
+                                        Leave Start Date <span style="color:#dc2626;">*</span>
+                                    </label>
+                                    <input type="date" name="leave_start_date" id="leaveStartDateInput"
+                                        class="form-control form-control-modern"
+                                        style="border-color:#d97706;">
+                                </div>
+                                <div class="col-md-3 leave-date-field" id="leaveEndDateWrapper" style="display:none;">
+                                    <label class="form-label small fw-bold text-uppercase"
+                                        style="font-size:0.65rem;color:#d97706;">
+                                        Leave End Date <span style="color:#dc2626;">*</span>
+                                    </label>
+                                    <input type="date" name="leave_end_date" id="leaveEndDateInput"
+                                        class="form-control form-control-modern"
+                                        style="border-color:#d97706;">
+                                </div>
                                 <div class="col-md-6"><label
                                         class="form-label small fw-bold text-secondary text-uppercase"
                                         style="font-size: 0.65rem;">Division (Department)</label><input type="text"
@@ -1054,6 +1082,17 @@
         const isTerminating  = (wasNotTerminal && TERMINAL_STATUSES.includes(newStatus));
         lastWrapper.style.display = isTerminating ? '' : 'none';
         lastInput.required = isTerminating;
+
+        // Leave Dates — only when transitioning INTO Leave
+        const isStartingLeave = (originalEmployeeStatus !== 'Leave' && newStatus === 'Leave');
+        const leaveFields = ['leaveApprovalDateWrapper', 'leaveStartDateWrapper', 'leaveEndDateWrapper'];
+        const leaveInputs = ['leaveApprovalDateInput', 'leaveStartDateInput', 'leaveEndDateInput'];
+        leaveFields.forEach(id => {
+            document.getElementById(id).style.display = isStartingLeave ? '' : 'none';
+        });
+        leaveInputs.forEach(id => {
+            document.getElementById(id).required = isStartingLeave;
+        });
     }
 
     async function editEmployee(empId) {
@@ -1097,6 +1136,27 @@
             document.getElementById('lastWorkingDateInput').focus();
             alert(`Please provide the last working date — the date the employee left as ${newStatus}.`);
             return;
+        }
+
+        // Leave dates validation — required when transitioning to Leave
+        const isStartingLeave = (originalEmployeeStatus !== 'Leave' && newStatus === 'Leave');
+        if (isStartingLeave) {
+            const approval = document.getElementById('leaveApprovalDateInput').value;
+            const start    = document.getElementById('leaveStartDateInput').value;
+            const end      = document.getElementById('leaveEndDateInput').value;
+            const missing = [];
+            if (!approval) missing.push('Leave Approval Date');
+            if (!start)    missing.push('Leave Start Date');
+            if (!end)      missing.push('Leave End Date');
+            if (missing.length) {
+                alert(`Required when going on Leave: ${missing.join(', ')}`);
+                return;
+            }
+            if (start && end && new Date(end) < new Date(start)) {
+                alert('Leave end date cannot be before leave start date.');
+                document.getElementById('leaveEndDateInput').focus();
+                return;
+            }
         }
 
         const formData = new FormData(form);
