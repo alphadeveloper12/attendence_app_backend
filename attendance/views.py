@@ -2180,7 +2180,10 @@ def admin_user_detail_view(request, user_id):
     # Normal GET - Return Skeleton Page
     # Pass user_id mainly for the initial JS fetch URL construction if needed, 
     # but we can also extract it from URL path in JS.
-    return render(request, "user_detail.html", {'user_id': user_id})
+    return render(request, "user_detail.html", {
+        'user_id': user_id,
+        'is_superuser': request.user.is_superuser
+    })
 
 
 
