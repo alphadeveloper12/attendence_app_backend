@@ -82,7 +82,29 @@ class Employee(models.Model):
     
     def __str__(self):
         return self.name
-    
+
+
+class EmployeeStatusHistory(models.Model):
+    """Records every status change for an employee with the dates that were captured at that moment."""
+    employee            = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name='status_history')
+    old_status          = models.CharField(max_length=50, null=True, blank=True)
+    new_status          = models.CharField(max_length=50)
+    leave_approval_date = models.DateField(null=True, blank=True)
+    leave_start_date    = models.DateField(null=True, blank=True)
+    leave_end_date      = models.DateField(null=True, blank=True)
+    resumption_date     = models.DateField(null=True, blank=True)
+    last_working_date   = models.DateField(null=True, blank=True)
+    note                = models.CharField(max_length=255, null=True, blank=True)
+    changed_at          = models.DateTimeField(auto_now_add=True)
+    changed_by          = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+
+    class Meta:
+        ordering = ['-changed_at']
+
+    def __str__(self):
+        return f"{self.employee.name}: {self.old_status} → {self.new_status} @ {self.changed_at:%Y-%m-%d}"
+
+
 class Attendance(models.Model):
     user = models.ForeignKey(Employee, on_delete=models.CASCADE)
     check_in_time = models.DateTimeField(null=True, blank=True)

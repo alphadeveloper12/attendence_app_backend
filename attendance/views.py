@@ -45,7 +45,7 @@ from .utils import (
     THRESH, MARGIN, get_image_bytes
 )
 from .geofence import check_geofence
-from .models import Employee, Attendance, Site, FaceTemplate, AdminProfile, AppBuild
+from .models import Employee, Attendance, Site, FaceTemplate, AdminProfile, AppBuild, EmployeeStatusHistory
 from .serializers import *
 from .permissions import IsSiteAdmin
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -546,7 +546,7 @@ class AdminAddEmployeeView(APIView):
                         status=400,
                     )
 
-            Employee.objects.create(
+            new_emp = Employee.objects.create(
                 name=name,
                 email=email or None,
                 phone=data.get('phone'),
@@ -580,6 +580,22 @@ class AdminAddEmployeeView(APIView):
                 camp=data.get('camp'),
                 transportation=data.get('transportation')
             )
+
+            # Record initial status as history when relevant dates are present
+            if status and (resumption_date or last_working_date or leave_approval_date or leave_start_date or leave_end_date):
+                EmployeeStatusHistory.objects.create(
+                    employee=new_emp,
+                    old_status=None,
+                    new_status=status,
+                    leave_approval_date=leave_approval_date,
+                    leave_start_date=leave_start_date,
+                    leave_end_date=leave_end_date,
+                    resumption_date=resumption_date,
+                    last_working_date=last_working_date,
+                    note='Initial status on employee creation',
+                    changed_by=request.user if request.user.is_authenticated else None,
+                )
+
             return Response({'success': True, 'message': 'Employee added successfully'})
             
         except Exception as e:
@@ -737,11 +753,63 @@ class AdminEditEmployeeView(APIView):
                 emp.salary_grade = data.get('salary_grade', emp.salary_grade)
 
             emp.save()
+
+            # Record history if status changed
+            if old_status != new_status:
+                EmployeeStatusHistory.objects.create(
+                    employee=emp,
+                    old_status=old_status,
+                    new_status=new_status,
+                    leave_approval_date=new_leave_approval if is_starting_leave else None,
+                    leave_start_date=new_leave_start    if is_starting_leave else None,
+                    leave_end_date=new_leave_end        if is_starting_leave else None,
+                    resumption_date=new_resumption       if is_resuming      else None,
+                    last_working_date=new_last_working   if is_terminating   else None,
+                    note=(
+                        f"{old_status or '—'} → {new_status}"
+                    ),
+                    changed_by=request.user if request.user.is_authenticated else None,
+                )
+
             return Response({'success': True, 'message': 'Employee updated successfully'})
         except Employee.DoesNotExist:
             return Response({'error': 'Employee not found'}, status=404)
         except Exception as e:
             return Response({'error': str(e)}, status=500)
+
+
+class EmployeeStatusHistoryView(APIView):
+    """Returns the chronological status history for one employee."""
+    permission_classes = [IsAdminUser | IsSiteAdmin]
+
+    def get(self, request, employee_id):
+        try:
+            emp = Employee.objects.get(id=employee_id)
+        except Employee.DoesNotExist:
+            return Response({'error': 'Employee not found'}, status=404)
+
+        history = emp.status_history.select_related('changed_by').all()
+        results = []
+        for h in history:
+            results.append({
+                'id': h.id,
+                'old_status': h.old_status,
+                'new_status': h.new_status,
+                'leave_approval_date': str(h.leave_approval_date) if h.leave_approval_date else None,
+                'leave_start_date': str(h.leave_start_date) if h.leave_start_date else None,
+                'leave_end_date': str(h.leave_end_date) if h.leave_end_date else None,
+                'resumption_date': str(h.resumption_date) if h.resumption_date else None,
+                'last_working_date': str(h.last_working_date) if h.last_working_date else None,
+                'note': h.note,
+                'changed_at': h.changed_at.isoformat() if h.changed_at else None,
+                'changed_by': h.changed_by.username if h.changed_by else None,
+            })
+        return Response({
+            'employee_id': emp.id,
+            'employee_name': emp.name,
+            'current_status': emp.status,
+            'history': results,
+        })
 
 
 class AdminDeleteEmployeeView(APIView):

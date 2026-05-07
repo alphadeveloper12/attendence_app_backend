@@ -13,6 +13,7 @@ urlpatterns = [
     path('employees/template/', DownloadEmployeeTemplateView.as_view(), name='download-employee-template'),
     path('employees/add/', AdminAddEmployeeView.as_view(), name='admin-add-employee'),
     path('employees/edit/<int:employee_id>/', AdminEditEmployeeView.as_view(), name='admin-edit-employee'),
+    path('employees/<int:employee_id>/status-history/', EmployeeStatusHistoryView.as_view(), name='admin-employee-status-history'),
     path('employees/delete/<int:employee_id>/', AdminDeleteEmployeeView.as_view(), name='admin-delete-employee'),
     path('employees/delete/bulk/', AdminBulkDeleteEmployeeView.as_view(), name='admin-bulk-delete-employees'),
     path('employees/export/', ExportAttendanceView.as_view(), name='export-attendance'),

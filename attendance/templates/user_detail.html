@@ -636,14 +636,13 @@
                         </div>
                         {% endif %}
 
-                        <!-- 5. Leave Management — placeholder, content to be added later -->
+                        <!-- 5. Leave Management — chronological status change history -->
                         <div class="tab-pane fade" id="leaveMgmt">
-                            <div class="text-center py-5">
-                                <div style="font-size:3rem;opacity:0.3;">🏖️</div>
-                                <h5 class="fw-bold text-secondary mt-3">Leave Management</h5>
-                                <p class="text-muted small mb-0">
-                                    Leave history, balance, and approvals will appear here soon.
-                                </p>
+                            <div id="statusHistoryContainer">
+                                <div class="text-center py-4">
+                                    <div class="spinner-border spinner-border-sm text-secondary"></div>
+                                    <p class="text-muted small mt-2 mb-0">Loading history…</p>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1075,7 +1074,72 @@
             });
             originalEmployeeStatus = data.status || null;
             toggleResumptionDate(data.status || '');
+            loadStatusHistory(empId);
         } catch (e) { alert("Failed to load employee data."); }
+    }
+
+    async function loadStatusHistory(empId) {
+        const container = document.getElementById('statusHistoryContainer');
+        if (!container) return;
+        container.innerHTML = `<div class="text-center py-4"><div class="spinner-border spinner-border-sm text-secondary"></div><p class="text-muted small mt-2 mb-0">Loading history…</p></div>`;
+        try {
+            const res = await fetch(`/api/attendance/employees/${empId}/status-history/`);
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Failed');
+            const items = data.history || [];
+            if (items.length === 0) {
+                container.innerHTML = `<div class="text-center py-5">
+                    <div style="font-size:2.5rem;opacity:0.3;">📜</div>
+                    <h6 class="fw-bold text-secondary mt-3">No status changes recorded</h6>
+                    <p class="text-muted small mb-0">Future status changes (Leave, Resigned, Terminated…) will appear here.</p>
+                </div>`;
+                return;
+            }
+            const statusBadge = (s) => {
+                const colors = {
+                    'Active': 'bg-success bg-opacity-10 text-success',
+                    'Leave': 'bg-warning bg-opacity-10 text-warning',
+                    'Resigned': 'bg-danger bg-opacity-10 text-danger',
+                    'Terminated': 'bg-danger bg-opacity-10 text-danger',
+                    'No Renewal': 'bg-secondary bg-opacity-10 text-secondary',
+                    'Absconding': 'bg-dark bg-opacity-25 text-dark',
+                };
+                const cls = colors[s] || 'bg-secondary bg-opacity-10 text-secondary';
+                return `<span class="badge rounded-pill px-2 py-1 fw-bold ${cls}">${s || '—'}</span>`;
+            };
+            const fmt = (d) => d ? `<span class="font-monospace small">${d}</span>` : '<span class="text-muted small">—</span>';
+            container.innerHTML = `
+                <div class="mb-3 pb-2 border-bottom">
+                    <span class="text-secondary small">Current status:</span> ${statusBadge(data.current_status)}
+                    <span class="text-muted small ms-2">${items.length} change${items.length !== 1 ? 's' : ''} recorded</span>
+                </div>
+                <div class="d-flex flex-column gap-3">
+                    ${items.map(h => `
+                        <div class="border rounded-3 p-3" style="background:#fafafa;">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <div>
+                                    ${statusBadge(h.old_status)} <i class="ri-arrow-right-line text-secondary"></i> ${statusBadge(h.new_status)}
+                                </div>
+                                <div class="text-secondary small">
+                                    <i class="ri-time-line me-1"></i>${new Date(h.changed_at).toLocaleString()}
+                                    ${h.changed_by ? ' · by ' + h.changed_by : ''}
+                                </div>
+                            </div>
+                            <div class="row g-2 small">
+                                ${h.leave_approval_date ? `<div class="col-md-4"><span class="text-secondary">Leave Approval:</span> ${fmt(h.leave_approval_date)}</div>` : ''}
+                                ${h.leave_start_date    ? `<div class="col-md-4"><span class="text-secondary">Leave Start:</span> ${fmt(h.leave_start_date)}</div>` : ''}
+                                ${h.leave_end_date      ? `<div class="col-md-4"><span class="text-secondary">Leave End:</span> ${fmt(h.leave_end_date)}</div>` : ''}
+                                ${h.resumption_date     ? `<div class="col-md-4"><span class="text-secondary">Resumed:</span> ${fmt(h.resumption_date)}</div>` : ''}
+                                ${h.last_working_date   ? `<div class="col-md-4"><span class="text-secondary">Last Working:</span> ${fmt(h.last_working_date)}</div>` : ''}
+                            </div>
+                            ${h.note ? `<div class="text-muted small mt-2 fst-italic">${h.note}</div>` : ''}
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        } catch (e) {
+            container.innerHTML = `<div class="text-danger small text-center py-4">Failed to load history.</div>`;
+        }
     }
 
     async function saveEmployee() {
