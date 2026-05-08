@@ -261,14 +261,14 @@
                 </div>
                 <div class="col-auto" id="resumption-date-wrapper" style="display:none;">
                     <span class="badge rounded-pill px-3 py-2 fw-semibold"
-                          style="background:rgba(37,99,235,0.1);color:#2563eb;border:1px solid rgba(37,99,235,0.3);">
+                        style="background:rgba(37,99,235,0.1);color:#2563eb;border:1px solid rgba(37,99,235,0.3);">
                         <i class="ri-calendar-check-line me-1"></i>
                         Resumed on: <span id="emp-resumption-date">—</span>
                     </span>
                 </div>
                 <div class="col-auto" id="last-working-date-wrapper" style="display:none;">
                     <span class="badge rounded-pill px-3 py-2 fw-semibold"
-                          style="background:rgba(220,38,38,0.1);color:#dc2626;border:1px solid rgba(220,38,38,0.3);">
+                        style="background:rgba(220,38,38,0.1);color:#dc2626;border:1px solid rgba(220,38,38,0.3);">
                         <i class="ri-calendar-close-line me-1"></i>
                         Last Working: <span id="emp-last-working-date">—</span>
                     </span>
@@ -276,17 +276,17 @@
                 <div class="col-12" id="leave-dates-wrapper" style="display:none;">
                     <div class="d-flex flex-wrap gap-2 mt-2">
                         <span class="badge rounded-pill px-3 py-2 fw-semibold"
-                              style="background:rgba(217,119,6,0.1);color:#d97706;border:1px solid rgba(217,119,6,0.3);">
+                            style="background:rgba(217,119,6,0.1);color:#d97706;border:1px solid rgba(217,119,6,0.3);">
                             <i class="ri-check-double-line me-1"></i>
                             Approved: <span id="emp-leave-approval">—</span>
                         </span>
                         <span class="badge rounded-pill px-3 py-2 fw-semibold"
-                              style="background:rgba(217,119,6,0.1);color:#d97706;border:1px solid rgba(217,119,6,0.3);">
+                            style="background:rgba(217,119,6,0.1);color:#d97706;border:1px solid rgba(217,119,6,0.3);">
                             <i class="ri-flight-takeoff-line me-1"></i>
                             From: <span id="emp-leave-start">—</span>
                         </span>
                         <span class="badge rounded-pill px-3 py-2 fw-semibold"
-                              style="background:rgba(217,119,6,0.1);color:#d97706;border:1px solid rgba(217,119,6,0.3);">
+                            style="background:rgba(217,119,6,0.1);color:#d97706;border:1px solid rgba(217,119,6,0.3);">
                             <i class="ri-flight-land-line me-1"></i>
                             Until: <span id="emp-leave-end">—</span>
                         </span>
@@ -457,8 +457,7 @@
                                         Resumption Date <span style="color:#dc2626;">*</span>
                                     </label>
                                     <input type="date" name="resumption_date" id="resumptionDateInput"
-                                        class="form-control form-control-modern"
-                                        style="border-color:#dc2626;">
+                                        class="form-control form-control-modern" style="border-color:#dc2626;">
                                     <div class="text-danger" style="font-size:0.7rem;margin-top:3px;">
                                         Required when returning from Leave
                                     </div>
@@ -470,21 +469,20 @@
                                         Last Working Date <span style="color:#dc2626;">*</span>
                                     </label>
                                     <input type="date" name="last_working_date" id="lastWorkingDateInput"
-                                        class="form-control form-control-modern"
-                                        style="border-color:#dc2626;">
+                                        class="form-control form-control-modern" style="border-color:#dc2626;">
                                     <div class="text-danger" style="font-size:0.7rem;margin-top:3px;">
                                         Date employee left
                                     </div>
                                 </div>
                                 <!-- Leave Dates — shown only when status is being set to Leave -->
-                                <div class="col-md-3 leave-date-field" id="leaveApprovalDateWrapper" style="display:none;">
+                                <div class="col-md-3 leave-date-field" id="leaveApprovalDateWrapper"
+                                    style="display:none;">
                                     <label class="form-label small fw-bold text-uppercase"
                                         style="font-size:0.65rem;color:#d97706;">
-                                        Leave Approval Date <span style="color:#dc2626;">*</span>
+                                        Last working Date <span style="color:#dc2626;">*</span>
                                     </label>
                                     <input type="date" name="leave_approval_date" id="leaveApprovalDateInput"
-                                        class="form-control form-control-modern"
-                                        style="border-color:#d97706;">
+                                        class="form-control form-control-modern" style="border-color:#d97706;">
                                 </div>
                                 <div class="col-md-3 leave-date-field" id="leaveStartDateWrapper" style="display:none;">
                                     <label class="form-label small fw-bold text-uppercase"
@@ -492,8 +490,7 @@
                                         Leave Start Date <span style="color:#dc2626;">*</span>
                                     </label>
                                     <input type="date" name="leave_start_date" id="leaveStartDateInput"
-                                        class="form-control form-control-modern"
-                                        style="border-color:#d97706;">
+                                        class="form-control form-control-modern" style="border-color:#d97706;">
                                 </div>
                                 <div class="col-md-3 leave-date-field" id="leaveEndDateWrapper" style="display:none;">
                                     <label class="form-label small fw-bold text-uppercase"
@@ -501,8 +498,7 @@
                                         Leave End Date <span style="color:#dc2626;">*</span>
                                     </label>
                                     <input type="date" name="leave_end_date" id="leaveEndDateInput"
-                                        class="form-control form-control-modern"
-                                        style="border-color:#d97706;">
+                                        class="form-control form-control-modern" style="border-color:#d97706;">
                                 </div>
                                 <div class="col-md-6"><label
                                         class="form-label small fw-bold text-secondary text-uppercase"
@@ -630,7 +626,8 @@
                                         name="gross_salary" class="form-control form-control-modern" placeholder="0.00">
                                 </div>
                                 <div class="col-md-12">
-                                    <p class="text-muted small">Note: Other salary components can be viewed in the full reports.</p>
+                                    <p class="text-muted small">Note: Other salary components can be viewed in the full
+                                        reports.</p>
                                 </div>
                             </div>
                         </div>
@@ -761,8 +758,8 @@
         const leaveWrapper = document.getElementById('leave-dates-wrapper');
         if (emp.status === 'Leave' && (emp.leave_approval_date || emp.leave_start_date || emp.leave_end_date)) {
             document.getElementById('emp-leave-approval').textContent = emp.leave_approval_date || '—';
-            document.getElementById('emp-leave-start').textContent    = emp.leave_start_date || '—';
-            document.getElementById('emp-leave-end').textContent      = emp.leave_end_date || '—';
+            document.getElementById('emp-leave-start').textContent = emp.leave_start_date || '—';
+            document.getElementById('emp-leave-end').textContent = emp.leave_end_date || '—';
             leaveWrapper.style.display = '';
         } else {
             leaveWrapper.style.display = 'none';
@@ -777,7 +774,8 @@
 
         // Render detailed grid
         const detailGrid = document.getElementById('profile-details-grid');
-        const isSuperuser = {{ user.is_superuser|lower }};
+        const isSuperuser = {{ user.is_superuser| lower
+    }};
     const sections = [
         {
             title: "Personal Details",
@@ -800,8 +798,8 @@
                 emp.resumption_date ? { label: '✅ Last Resumption Date', value: emp.resumption_date } : null,
                 emp.last_working_date ? { label: '🚪 Last Working Date', value: emp.last_working_date } : null,
                 (emp.status === 'Leave' && emp.leave_approval_date) ? { label: '📋 Leave Approval Date', value: emp.leave_approval_date } : null,
-                (emp.status === 'Leave' && emp.leave_start_date)    ? { label: '✈️ Leave Start Date',    value: emp.leave_start_date }    : null,
-                (emp.status === 'Leave' && emp.leave_end_date)      ? { label: '🏁 Leave End Date',      value: emp.leave_end_date }      : null,
+                (emp.status === 'Leave' && emp.leave_start_date) ? { label: '✈️ Leave Start Date', value: emp.leave_start_date } : null,
+                (emp.status === 'Leave' && emp.leave_end_date) ? { label: '🏁 Leave End Date', value: emp.leave_end_date } : null,
             ].filter(f => f !== null && f.value !== null)
         },
         {
@@ -1020,17 +1018,17 @@
 
     // --- Modal Logic (Edit, Save) ---
     function toggleResumptionDate(newStatus) {
-        const resWrapper  = document.getElementById('resumptionDateWrapper');
-        const resInput    = document.getElementById('resumptionDateInput');
+        const resWrapper = document.getElementById('resumptionDateWrapper');
+        const resInput = document.getElementById('resumptionDateInput');
         const lastWrapper = document.getElementById('lastWorkingDateWrapper');
-        const lastInput   = document.getElementById('lastWorkingDateInput');
+        const lastInput = document.getElementById('lastWorkingDateInput');
 
         const isResuming = (originalEmployeeStatus === 'Leave' && newStatus === 'Active');
         resWrapper.style.display = isResuming ? '' : 'none';
         resInput.required = isResuming;
 
         const wasNotTerminal = !TERMINAL_STATUSES.includes(originalEmployeeStatus);
-        const isTerminating  = (wasNotTerminal && TERMINAL_STATUSES.includes(newStatus));
+        const isTerminating = (wasNotTerminal && TERMINAL_STATUSES.includes(newStatus));
         lastWrapper.style.display = isTerminating ? '' : 'none';
         lastInput.required = isTerminating;
 
@@ -1054,7 +1052,7 @@
             const res = await fetch(`/api/attendance/employees/edit/${empId}/`);
             const data = await res.json();
             const f = document.querySelector('#addEmployeeForm');
-            
+
             // Populate sites dropdown
             const siteSelect = document.getElementById('employeeSiteSelect');
             if (siteSelect && siteSelect.options.length === 0) {
@@ -1127,10 +1125,10 @@
                             </div>
                             <div class="row g-2 small">
                                 ${h.leave_approval_date ? `<div class="col-md-4"><span class="text-secondary">Leave Approval:</span> ${fmt(h.leave_approval_date)}</div>` : ''}
-                                ${h.leave_start_date    ? `<div class="col-md-4"><span class="text-secondary">Leave Start:</span> ${fmt(h.leave_start_date)}</div>` : ''}
-                                ${h.leave_end_date      ? `<div class="col-md-4"><span class="text-secondary">Leave End:</span> ${fmt(h.leave_end_date)}</div>` : ''}
-                                ${h.resumption_date     ? `<div class="col-md-4"><span class="text-secondary">Resumed:</span> ${fmt(h.resumption_date)}</div>` : ''}
-                                ${h.last_working_date   ? `<div class="col-md-4"><span class="text-secondary">Last Working:</span> ${fmt(h.last_working_date)}</div>` : ''}
+                                ${h.leave_start_date ? `<div class="col-md-4"><span class="text-secondary">Leave Start:</span> ${fmt(h.leave_start_date)}</div>` : ''}
+                                ${h.leave_end_date ? `<div class="col-md-4"><span class="text-secondary">Leave End:</span> ${fmt(h.leave_end_date)}</div>` : ''}
+                                ${h.resumption_date ? `<div class="col-md-4"><span class="text-secondary">Resumed:</span> ${fmt(h.resumption_date)}</div>` : ''}
+                                ${h.last_working_date ? `<div class="col-md-4"><span class="text-secondary">Last Working:</span> ${fmt(h.last_working_date)}</div>` : ''}
                             </div>
                             ${h.note ? `<div class="text-muted small mt-2 fst-italic">${h.note}</div>` : ''}
                         </div>
@@ -1144,7 +1142,7 @@
 
     async function saveEmployee() {
         const form = document.getElementById('addEmployeeForm');
-        const newStatus  = document.getElementById('employeeStatusSelect').value;
+        const newStatus = document.getElementById('employeeStatusSelect').value;
         const resumption = document.getElementById('resumptionDateInput').value;
         const lastWorking = document.getElementById('lastWorkingDateInput').value;
 
@@ -1156,7 +1154,7 @@
         }
 
         const wasNotTerminal = !TERMINAL_STATUSES.includes(originalEmployeeStatus);
-        const isTerminating  = (wasNotTerminal && TERMINAL_STATUSES.includes(newStatus));
+        const isTerminating = (wasNotTerminal && TERMINAL_STATUSES.includes(newStatus));
         if (isTerminating && !lastWorking) {
             document.getElementById('lastWorkingDateInput').focus();
             alert(`Please provide the last working date.`);
@@ -1166,8 +1164,8 @@
         const isStartingLeave = (originalEmployeeStatus !== 'Leave' && newStatus === 'Leave');
         if (isStartingLeave) {
             const approval = document.getElementById('leaveApprovalDateInput').value;
-            const start    = document.getElementById('leaveStartDateInput').value;
-            const end      = document.getElementById('leaveEndDateInput').value;
+            const start = document.getElementById('leaveStartDateInput').value;
+            const end = document.getElementById('leaveEndDateInput').value;
             if (!approval || !start || !end) {
                 alert(`Required when going on Leave: Approval Date, Start Date, End Date`);
                 return;
@@ -1186,11 +1184,11 @@
                 body: JSON.stringify(data)
             });
             const result = await res.json();
-            if (res.ok) { 
-                addModal.hide(); 
-                loadAllData(); 
-            } else { 
-                alert(result.error || 'Operation failed'); 
+            if (res.ok) {
+                addModal.hide();
+                loadAllData();
+            } else {
+                alert(result.error || 'Operation failed');
             }
         } catch (e) { alert('Network Error'); } finally { btn.disabled = false; }
     }
