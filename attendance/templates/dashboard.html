@@ -483,6 +483,8 @@
                     {% endif %}
                     <li class="nav-item flex-fill"><button class="nav-link w-100 py-2" data-bs-toggle="pill"
                             data-bs-target="#leaveMgmt">5. Leave Management</button></li>
+                    <li class="nav-item flex-fill"><button class="nav-link w-100 py-2" data-bs-toggle="pill"
+                            data-bs-target="#employmentStatus">6. Employment Status</button></li>
                 </ul>
 
                 <form id="addEmployeeForm">
@@ -557,7 +559,8 @@
                                     </label>
                                     <input type="date" name="leave_start_date" id="leaveStartDateInput"
                                         class="form-control form-control-modern"
-                                        style="border-color:#d97706;">
+                                        style="border-color:#d97706;"
+                                        onchange="recalcLeaveTotalDays()">
                                 </div>
                                 <div class="col-md-3 leave-date-field" id="leaveEndDateWrapper" style="display:none;">
                                     <label class="form-label small fw-bold text-uppercase"
@@ -566,7 +569,59 @@
                                     </label>
                                     <input type="date" name="leave_end_date" id="leaveEndDateInput"
                                         class="form-control form-control-modern"
+                                        style="border-color:#d97706;"
+                                        onchange="recalcLeaveTotalDays()">
+                                </div>
+                                <!-- Leave Type -->
+                                <div class="col-md-3 leave-date-field" id="leaveTypeWrapper" style="display:none;">
+                                    <label class="form-label small fw-bold text-uppercase"
+                                        style="font-size:0.65rem;color:#d97706;">
+                                        Leave Type <span style="color:#dc2626;">*</span>
+                                    </label>
+                                    <select name="leave_type" id="leaveTypeSelect"
+                                        class="form-select form-select-modern"
                                         style="border-color:#d97706;">
+                                        <option value="">— Select —</option>
+                                        <option value="Annual">Annual</option>
+                                        <option value="Emergency">Emergency</option>
+                                        <option value="Unpaid">Unpaid</option>
+                                        <option value="Hajj/Umrah">Hajj/Umrah</option>
+                                    </select>
+                                </div>
+                                <!-- Ticket Eligibility -->
+                                <div class="col-md-3 leave-date-field" id="leaveTicketEligibleWrapper" style="display:none;">
+                                    <label class="form-label small fw-bold text-uppercase"
+                                        style="font-size:0.65rem;color:#d97706;">
+                                        Ticket Condition
+                                    </label>
+                                    <select name="leave_ticket_eligible" id="leaveTicketEligibleSelect"
+                                        class="form-select form-select-modern"
+                                        style="border-color:#d97706;"
+                                        onchange="toggleTicketPrice(this.value)">
+                                        <option value="">— Select —</option>
+                                        <option value="Eligible">Eligible</option>
+                                        <option value="Not Eligible">Not Eligible</option>
+                                    </select>
+                                </div>
+                                <!-- Ticket Price (only when Eligible) -->
+                                <div class="col-md-3 leave-date-field" id="leaveTicketPriceWrapper" style="display:none;">
+                                    <label class="form-label small fw-bold text-uppercase"
+                                        style="font-size:0.65rem;color:#d97706;">
+                                        Ticket Price
+                                    </label>
+                                    <input type="number" step="0.01" name="leave_ticket_price" id="leaveTicketPriceInput"
+                                        class="form-control form-control-modern"
+                                        style="border-color:#d97706;" placeholder="0.00">
+                                </div>
+                                <!-- Total Days (read-only, computed) -->
+                                <div class="col-md-3 leave-date-field" id="leaveTotalDaysWrapper" style="display:none;">
+                                    <label class="form-label small fw-bold text-uppercase"
+                                        style="font-size:0.65rem;color:#0d6efd;">
+                                        Total Days of Leave
+                                    </label>
+                                    <input type="text" id="leaveTotalDaysDisplay" readonly
+                                        class="form-control form-control-modern"
+                                        style="border-color:#0d6efd; background:#f0f8ff;" placeholder="—">
                                 </div>
                                 <div class="col-md-6"><label
                                         class="form-label small fw-bold text-secondary text-uppercase"
@@ -695,12 +750,22 @@
                         </div>
                         {% endif %}
 
-                        <!-- 5. Leave Management — chronological status change history -->
+                        <!-- 5. Leave Management — leave-only history -->
                         <div class="tab-pane fade" id="leaveMgmt">
-                            <div id="statusHistoryContainer">
+                            <div id="leaveHistoryContainer">
                                 <div class="text-center py-4">
                                     <div class="spinner-border spinner-border-sm text-secondary"></div>
-                                    <p class="text-muted small mt-2 mb-0">Loading history…</p>
+                                    <p class="text-muted small mt-2 mb-0">Loading leave history…</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 6. Employment Status — non-leave status change history -->
+                        <div class="tab-pane fade" id="employmentStatus">
+                            <div id="employmentStatusContainer">
+                                <div class="text-center py-4">
+                                    <div class="spinner-border spinner-border-sm text-secondary"></div>
+                                    <p class="text-muted small mt-2 mb-0">Loading employment status history…</p>
                                 </div>
                             </div>
                         </div>
@@ -1096,14 +1161,56 @@
 
         // Leave Dates — only when transitioning INTO Leave
         const isStartingLeave = (originalEmployeeStatus !== 'Leave' && newStatus === 'Leave');
-        const leaveFields = ['leaveApprovalDateWrapper', 'leaveStartDateWrapper', 'leaveEndDateWrapper'];
+        const leaveFields = [
+            'leaveApprovalDateWrapper', 'leaveStartDateWrapper', 'leaveEndDateWrapper',
+            'leaveTypeWrapper', 'leaveTicketEligibleWrapper', 'leaveTotalDaysWrapper'
+        ];
         const leaveInputs = ['leaveApprovalDateInput', 'leaveStartDateInput', 'leaveEndDateInput'];
         leaveFields.forEach(id => {
-            document.getElementById(id).style.display = isStartingLeave ? '' : 'none';
+            const el = document.getElementById(id);
+            if (el) el.style.display = isStartingLeave ? '' : 'none';
         });
         leaveInputs.forEach(id => {
-            document.getElementById(id).required = isStartingLeave;
+            const el = document.getElementById(id);
+            if (el) el.required = isStartingLeave;
         });
+        const typeSel = document.getElementById('leaveTypeSelect');
+        if (typeSel) typeSel.required = isStartingLeave;
+
+        // Ticket price visibility depends on eligibility selection — recompute now
+        if (isStartingLeave) {
+            const eligVal = (document.getElementById('leaveTicketEligibleSelect') || {}).value || '';
+            toggleTicketPrice(eligVal);
+            recalcLeaveTotalDays();
+        } else {
+            const tpw = document.getElementById('leaveTicketPriceWrapper');
+            if (tpw) tpw.style.display = 'none';
+        }
+    }
+
+    // Show ticket price input only when "Eligible"
+    function toggleTicketPrice(value) {
+        const wrapper = document.getElementById('leaveTicketPriceWrapper');
+        const input   = document.getElementById('leaveTicketPriceInput');
+        if (!wrapper || !input) return;
+        const show = (value === 'Eligible');
+        wrapper.style.display = show ? '' : 'none';
+        if (!show) input.value = '';
+    }
+
+    // Calculate total days = end - start + 1 (inclusive). JS Date handles month lengths and leap years.
+    function recalcLeaveTotalDays() {
+        const startEl = document.getElementById('leaveStartDateInput');
+        const endEl   = document.getElementById('leaveEndDateInput');
+        const out     = document.getElementById('leaveTotalDaysDisplay');
+        if (!startEl || !endEl || !out) return;
+        const s = startEl.value, e = endEl.value;
+        if (!s || !e) { out.value = '—'; return; }
+        const sd = new Date(s + 'T00:00:00');
+        const ed = new Date(e + 'T00:00:00');
+        if (isNaN(sd) || isNaN(ed) || ed < sd) { out.value = '—'; return; }
+        const days = Math.round((ed - sd) / 86400000) + 1;
+        out.value = days + (days === 1 ? ' day' : ' days');
     }
 
     async function editEmployee(empId) {
@@ -1123,71 +1230,141 @@
             originalEmployeeStatus = data.status || null;
             // Initially hide; will appear only if user changes Leave → Active
             toggleResumptionDate(data.status || '');
-            // Load status change history for the Leave Management tab
+            // If currently on Leave, sync ticket-price visibility from current eligibility value
+            if ((data.status || '') === 'Leave') {
+                toggleTicketPrice(data.leave_ticket_eligible || '');
+                recalcLeaveTotalDays();
+            }
+            // Load status change history for both Leave Management and Employment Status tabs
             loadStatusHistory(empId);
         } catch (e) { alert("Failed to load employee data."); }
     }
 
+    // Status helpers shared between leave-history and employment-status panes
+    function _statusBadge(s) {
+        const colors = {
+            'Active': 'bg-success bg-opacity-10 text-success',
+            'Leave': 'bg-warning bg-opacity-10 text-warning',
+            'Resigned': 'bg-danger bg-opacity-10 text-danger',
+            'Terminated': 'bg-danger bg-opacity-10 text-danger',
+            'No Renewal': 'bg-secondary bg-opacity-10 text-secondary',
+            'Absconding': 'bg-dark bg-opacity-25 text-dark',
+        };
+        const cls = colors[s] || 'bg-secondary bg-opacity-10 text-secondary';
+        return `<span class="badge rounded-pill px-2 py-1 fw-bold ${cls}">${s || '—'}</span>`;
+    }
+    function _fmtDate(d) {
+        return d ? `<span class="font-monospace small">${d}</span>` : '<span class="text-muted small">—</span>';
+    }
+
+    function _renderLeaveHistoryCard(h) {
+        const totalDays = (h.total_days != null) ? h.total_days
+            : (h.leave_start_date && h.leave_end_date
+                ? Math.round((new Date(h.leave_end_date) - new Date(h.leave_start_date)) / 86400000) + 1
+                : null);
+        return `
+            <div class="border rounded-3 p-3" style="background:#fafafa;">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <div>
+                        ${_statusBadge(h.old_status)} <i class="ri-arrow-right-line text-secondary"></i> ${_statusBadge(h.new_status)}
+                        ${h.leave_type ? `<span class="badge rounded-pill bg-info bg-opacity-10 text-info ms-2">${h.leave_type}</span>` : ''}
+                    </div>
+                    <div class="text-secondary small">
+                        <i class="ri-time-line me-1"></i>${new Date(h.changed_at).toLocaleString()}
+                        ${h.changed_by ? ' · by ' + h.changed_by : ''}
+                    </div>
+                </div>
+                <div class="row g-2 small">
+                    ${h.leave_approval_date ? `<div class="col-md-4"><span class="text-secondary">Last Working (before leave):</span> ${_fmtDate(h.leave_approval_date)}</div>` : ''}
+                    ${h.leave_start_date    ? `<div class="col-md-4"><span class="text-secondary">Leave Start:</span> ${_fmtDate(h.leave_start_date)}</div>` : ''}
+                    ${h.leave_end_date      ? `<div class="col-md-4"><span class="text-secondary">Leave End:</span> ${_fmtDate(h.leave_end_date)}</div>` : ''}
+                    ${h.resumption_date     ? `<div class="col-md-4"><span class="text-secondary">Resumed:</span> ${_fmtDate(h.resumption_date)}</div>` : ''}
+                    ${totalDays != null     ? `<div class="col-md-4"><span class="text-secondary">Total Days:</span> <span class="fw-bold text-primary">${totalDays}</span></div>` : ''}
+                    ${h.leave_ticket_eligible ? `<div class="col-md-4"><span class="text-secondary">Ticket:</span> <span class="fw-semibold">${h.leave_ticket_eligible}</span></div>` : ''}
+                    ${h.leave_ticket_price  ? `<div class="col-md-4"><span class="text-secondary">Ticket Price:</span> <span class="fw-semibold">${h.leave_ticket_price}</span></div>` : ''}
+                </div>
+                ${h.note ? `<div class="text-muted small mt-2 fst-italic">${h.note}</div>` : ''}
+            </div>
+        `;
+    }
+
+    function _renderEmploymentHistoryCard(h) {
+        return `
+            <div class="border rounded-3 p-3" style="background:#fafafa;">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <div>
+                        ${_statusBadge(h.old_status)} <i class="ri-arrow-right-line text-secondary"></i> ${_statusBadge(h.new_status)}
+                    </div>
+                    <div class="text-secondary small">
+                        <i class="ri-time-line me-1"></i>${new Date(h.changed_at).toLocaleString()}
+                        ${h.changed_by ? ' · by ' + h.changed_by : ''}
+                    </div>
+                </div>
+                <div class="row g-2 small">
+                    ${h.last_working_date ? `<div class="col-md-6"><span class="text-secondary">Last Working Date:</span> ${_fmtDate(h.last_working_date)}</div>` : ''}
+                </div>
+                ${h.note ? `<div class="text-muted small mt-2 fst-italic">${h.note}</div>` : ''}
+            </div>
+        `;
+    }
+
     async function loadStatusHistory(empId) {
-        const container = document.getElementById('statusHistoryContainer');
-        container.innerHTML = `<div class="text-center py-4"><div class="spinner-border spinner-border-sm text-secondary"></div><p class="text-muted small mt-2 mb-0">Loading history…</p></div>`;
+        const leaveBox = document.getElementById('leaveHistoryContainer');
+        const empBox   = document.getElementById('employmentStatusContainer');
+        const spinner  = `<div class="text-center py-4"><div class="spinner-border spinner-border-sm text-secondary"></div><p class="text-muted small mt-2 mb-0">Loading history…</p></div>`;
+        if (leaveBox) leaveBox.innerHTML = spinner;
+        if (empBox)   empBox.innerHTML   = spinner;
         try {
             const res = await fetch(`/api/attendance/employees/${empId}/status-history/`);
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Failed');
             const items = data.history || [];
-            if (items.length === 0) {
-                container.innerHTML = `<div class="text-center py-5">
-                    <div style="font-size:2.5rem;opacity:0.3;">📜</div>
-                    <h6 class="fw-bold text-secondary mt-3">No status changes recorded</h6>
-                    <p class="text-muted small mb-0">Future status changes (Leave, Resigned, Terminated…) will appear here.</p>
-                </div>`;
-                return;
-            }
-            const statusBadge = (s) => {
-                const colors = {
-                    'Active': 'bg-success bg-opacity-10 text-success',
-                    'Leave': 'bg-warning bg-opacity-10 text-warning',
-                    'Resigned': 'bg-danger bg-opacity-10 text-danger',
-                    'Terminated': 'bg-danger bg-opacity-10 text-danger',
-                    'No Renewal': 'bg-secondary bg-opacity-10 text-secondary',
-                    'Absconding': 'bg-dark bg-opacity-25 text-dark',
-                };
-                const cls = colors[s] || 'bg-secondary bg-opacity-10 text-secondary';
-                return `<span class="badge rounded-pill px-2 py-1 fw-bold ${cls}">${s || '—'}</span>`;
-            };
-            const fmt = (d) => d ? `<span class="font-monospace small">${d}</span>` : '<span class="text-muted small">—</span>';
-            container.innerHTML = `
+
+            const TERMINAL = ['Resigned', 'Terminated', 'No Renewal', 'Absconding'];
+            // Leave-related: any record where new_status is Leave OR old_status was Leave (resumption)
+            const leaveItems = items.filter(h =>
+                h.new_status === 'Leave' || h.old_status === 'Leave'
+            );
+            // Employment-status: terminal-status changes
+            const employmentItems = items.filter(h =>
+                TERMINAL.includes(h.new_status) || TERMINAL.includes(h.old_status)
+            );
+
+            const header = (count) => `
                 <div class="mb-3 pb-2 border-bottom">
-                    <span class="text-secondary small">Current status:</span> ${statusBadge(data.current_status)}
-                    <span class="text-muted small ms-2">${items.length} change${items.length !== 1 ? 's' : ''} recorded</span>
-                </div>
-                <div class="d-flex flex-column gap-3">
-                    ${items.map(h => `
-                        <div class="border rounded-3 p-3" style="background:#fafafa;">
-                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                <div>
-                                    ${statusBadge(h.old_status)} <i class="ri-arrow-right-line text-secondary"></i> ${statusBadge(h.new_status)}
-                                </div>
-                                <div class="text-secondary small">
-                                    <i class="ri-time-line me-1"></i>${new Date(h.changed_at).toLocaleString()}
-                                    ${h.changed_by ? ' · by ' + h.changed_by : ''}
-                                </div>
-                            </div>
-                            <div class="row g-2 small">
-                                ${h.leave_approval_date ? `<div class="col-md-4"><span class="text-secondary">Last Working:</span> ${fmt(h.leave_approval_date)}</div>` : ''}
-                                ${h.leave_start_date    ? `<div class="col-md-4"><span class="text-secondary">Leave Start:</span> ${fmt(h.leave_start_date)}</div>` : ''}
-                                ${h.leave_end_date      ? `<div class="col-md-4"><span class="text-secondary">Leave End:</span> ${fmt(h.leave_end_date)}</div>` : ''}
-                                ${h.resumption_date     ? `<div class="col-md-4"><span class="text-secondary">Resumed:</span> ${fmt(h.resumption_date)}</div>` : ''}
-                                ${h.last_working_date   ? `<div class="col-md-4"><span class="text-secondary">Last Working:</span> ${fmt(h.last_working_date)}</div>` : ''}
-                            </div>
-                            ${h.note ? `<div class="text-muted small mt-2 fst-italic">${h.note}</div>` : ''}
-                        </div>
-                    `).join('')}
-                </div>
-            `;
+                    <span class="text-secondary small">Current status:</span> ${_statusBadge(data.current_status)}
+                    <span class="text-muted small ms-2">${count} record${count !== 1 ? 's' : ''}</span>
+                </div>`;
+
+            if (leaveBox) {
+                if (leaveItems.length === 0) {
+                    leaveBox.innerHTML = header(0) + `<div class="text-center py-5">
+                        <div style="font-size:2.5rem;opacity:0.3;">🏖️</div>
+                        <h6 class="fw-bold text-secondary mt-3">No leave records yet</h6>
+                        <p class="text-muted small mb-0">When an employee goes on leave (or returns), it will appear here.</p>
+                    </div>`;
+                } else {
+                    leaveBox.innerHTML = header(leaveItems.length) +
+                        `<div class="d-flex flex-column gap-3">${leaveItems.map(_renderLeaveHistoryCard).join('')}</div>`;
+                }
+            }
+
+            if (empBox) {
+                if (employmentItems.length === 0) {
+                    empBox.innerHTML = header(0) + `<div class="text-center py-5">
+                        <div style="font-size:2.5rem;opacity:0.3;">📋</div>
+                        <h6 class="fw-bold text-secondary mt-3">No employment status changes</h6>
+                        <p class="text-muted small mb-0">Resigned / Terminated / No Renewal / Absconding entries will appear here.</p>
+                    </div>`;
+                } else {
+                    empBox.innerHTML = header(employmentItems.length) +
+                        `<div class="d-flex flex-column gap-3">${employmentItems.map(_renderEmploymentHistoryCard).join('')}</div>`;
+                }
+            }
         } catch (e) {
-            container.innerHTML = `<div class="text-danger small text-center py-4">Failed to load history.</div>`;
+            const err = `<div class="text-danger small text-center py-4">Failed to load history.</div>`;
+            if (leaveBox) leaveBox.innerHTML = err;
+            if (empBox)   empBox.innerHTML   = err;
         }
     }
 
@@ -1217,13 +1394,17 @@
         // Leave dates validation — required when transitioning to Leave
         const isStartingLeave = (originalEmployeeStatus !== 'Leave' && newStatus === 'Leave');
         if (isStartingLeave) {
-            const approval = document.getElementById('leaveApprovalDateInput').value;
-            const start    = document.getElementById('leaveStartDateInput').value;
-            const end      = document.getElementById('leaveEndDateInput').value;
+            const approval  = document.getElementById('leaveApprovalDateInput').value;
+            const start     = document.getElementById('leaveStartDateInput').value;
+            const end       = document.getElementById('leaveEndDateInput').value;
+            const leaveType = document.getElementById('leaveTypeSelect').value;
+            const eligible  = document.getElementById('leaveTicketEligibleSelect').value;
+            const ticketPx  = document.getElementById('leaveTicketPriceInput').value;
             const missing = [];
-            if (!approval) missing.push('Last Working Date');
-            if (!start)    missing.push('Leave Start Date');
-            if (!end)      missing.push('Leave End Date');
+            if (!approval)  missing.push('Last Working Date');
+            if (!start)     missing.push('Leave Start Date');
+            if (!end)       missing.push('Leave End Date');
+            if (!leaveType) missing.push('Leave Type');
             if (missing.length) {
                 alert(`Required when going on Leave: ${missing.join(', ')}`);
                 return;
@@ -1231,6 +1412,11 @@
             if (start && end && new Date(end) < new Date(start)) {
                 alert('Leave end date cannot be before leave start date.');
                 document.getElementById('leaveEndDateInput').focus();
+                return;
+            }
+            if (eligible === 'Eligible' && (!ticketPx || parseFloat(ticketPx) < 0)) {
+                alert('Please enter a valid ticket price (or change Ticket Condition to "Not Eligible").');
+                document.getElementById('leaveTicketPriceInput').focus();
                 return;
             }
         }

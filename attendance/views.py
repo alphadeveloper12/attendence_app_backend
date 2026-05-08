@@ -516,9 +516,17 @@ class AdminAddEmployeeView(APIView):
             status              = data.get('status')
             resumption_date     = parse_date(data.get('resumption_date'))
             last_working_date   = parse_date(data.get('last_working_date'))
-            leave_approval_date = parse_date(data.get('leave_approval_date'))
+            leave_approval_date = parse_date(data.get('leave_approval_date'))  # Last working date before leave
             leave_start_date    = parse_date(data.get('leave_start_date'))
             leave_end_date      = parse_date(data.get('leave_end_date'))
+            leave_type          = data.get('leave_type') or None
+            ticket_raw          = data.get('leave_ticket_eligible')
+            leave_ticket_eligible = (
+                True if str(ticket_raw).lower() in ('true', 'eligible', '1', 'yes')
+                else False if str(ticket_raw).lower() in ('false', 'not eligible', '0', 'no')
+                else None
+            )
+            leave_ticket_price  = parse_decimal(data.get('leave_ticket_price')) if leave_ticket_eligible else None
 
             # Validate last_working_date for terminal statuses
             TERMINAL_STATUSES = {'Resigned', 'Terminated', 'No Renewal', 'Absconding'}
@@ -560,6 +568,9 @@ class AdminAddEmployeeView(APIView):
                 leave_approval_date=leave_approval_date,
                 leave_start_date=leave_start_date,
                 leave_end_date=leave_end_date,
+                leave_type=leave_type,
+                leave_ticket_eligible=leave_ticket_eligible,
+                leave_ticket_price=leave_ticket_price,
                 nationality=data.get('nationality'),
                 gender=data.get('gender'),
                 marital_status=data.get('marital_status'),
@@ -592,6 +603,9 @@ class AdminAddEmployeeView(APIView):
                     leave_end_date=leave_end_date,
                     resumption_date=resumption_date,
                     last_working_date=last_working_date,
+                    leave_type=leave_type,
+                    leave_ticket_eligible=leave_ticket_eligible,
+                    leave_ticket_price=leave_ticket_price,
                     note='Initial status on employee creation',
                     changed_by=request.user if request.user.is_authenticated else None,
                 )
@@ -623,6 +637,9 @@ class AdminEditEmployeeView(APIView):
                 'leave_approval_date': str(emp.leave_approval_date) if emp.leave_approval_date else '',
                 'leave_start_date': str(emp.leave_start_date) if emp.leave_start_date else '',
                 'leave_end_date': str(emp.leave_end_date) if emp.leave_end_date else '',
+                'leave_type': emp.leave_type or '',
+                'leave_ticket_eligible': '' if emp.leave_ticket_eligible is None else ('Eligible' if emp.leave_ticket_eligible else 'Not Eligible'),
+                'leave_ticket_price': str(emp.leave_ticket_price) if emp.leave_ticket_price is not None else '',
                 'nationality': emp.nationality,
                 'gender': emp.gender,
                 'marital_status': emp.marital_status,
@@ -669,6 +686,15 @@ class AdminEditEmployeeView(APIView):
             new_last_working     = parse_date(data.get('last_working_date'))
             new_leave_approval   = parse_date(data.get('leave_approval_date'))
             new_leave_start      = parse_date(data.get('leave_start_date'))
+            # New leave-specific fields
+            new_leave_type       = data.get('leave_type') or None
+            _ticket_raw          = data.get('leave_ticket_eligible')
+            new_ticket_eligible  = (
+                True if str(_ticket_raw).lower() in ('true', 'eligible', '1', 'yes')
+                else False if str(_ticket_raw).lower() in ('false', 'not eligible', '0', 'no')
+                else None
+            )
+            new_ticket_price     = parse_decimal(data.get('leave_ticket_price')) if new_ticket_eligible else None
             new_leave_end        = parse_date(data.get('leave_end_date'))
             old_status           = emp.status
 
@@ -720,6 +746,9 @@ class AdminEditEmployeeView(APIView):
             emp.last_working_date = new_last_working
             emp.leave_approval_date = new_leave_approval
             emp.leave_start_date    = new_leave_start
+            emp.leave_type            = new_leave_type
+            emp.leave_ticket_eligible = new_ticket_eligible
+            emp.leave_ticket_price    = new_ticket_price
             emp.leave_end_date      = new_leave_end
             emp.nationality = data.get('nationality')
             emp.gender = data.get('gender')
@@ -765,6 +794,9 @@ class AdminEditEmployeeView(APIView):
                     leave_end_date=new_leave_end        if is_starting_leave else None,
                     resumption_date=new_resumption       if is_resuming      else None,
                     last_working_date=new_last_working   if is_terminating   else None,
+                    leave_type=new_leave_type            if is_starting_leave else None,
+                    leave_ticket_eligible=new_ticket_eligible if is_starting_leave else None,
+                    leave_ticket_price=new_ticket_price       if is_starting_leave else None,
                     note=(
                         f"{old_status or '—'} → {new_status}"
                     ),
@@ -791,6 +823,11 @@ class EmployeeStatusHistoryView(APIView):
         history = emp.status_history.select_related('changed_by').all()
         results = []
         for h in history:
+            # Compute total days of leave when both dates are present
+            total_days = None
+            if h.leave_start_date and h.leave_end_date:
+                total_days = (h.leave_end_date - h.leave_start_date).days + 1
+
             results.append({
                 'id': h.id,
                 'old_status': h.old_status,
@@ -800,6 +837,13 @@ class EmployeeStatusHistoryView(APIView):
                 'leave_end_date': str(h.leave_end_date) if h.leave_end_date else None,
                 'resumption_date': str(h.resumption_date) if h.resumption_date else None,
                 'last_working_date': str(h.last_working_date) if h.last_working_date else None,
+                'leave_type': h.leave_type or None,
+                'leave_ticket_eligible': (
+                    None if h.leave_ticket_eligible is None
+                    else ('Eligible' if h.leave_ticket_eligible else 'Not Eligible')
+                ),
+                'leave_ticket_price': str(h.leave_ticket_price) if h.leave_ticket_price is not None else None,
+                'total_days': total_days,
                 'note': h.note,
                 'changed_at': h.changed_at.isoformat() if h.changed_at else None,
                 'changed_by': h.changed_by.username if h.changed_by else None,
@@ -2132,6 +2176,16 @@ def admin_user_detail_view(request, user_id):
                     'leave_approval_date': str(employee.leave_approval_date) if employee.leave_approval_date else None,
                     'leave_start_date': str(employee.leave_start_date) if employee.leave_start_date else None,
                     'leave_end_date': str(employee.leave_end_date) if employee.leave_end_date else None,
+                    'leave_type': employee.leave_type or None,
+                    'leave_ticket_eligible': (
+                        None if employee.leave_ticket_eligible is None
+                        else ('Eligible' if employee.leave_ticket_eligible else 'Not Eligible')
+                    ),
+                    'leave_ticket_price': str(employee.leave_ticket_price) if employee.leave_ticket_price is not None else None,
+                    'leave_total_days': (
+                        (employee.leave_end_date - employee.leave_start_date).days + 1
+                        if employee.leave_start_date and employee.leave_end_date else None
+                    ),
                     'profile_picture': employee.profile_picture.url if employee.profile_picture else None,
                     # Expanded Fields
                     'job_description': employee.job_description,
