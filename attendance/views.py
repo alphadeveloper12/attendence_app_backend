@@ -531,7 +531,7 @@ class AdminAddEmployeeView(APIView):
             # Validate leave dates when status is Leave
             if status == 'Leave':
                 missing = [n for n, v in [
-                    ('Leave Approval Date', leave_approval_date),
+                    ('Last Working Date', leave_approval_date),
                     ('Leave Start Date', leave_start_date),
                     ('Leave End Date', leave_end_date),
                 ] if not v]
@@ -693,7 +693,7 @@ class AdminEditEmployeeView(APIView):
             is_starting_leave = (old_status != 'Leave' and new_status == 'Leave')
             if is_starting_leave:
                 missing = [n for n, v in [
-                    ('Leave Approval Date', new_leave_approval),
+                    ('Last Working Date', new_leave_approval),
                     ('Leave Start Date', new_leave_start),
                     ('Leave End Date', new_leave_end),
                 ] if not v]

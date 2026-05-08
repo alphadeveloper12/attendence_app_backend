@@ -277,8 +277,8 @@
                     <div class="d-flex flex-wrap gap-2 mt-2">
                         <span class="badge rounded-pill px-3 py-2 fw-semibold"
                             style="background:rgba(217,119,6,0.1);color:#d97706;border:1px solid rgba(217,119,6,0.3);">
-                            <i class="ri-check-double-line me-1"></i>
-                            Approved: <span id="emp-leave-approval">—</span>
+                            <i class="ri-calendar-close-line me-1"></i>
+                            Last Working: <span id="emp-leave-approval">—</span>
                         </span>
                         <span class="badge rounded-pill px-3 py-2 fw-semibold"
                             style="background:rgba(217,119,6,0.1);color:#d97706;border:1px solid rgba(217,119,6,0.3);">
@@ -479,7 +479,7 @@
                                     style="display:none;">
                                     <label class="form-label small fw-bold text-uppercase"
                                         style="font-size:0.65rem;color:#d97706;">
-                                        Last working Date <span style="color:#dc2626;">*</span>
+                                        Last Working Date <span style="color:#dc2626;">*</span>
                                     </label>
                                     <input type="date" name="leave_approval_date" id="leaveApprovalDateInput"
                                         class="form-control form-control-modern" style="border-color:#d97706;">
@@ -797,7 +797,7 @@
                 { label: 'D.O.J.', value: emp.date_of_joining },
                 emp.resumption_date ? { label: '✅ Last Resumption Date', value: emp.resumption_date } : null,
                 emp.last_working_date ? { label: '🚪 Last Working Date', value: emp.last_working_date } : null,
-                (emp.status === 'Leave' && emp.leave_approval_date) ? { label: '📋 Leave Approval Date', value: emp.leave_approval_date } : null,
+                (emp.status === 'Leave' && emp.leave_approval_date) ? { label: '🚪 Last Working Date', value: emp.leave_approval_date } : null,
                 (emp.status === 'Leave' && emp.leave_start_date) ? { label: '✈️ Leave Start Date', value: emp.leave_start_date } : null,
                 (emp.status === 'Leave' && emp.leave_end_date) ? { label: '🏁 Leave End Date', value: emp.leave_end_date } : null,
             ].filter(f => f !== null && f.value !== null)
@@ -1124,7 +1124,7 @@
                                 </div>
                             </div>
                             <div class="row g-2 small">
-                                ${h.leave_approval_date ? `<div class="col-md-4"><span class="text-secondary">Leave Approval:</span> ${fmt(h.leave_approval_date)}</div>` : ''}
+                                ${h.leave_approval_date ? `<div class="col-md-4"><span class="text-secondary">Last Working:</span> ${fmt(h.leave_approval_date)}</div>` : ''}
                                 ${h.leave_start_date ? `<div class="col-md-4"><span class="text-secondary">Leave Start:</span> ${fmt(h.leave_start_date)}</div>` : ''}
                                 ${h.leave_end_date ? `<div class="col-md-4"><span class="text-secondary">Leave End:</span> ${fmt(h.leave_end_date)}</div>` : ''}
                                 ${h.resumption_date ? `<div class="col-md-4"><span class="text-secondary">Resumed:</span> ${fmt(h.resumption_date)}</div>` : ''}

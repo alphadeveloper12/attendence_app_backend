@@ -544,7 +544,7 @@
                                 <div class="col-md-3 leave-date-field" id="leaveApprovalDateWrapper" style="display:none;">
                                     <label class="form-label small fw-bold text-uppercase"
                                         style="font-size:0.65rem;color:#d97706;">
-                                        Leave Approval Date <span style="color:#dc2626;">*</span>
+                                        Last Working Date <span style="color:#dc2626;">*</span>
                                     </label>
                                     <input type="date" name="leave_approval_date" id="leaveApprovalDateInput"
                                         class="form-control form-control-modern"
@@ -1175,7 +1175,7 @@
                                 </div>
                             </div>
                             <div class="row g-2 small">
-                                ${h.leave_approval_date ? `<div class="col-md-4"><span class="text-secondary">Leave Approval:</span> ${fmt(h.leave_approval_date)}</div>` : ''}
+                                ${h.leave_approval_date ? `<div class="col-md-4"><span class="text-secondary">Last Working:</span> ${fmt(h.leave_approval_date)}</div>` : ''}
                                 ${h.leave_start_date    ? `<div class="col-md-4"><span class="text-secondary">Leave Start:</span> ${fmt(h.leave_start_date)}</div>` : ''}
                                 ${h.leave_end_date      ? `<div class="col-md-4"><span class="text-secondary">Leave End:</span> ${fmt(h.leave_end_date)}</div>` : ''}
                                 ${h.resumption_date     ? `<div class="col-md-4"><span class="text-secondary">Resumed:</span> ${fmt(h.resumption_date)}</div>` : ''}
@@ -1221,7 +1221,7 @@
             const start    = document.getElementById('leaveStartDateInput').value;
             const end      = document.getElementById('leaveEndDateInput').value;
             const missing = [];
-            if (!approval) missing.push('Leave Approval Date');
+            if (!approval) missing.push('Last Working Date');
             if (!start)    missing.push('Leave Start Date');
             if (!end)      missing.push('Leave End Date');
             if (missing.length) {
