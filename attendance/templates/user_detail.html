@@ -837,8 +837,7 @@
 
         // Render detailed grid
         const detailGrid = document.getElementById('profile-details-grid');
-        const isSuperuser = {{ user.is_superuser| lower
-    }};
+        const isSuperuser = {% if user.is_superuser %}true{% else %}false{% endif %};
     const sections = [
         {
             title: "Personal Details",
