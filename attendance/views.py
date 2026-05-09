@@ -856,6 +856,119 @@ class EmployeeStatusHistoryView(APIView):
         })
 
 
+class EmployeeSickLeaveView(APIView):
+    """List sick leaves for an employee, or mark a date (today or past) as sick.
+
+    GET  /api/attendance/employees/<id>/sick-leave/  → list of sick days + count
+    POST /api/attendance/employees/<id>/sick-leave/  → multipart: date, certificate, [note]
+    """
+    permission_classes = [IsAdminUser | IsSiteAdmin]
+
+    def get(self, request, employee_id):
+        try:
+            emp = Employee.objects.get(id=employee_id)
+        except Employee.DoesNotExist:
+            return Response({'error': 'Employee not found'}, status=404)
+
+        records = (Attendance.objects
+                   .filter(user=emp, status='sick')
+                   .select_related('sick_leave_marked_by')
+                   .order_by('-date'))
+        items = []
+        for r in records:
+            items.append({
+                'id': r.id,
+                'date': str(r.date),
+                'note': r.sick_leave_note or '',
+                'certificate_url': (r.medical_certificate.url
+                                    if r.medical_certificate else None),
+                'marked_at': r.sick_leave_marked_at.isoformat() if r.sick_leave_marked_at else None,
+                'marked_by': r.sick_leave_marked_by.username if r.sick_leave_marked_by else None,
+            })
+        return Response({
+            'employee_id': emp.id,
+            'employee_name': emp.name,
+            'count': len(items),
+            'records': items,
+        })
+
+    def post(self, request, employee_id):
+        from datetime import datetime as _dt
+
+        try:
+            emp = Employee.objects.get(id=employee_id)
+        except Employee.DoesNotExist:
+            return Response({'error': 'Employee not found'}, status=404)
+
+        date_str = request.data.get('date')
+        certificate = request.FILES.get('certificate')
+        note = request.data.get('note', '') or ''
+
+        if not date_str:
+            return Response({'error': 'date is required (YYYY-MM-DD)'}, status=400)
+        if not certificate:
+            return Response({'error': 'Medical certificate file is required'}, status=400)
+
+        try:
+            sick_date = _dt.strptime(date_str, '%Y-%m-%d').date()
+        except ValueError:
+            return Response({'error': 'Invalid date format. Use YYYY-MM-DD'}, status=400)
+
+        if sick_date > timezone.localdate():
+            return Response({'error': 'Cannot mark a future date as sick leave'}, status=400)
+
+        # Find existing record for that date or create one
+        record, created = Attendance.objects.get_or_create(
+            user=emp, date=sick_date,
+            defaults={'status': 'sick'},
+        )
+
+        # Only allow flipping from absent / late / sick → sick.
+        # Don't overwrite a 'present' day (that would erase real attendance).
+        if not created and record.status == 'present':
+            return Response(
+                {'error': "Cannot mark a 'present' day as sick. Adjust the attendance record first."},
+                status=400,
+            )
+
+        record.status = 'sick'
+        record.medical_certificate = certificate
+        record.sick_leave_note = note
+        record.sick_leave_marked_at = timezone.now()
+        record.sick_leave_marked_by = request.user if request.user.is_authenticated else None
+        record.save()
+
+        return Response({
+            'success': True,
+            'id': record.id,
+            'date': str(record.date),
+            'certificate_url': record.medical_certificate.url if record.medical_certificate else None,
+            'note': record.sick_leave_note or '',
+            'marked_at': record.sick_leave_marked_at.isoformat() if record.sick_leave_marked_at else None,
+            'marked_by': record.sick_leave_marked_by.username if record.sick_leave_marked_by else None,
+        }, status=201)
+
+    def delete(self, request, employee_id):
+        """Remove a sick-leave entry by attendance id (revert to absent)."""
+        record_id = request.query_params.get('id') or request.data.get('id')
+        if not record_id:
+            return Response({'error': 'id is required'}, status=400)
+        try:
+            record = Attendance.objects.get(id=record_id, user_id=employee_id, status='sick')
+        except Attendance.DoesNotExist:
+            return Response({'error': 'Sick leave record not found'}, status=404)
+
+        if record.medical_certificate:
+            record.medical_certificate.delete(save=False)
+        record.medical_certificate = None
+        record.sick_leave_note = None
+        record.sick_leave_marked_at = None
+        record.sick_leave_marked_by = None
+        record.status = 'absent'
+        record.save()
+        return Response({'success': True})
+
+
 class AdminDeleteEmployeeView(APIView):
     permission_classes = [IsAdminUser]
 
@@ -2155,8 +2268,11 @@ def admin_user_detail_view(request, user_id):
             present_count = sum(1 for r in attendance_records if r.status == 'present')
             late_count = sum(1 for r in attendance_records if r.status == 'late')
             absent_count = sum(1 for r in attendance_records if r.status == 'absent')
+            sick_count = sum(1 for r in attendance_records if r.status == 'sick')
             total_late_minutes = sum(r.late_minutes for r in attendance_records)
             total_early_minutes = sum(r.early_minutes for r in attendance_records)
+            # Total sick leaves taken (across all time, not just filtered range)
+            total_sick_count = Attendance.objects.filter(user=employee, status='sick').count()
 
             # Build Response Data
             data = {
@@ -2210,6 +2326,8 @@ def admin_user_detail_view(request, user_id):
                     'present': present_count,
                     'late': late_count,
                     'absent': absent_count,
+                    'sick': sick_count,
+                    'total_sick': total_sick_count,
                     'late_minutes': total_late_minutes,
                     'early_minutes': total_early_minutes,
                 },
@@ -2254,6 +2372,15 @@ def admin_user_detail_view(request, user_id):
                     "longitude": record.longitude if record else None,
                 }
                 data['slots'] = slots
+                # Sick-leave info for the day (if any)
+                if record and record.status == 'sick':
+                    data['sick_leave'] = {
+                        'date': str(record.date),
+                        'note': record.sick_leave_note or '',
+                        'certificate_url': record.medical_certificate.url if record.medical_certificate else None,
+                        'marked_at': record.sick_leave_marked_at.isoformat() if record.sick_leave_marked_at else None,
+                        'marked_by': record.sick_leave_marked_by.username if record.sick_leave_marked_by else None,
+                    }
             else:
                 # Calendar/List View Data
                 # Map records by date string
@@ -2271,6 +2398,11 @@ def admin_user_detail_view(request, user_id):
                             'status': record.status if record else None,
                             'late_minutes': record.late_minutes if record else 0,
                             'early_minutes': record.early_minutes if record else 0,
+                            'medical_certificate_url': (
+                                record.medical_certificate.url
+                                if record and record.medical_certificate else None
+                            ),
+                            'sick_leave_note': record.sick_leave_note if record else None,
                         } if record else None,
                         'slots': []
                     }

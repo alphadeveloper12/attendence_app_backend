@@ -121,7 +121,7 @@ class Attendance(models.Model):
     early_minutes = models.IntegerField(default=0)  # Store early going minutes
     normal_ot_hours = models.DecimalField(max_digits=5, decimal_places=2, default=0.00)
     special_ot_hours = models.DecimalField(max_digits=5, decimal_places=2, default=0.00)
-    status = models.CharField(max_length=10, choices=[('present', 'Present'), ('absent', 'Absent'), ('late', 'Late')])
+    status = models.CharField(max_length=10, choices=[('present', 'Present'), ('absent', 'Absent'), ('late', 'Late'), ('sick', 'Sick')])
     date = models.DateField(default=timezone.localdate)  # Track date for attendance, using localdate
     latitude = models.FloatField(null=True, blank=True)  # Store latitude
     longitude = models.FloatField(null=True, blank=True)  # Store longitude
@@ -130,6 +130,10 @@ class Attendance(models.Model):
         ('office_out', 'Office Out'),
     ])
     is_within_geofence = models.BooleanField(default=True)  # Track if attendance was marked within geofence
+    medical_certificate = models.FileField(upload_to='medical_certificates/', null=True, blank=True)
+    sick_leave_note = models.TextField(null=True, blank=True)
+    sick_leave_marked_at = models.DateTimeField(null=True, blank=True)
+    sick_leave_marked_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='sick_leaves_marked')
     
     class Meta:
         unique_together = ['user', 'date']  # Prevent duplicate records for same user and date

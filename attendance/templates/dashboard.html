@@ -485,6 +485,8 @@
                             data-bs-target="#leaveMgmt">5. Leave Management</button></li>
                     <li class="nav-item flex-fill"><button class="nav-link w-100 py-2" data-bs-toggle="pill"
                             data-bs-target="#employmentStatus">6. Employment Status</button></li>
+                    <li class="nav-item flex-fill"><button class="nav-link w-100 py-2" data-bs-toggle="pill"
+                            data-bs-target="#sickLeave">7. Sick Leave</button></li>
                 </ul>
 
                 <form id="addEmployeeForm">
@@ -766,6 +768,50 @@
                                 <div class="text-center py-4">
                                     <div class="spinner-border spinner-border-sm text-secondary"></div>
                                     <p class="text-muted small mt-2 mb-0">Loading employment status history…</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 7. Sick Leave — list of sick days + add new -->
+                        <div class="tab-pane fade" id="sickLeave">
+                            <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom">
+                                <div>
+                                    <span class="text-secondary small">Total sick leaves:</span>
+                                    <span class="badge rounded-pill bg-info bg-opacity-10 text-info fw-bold ms-1"
+                                          id="sickLeaveCount">—</span>
+                                </div>
+                                <button type="button" class="btn btn-sm btn-outline-primary"
+                                        onclick="openAddSickLeaveForm()">
+                                    <i class="ri-add-line"></i> Mark a date as Sick
+                                </button>
+                            </div>
+
+                            <div id="addSickLeaveForm" class="border rounded-3 p-3 mb-3" style="display:none; background:#f0f8ff;">
+                                <div class="row g-2">
+                                    <div class="col-md-3">
+                                        <label class="form-label small fw-bold text-secondary text-uppercase" style="font-size:0.65rem;">Sick Date *</label>
+                                        <input type="date" id="sickDateInput" class="form-control form-control-sm">
+                                    </div>
+                                    <div class="col-md-5">
+                                        <label class="form-label small fw-bold text-secondary text-uppercase" style="font-size:0.65rem;">Medical Certificate *</label>
+                                        <input type="file" id="sickCertificateInput" class="form-control form-control-sm"
+                                               accept=".pdf,.png,.jpg,.jpeg">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label small fw-bold text-secondary text-uppercase" style="font-size:0.65rem;">Note (optional)</label>
+                                        <input type="text" id="sickNoteInput" class="form-control form-control-sm" placeholder="e.g. flu, fever">
+                                    </div>
+                                </div>
+                                <div class="text-end mt-2">
+                                    <button type="button" class="btn btn-sm btn-light" onclick="closeAddSickLeaveForm()">Cancel</button>
+                                    <button type="button" class="btn btn-sm btn-primary" onclick="submitSickLeave()" id="sickLeaveSubmitBtn">Save</button>
+                                </div>
+                            </div>
+
+                            <div id="sickLeaveContainer">
+                                <div class="text-center py-4">
+                                    <div class="spinner-border spinner-border-sm text-secondary"></div>
+                                    <p class="text-muted small mt-2 mb-0">Loading sick leaves…</p>
                                 </div>
                             </div>
                         </div>
@@ -1237,7 +1283,121 @@
             }
             // Load status change history for both Leave Management and Employment Status tabs
             loadStatusHistory(empId);
+            // Load sick leave records
+            loadSickLeaves(empId);
         } catch (e) { alert("Failed to load employee data."); }
+    }
+
+    // ---- Sick Leave ----
+    async function loadSickLeaves(empId) {
+        const container = document.getElementById('sickLeaveContainer');
+        const countBadge = document.getElementById('sickLeaveCount');
+        if (!container) return;
+        container.innerHTML = `<div class="text-center py-4"><div class="spinner-border spinner-border-sm text-secondary"></div><p class="text-muted small mt-2 mb-0">Loading sick leaves…</p></div>`;
+        try {
+            const res = await fetch(`/api/attendance/employees/${empId}/sick-leave/`);
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Failed');
+            const items = data.records || [];
+            if (countBadge) countBadge.textContent = data.count || 0;
+            if (items.length === 0) {
+                container.innerHTML = `<div class="text-center py-5">
+                    <div style="font-size:2.5rem;opacity:0.3;">🤒</div>
+                    <h6 class="fw-bold text-secondary mt-3">No sick leaves recorded</h6>
+                    <p class="text-muted small mb-0">Mark an absent day as sick using the button above.</p>
+                </div>`;
+                return;
+            }
+            container.innerHTML = `<div class="d-flex flex-column gap-2">
+                ${items.map(s => `
+                    <div class="border rounded-3 p-3 d-flex justify-content-between align-items-center" style="background:#fafafa;">
+                        <div>
+                            <div class="fw-bold">
+                                <i class="ri-calendar-line text-info me-1"></i>
+                                <span class="font-monospace">${s.date}</span>
+                                ${s.note ? `<span class="text-muted small ms-2 fst-italic">${s.note}</span>` : ''}
+                            </div>
+                            <div class="text-secondary small mt-1">
+                                ${s.marked_at ? `Marked ${new Date(s.marked_at).toLocaleString()}` : ''}
+                                ${s.marked_by ? ` · by ${s.marked_by}` : ''}
+                            </div>
+                        </div>
+                        <div class="d-flex gap-2">
+                            ${s.certificate_url
+                                ? `<a href="${s.certificate_url}" target="_blank" class="btn btn-sm btn-outline-info"><i class="ri-file-download-line"></i> Certificate</a>`
+                                : `<span class="text-muted small">No certificate</span>`}
+                            <button type="button" class="btn btn-sm btn-outline-danger" onclick="deleteSickLeave(${s.id})" title="Remove sick leave">
+                                <i class="ri-delete-bin-line"></i>
+                            </button>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>`;
+        } catch (e) {
+            container.innerHTML = `<div class="text-danger small text-center py-4">Failed to load sick leaves.</div>`;
+        }
+    }
+
+    function openAddSickLeaveForm() {
+        const form = document.getElementById('addSickLeaveForm');
+        if (!form) return;
+        document.getElementById('sickDateInput').value = new Date().toISOString().split('T')[0];
+        document.getElementById('sickCertificateInput').value = '';
+        document.getElementById('sickNoteInput').value = '';
+        form.style.display = '';
+    }
+    function closeAddSickLeaveForm() {
+        const form = document.getElementById('addSickLeaveForm');
+        if (form) form.style.display = 'none';
+    }
+
+    async function submitSickLeave() {
+        const empId = document.getElementById('editEmployeeId').value;
+        if (!empId) { alert('Save the employee first, then add sick leave.'); return; }
+        const date = document.getElementById('sickDateInput').value;
+        const cert = document.getElementById('sickCertificateInput').files[0];
+        const note = document.getElementById('sickNoteInput').value;
+        if (!date) { alert('Pick a date.'); return; }
+        if (!cert)  { alert('Please upload the medical certificate.'); return; }
+
+        const csrf = document.querySelector('[name=csrfmiddlewaretoken]').value;
+        const fd = new FormData();
+        fd.append('date', date);
+        fd.append('certificate', cert);
+        fd.append('note', note);
+
+        const btn = document.getElementById('sickLeaveSubmitBtn');
+        btn.disabled = true;
+        try {
+            const res = await fetch(`/api/attendance/employees/${empId}/sick-leave/`, {
+                method: 'POST',
+                headers: { 'X-CSRFToken': csrf },
+                body: fd,
+            });
+            const result = await res.json();
+            if (!res.ok) { alert(result.error || 'Failed to mark sick leave'); return; }
+            closeAddSickLeaveForm();
+            loadSickLeaves(empId);
+        } catch (e) {
+            alert('Network error');
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    async function deleteSickLeave(recordId) {
+        if (!confirm('Remove this sick-leave entry? The day will revert to Absent.')) return;
+        const empId = document.getElementById('editEmployeeId').value;
+        const csrf = document.querySelector('[name=csrfmiddlewaretoken]').value;
+        try {
+            const res = await fetch(`/api/attendance/employees/${empId}/sick-leave/?id=${recordId}`, {
+                method: 'DELETE',
+                headers: { 'X-CSRFToken': csrf },
+            });
+            const result = await res.json();
+            if (!res.ok) { alert(result.error || 'Failed'); return; }
+            loadSickLeaves(empId);
+        } catch (e) { alert('Network error'); }
     }
 
     // Status helpers shared between leave-history and employment-status panes
