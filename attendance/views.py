@@ -242,8 +242,12 @@ class ImportEmployeesView(APIView):
             col_map['religion'] = find_col_index(['Religion'], header_row_1)
             if col_map['religion'] == -1: col_map['religion'] = find_col_index(['Religion'], header_row_2)
 
-            col_map['employer'] = find_col_index(['Employer'], header_row_1)
-            if col_map['employer'] == -1: col_map['employer'] = find_col_index(['Employer'], header_row_2)
+            # Legacy "Employer" column in the spreadsheet maps to our renamed "sponsor" field.
+            col_map['sponsor'] = find_col_index(['Sponsor', 'Employer'], header_row_1)
+            if col_map['sponsor'] == -1: col_map['sponsor'] = find_col_index(['Sponsor', 'Employer'], header_row_2)
+            # New optional "Employer" column for the parent-company choice (Parkway / Katylink)
+            col_map['employer'] = find_col_index(['Employer Company', 'Parent Company', 'Company'], header_row_1)
+            if col_map['employer'] == -1: col_map['employer'] = find_col_index(['Employer Company', 'Parent Company', 'Company'], header_row_2)
 
             col_map['visa_details'] = find_col_index(['Visa Detail', 'Visa Details'], header_row_1)
             if col_map['visa_details'] == -1: col_map['visa_details'] = find_col_index(['Visa Detail', 'Visa Details'], header_row_2)
@@ -332,7 +336,8 @@ class ImportEmployeesView(APIView):
                     
                     if not emp and name and employer_name and nationality:
                         # Fallback for name-based lookup (rarer, keep as query for now or expand cache)
-                        emp = Employee.objects.filter(name=name, employer=employer_name, nationality=nationality).first()
+                        # NOTE: the spreadsheet "Employer" column now lives on the renamed `sponsor` field.
+                        emp = Employee.objects.filter(name=name, sponsor=employer_name, nationality=nationality).first()
                     
                     is_new = not emp
                     if not emp:
@@ -399,8 +404,12 @@ class ImportEmployeesView(APIView):
 
                         if not emp.phone: emp.phone = "0000000000"
 
-                    # Always update employer and visa_details (for both new and existing employees)
-                    emp.employer = get_val_from_row(row, 'employer') or employer_name
+                    # Always update sponsor (legacy "Employer" column) and visa_details
+                    emp.sponsor = get_val_from_row(row, 'sponsor') or employer_name
+                    # Optional new parent-company column ("Employer Company" / "Parent Company" / "Company")
+                    raw_employer_choice = (get_val_from_row(row, 'employer') or '').strip()
+                    if raw_employer_choice in ('Parkway', 'Katylink'):
+                        emp.employer = raw_employer_choice
                     emp.visa_details = get_val_from_row(row, 'visa_details')
 
                     emp.save()
@@ -583,7 +592,8 @@ class AdminAddEmployeeView(APIView):
                 labor_card_number=data.get('labor_card_number'),
                 mol_id=data.get('mol_id'),
                 job_description=data.get('job_description'),
-                employer=data.get('employer'),
+                sponsor=data.get('sponsor'),
+                employer=(data.get('employer') if data.get('employer') in ('Parkway', 'Katylink') else None),
                 site=site,
                 gross_salary=parse_decimal(data.get('gross_salary')),
                 basic_salary=parse_decimal(data.get('basic_salary')),
@@ -652,10 +662,15 @@ class AdminEditEmployeeView(APIView):
                 'labor_card_number': emp.labor_card_number,
                 'mol_id': emp.mol_id,
                 'job_description': emp.job_description,
-                'employer': emp.employer,
+                'sponsor': emp.sponsor or '',
+                'employer': emp.employer or '',
                 'site': emp.site.id if emp.site else '',
                 'camp': emp.camp,
                 'transportation': emp.transportation,
+                # Document URLs (frontend uses these for "View" buttons)
+                'passport_document_url': emp.passport_document.url if emp.passport_document else '',
+                'visa_document_url': emp.visa_document.url if emp.visa_document else '',
+                'labour_card_document_url': emp.labour_card_document.url if emp.labour_card_document else '',
             }
             if request.user.is_superuser:
                 data['gross_salary'] = str(emp.gross_salary) if emp.gross_salary else ''
@@ -761,7 +776,18 @@ class AdminEditEmployeeView(APIView):
             emp.transportation = data.get('transportation')
             emp.mol_id = data.get('mol_id')
             emp.job_description = data.get('job_description')
-            emp.employer = data.get('employer')
+            emp.sponsor = data.get('sponsor')
+            new_employer = data.get('employer')
+            emp.employer = new_employer if new_employer in ('Parkway', 'Katylink') else None
+
+            # Document uploads (multipart) — only overwrite when a new file is sent
+            if hasattr(request, 'FILES'):
+                if 'passport_document' in request.FILES:
+                    emp.passport_document = request.FILES['passport_document']
+                if 'visa_document' in request.FILES:
+                    emp.visa_document = request.FILES['visa_document']
+                if 'labour_card_document' in request.FILES:
+                    emp.labour_card_document = request.FILES['labour_card_document']
 
             site_id = data.get('site')
             if site_id:
@@ -1028,7 +1054,10 @@ class RegisterUserView(APIView):
         mol_id = data.get("mol_id") or ""
         labor_card_number = data.get("labor_card_number") or ""
         site_id = data.get("site")
-        employer = data.get("employer") or ""
+        sponsor = data.get("sponsor") or ""
+        employer_choice = data.get("employer") or ""
+        if employer_choice not in ('Parkway', 'Katylink'):
+            employer_choice = None
         nationality = data.get("nationality") or ""
         gender = data.get("gender") or ""
         marital_status = data.get("marital_status") or ""
@@ -1107,7 +1136,8 @@ class RegisterUserView(APIView):
             emp.mol_id = mol_id
             emp.labor_card_number = labor_card_number
             emp.site = site_obj
-            emp.employer = employer
+            emp.sponsor = sponsor
+            emp.employer = employer_choice
             emp.nationality = nationality
             emp.gender = gender
             emp.marital_status = marital_status
@@ -1136,7 +1166,8 @@ class RegisterUserView(APIView):
                 mol_id=mol_id,
                 labor_card_number=labor_card_number,
                 site=site_obj,
-                employer=employer,
+                sponsor=sponsor,
+                employer=employer_choice,
                 nationality=nationality,
                 gender=gender,
                 marital_status=marital_status,
@@ -1655,6 +1686,7 @@ class AttendanceStatsView(APIView):
             site_id = request.GET.get('site')
             category_filter = request.GET.get('category')
             status_filter = request.GET.get('status')
+            employer_filter = request.GET.get('employer')
             
             if not request.user.is_superuser:
                 try:
@@ -1691,6 +1723,10 @@ class AttendanceStatsView(APIView):
             if status_filter and status_filter != 'all':
                 employees = employees.filter(status__iexact=status_filter)
                 attendance = attendance.filter(user__status__iexact=status_filter)
+
+            if employer_filter and employer_filter != 'all':
+                employees = employees.filter(employer__iexact=employer_filter)
+                attendance = attendance.filter(user__employer__iexact=employer_filter)
 
             # Unique categories from both category and salary_grade
             # Get union of both fields, strip, and unify case-insensitively
@@ -1738,6 +1774,7 @@ class AttendanceStatsView(APIView):
                     "sites": [{"id": s.id, "name": s.name} for s in all_sites],
                     "categories": unique_categories,
                     "statuses": unique_statuses,
+                    "employers": ['Parkway', 'Katylink'],
                     "chart": {
                         "labels": chart_labels,
                         "data": chart_data
@@ -1842,6 +1879,11 @@ class EmployeeListView(APIView):
         status_filter = request.GET.get('status')
         if status_filter and status_filter != 'all':
             employees = employees.filter(status__iexact=status_filter)
+
+        # Filter by employer (parent company: Parkway / Katylink)
+        employer_filter = request.GET.get('employer')
+        if employer_filter and employer_filter != 'all':
+            employees = employees.filter(employer__iexact=employer_filter)
 
         # Search
         search = request.GET.get('search')
@@ -2308,7 +2350,11 @@ def admin_user_detail_view(request, user_id):
                     'salary_grade': employee.salary_grade,
                     'mol_id': employee.mol_id,
                     'labor_card_number': employee.labor_card_number,
+                    'sponsor': employee.sponsor,
                     'employer': employee.employer,
+                    'passport_document_url': employee.passport_document.url if employee.passport_document else None,
+                    'visa_document_url': employee.visa_document.url if employee.visa_document else None,
+                    'labour_card_document_url': employee.labour_card_document.url if employee.labour_card_document else None,
                     'nationality': employee.nationality,
                     'gender': employee.gender,
                     'marital_status': employee.marital_status,
@@ -3426,6 +3472,7 @@ def export_reports_view(request):
     site_id = request.GET.get('site')
     position_filter = request.GET.get('position')
     category_filter = request.GET.get('category')
+    employer_filter = request.GET.get('employer')
 
     if date_str:
         try:
@@ -3458,9 +3505,12 @@ def export_reports_view(request):
     
     if category_filter and category_filter != 'all':
         employees = employees.filter(
-            Q(salary_grade__iexact=category_filter) | 
+            Q(salary_grade__iexact=category_filter) |
             (Q(salary_grade__in=['', None]) & Q(category__iexact=category_filter))
         )
+
+    if employer_filter and employer_filter != 'all':
+        employees = employees.filter(employer__iexact=employer_filter)
 
     attendance_records = Attendance.objects.filter(
         date=selected_date,
@@ -3971,6 +4021,7 @@ def monthly_report_view(request):
         month = int(request.GET.get('month', datetime.now().month))
         year = int(request.GET.get('year', datetime.now().year))
         site_id = request.GET.get('site')
+        employer_filter = request.GET.get('employer')
         search_query = request.GET.get('search', '').strip()
         page_num = request.GET.get('page', 1)
         per_page = int(request.GET.get('per_page', 20))
@@ -3998,7 +4049,11 @@ def monthly_report_view(request):
                 Q(email__icontains=search_query) |
                 Q(phone__icontains=search_query)
             )
-        
+
+        # Employer Filter (parent company)
+        if employer_filter and employer_filter != 'all':
+            employees = employees.filter(employer__iexact=employer_filter)
+
         # Calculate date range for the month
         num_days = calendar.monthrange(year, month)[1]
         start_date = datetime(year, month, 1).date()
@@ -4078,6 +4133,7 @@ def monthly_report_view(request):
                 'end_index': page_obj.end_index(),
             },
             'sites': list(Site.objects.all().values('id', 'name')) if is_superuser else [],
+            'employers': ['Parkway', 'Katylink'],
             'permissions': {
                 'is_superuser': is_superuser
             }
@@ -4122,7 +4178,8 @@ def export_monthly_report(request):
     month = int(request.GET.get('month', datetime.now().month))
     year = int(request.GET.get('year', datetime.now().year))
     site_id = request.GET.get('site')
-    
+    employer_filter = request.GET.get('employer')
+
     # Get selected site
     selected_site = None
     if is_superuser and site_id and site_id != 'all':
@@ -4130,13 +4187,15 @@ def export_monthly_report(request):
             selected_site = Site.objects.get(id=site_id)
         except Site.DoesNotExist:
             pass
-    elif site_admin_sites.exists():
-        employees = employees.filter(site__in=site_admin_sites)
-    
+
     # Get employees
     employees = Employee.objects.all()
+    if not is_superuser and site_admin_sites.exists():
+        employees = employees.filter(site__in=site_admin_sites)
     if selected_site:
         employees = employees.filter(site=selected_site)
+    if employer_filter and employer_filter != 'all':
+        employees = employees.filter(employer__iexact=employer_filter)
     
     # Calculate date range
     num_days = calendar.monthrange(year, month)[1]
@@ -4234,6 +4293,7 @@ class AttendanceReportDataView(APIView):
         status_filter = request.GET.get('status')
         position_filter = request.GET.get('position')
         category_filter = request.GET.get('category')
+        employer_filter = request.GET.get('employer')
         page_num = request.GET.get('page', 1)
         per_page = int(request.GET.get('per_page', 20))
 
@@ -4280,6 +4340,10 @@ class AttendanceReportDataView(APIView):
         # Position Filter
         if position_filter and position_filter != 'all':
             employees = employees.filter(position__iexact=position_filter)
+
+        # Employer Filter (parent company: Parkway / Katylink)
+        if employer_filter and employer_filter != 'all':
+            employees = employees.filter(employer__iexact=employer_filter)
 
         # Attendance Fetch
         attendance_records = Attendance.objects.filter(
@@ -4348,6 +4412,7 @@ class AttendanceReportDataView(APIView):
             'sites': sites_list,
             'positions': positions_list,
             'categories': sorted(list({c.strip().capitalize(): c.strip().capitalize() for c in (list(Employee.objects.exclude(category__isnull=True).exclude(category='').values_list('category', flat=True)) + list(Employee.objects.exclude(salary_grade__isnull=True).exclude(salary_grade='').values_list('salary_grade', flat=True))) if c and c.strip()}.values())),
+            'employers': ['Parkway', 'Katylink'],
             'selected_site': site_id,
             'selected_date': selected_date.strftime('%Y-%m-%d'),
             'permissions': {'is_superuser': is_superuser},

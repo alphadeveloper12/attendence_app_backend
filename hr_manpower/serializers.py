@@ -48,7 +48,7 @@ class EmployeeWithHRProfileSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'email', 'phone', 'department', 'position',
             'nationality', 'status', 'date_of_joining', 'category',
-            'site', 'employer', 'hr_profile',
+            'site', 'sponsor', 'employer', 'hr_profile',
         ]
 
 

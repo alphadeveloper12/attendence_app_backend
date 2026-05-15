@@ -224,6 +224,14 @@
                 <option value="all">All Sites</option>
             </select>
         </div>
+        <div class="col-md-3">
+            <label class="form-label-premium">Employer</label>
+            <select id="filterEmployer" class="form-select form-select-premium w-100" onchange="loadData(1)">
+                <option value="all">All Employers</option>
+                <option value="Parkway">Parkway</option>
+                <option value="Katylink">Katylink</option>
+            </select>
+        </div>
     </div>
 </div>
 
@@ -373,10 +381,11 @@
         const month = document.getElementById('filterMonth').value;
         const year = document.getElementById('filterYear').value;
         const site = document.getElementById('filterSite')?.value || 'all';
+        const employer = document.getElementById('filterEmployer')?.value || 'all';
         const search = document.getElementById('searchInput').value;
         const perPage = document.getElementById('filterPerPage').value;
 
-        const params = new URLSearchParams({ month, year, site, search, page: currentPage, per_page: perPage });
+        const params = new URLSearchParams({ month, year, site, employer, search, page: currentPage, per_page: perPage });
 
         try {
             const res = await fetch(`?${params.toString()}`, {
@@ -499,7 +508,8 @@
         const month = document.getElementById('filterMonth').value;
         const year = document.getElementById('filterYear').value;
         const site = document.getElementById('filterSite')?.value || 'all';
-        const params = new URLSearchParams({ month, year, site });
+        const employer = document.getElementById('filterEmployer')?.value || 'all';
+        const params = new URLSearchParams({ month, year, site, employer });
         window.location.href = `/api/attendance/dashboard/monthly-report/export/?${params.toString()}`;
     }
 

@@ -51,7 +51,17 @@ class Employee(models.Model):
     mol_id = models.CharField(max_length=50, null=True, blank=True)  # MOL ID
     labor_card_number = models.CharField(max_length=50, null=True, blank=True)  # Labor Card/ Work Permit Numbers
     site = models.ForeignKey(Site, on_delete=models.SET_NULL, null=True, blank=True)  # Site
-    employer = models.CharField(max_length=100, null=True, blank=True)  # Employer (PIC or Sub contract)
+    sponsor = models.CharField(max_length=100, null=True, blank=True)  # Sponsor (PIC or Sub contract) — previously named "employer"
+    employer = models.CharField(  # Parent company the employee is contracted under
+        max_length=20,
+        null=True, blank=True,
+        choices=[('Parkway', 'Parkway'), ('Katylink', 'Katylink')],
+    )
+
+    # Document uploads
+    passport_document = models.FileField(upload_to='employee_docs/passport/', null=True, blank=True)
+    visa_document = models.FileField(upload_to='employee_docs/visa/', null=True, blank=True)
+    labour_card_document = models.FileField(upload_to='employee_docs/labour/', null=True, blank=True)
     
     # New fields from Excel Import
     nationality = models.CharField(max_length=50, null=True, blank=True)

@@ -329,6 +329,17 @@
             </select>
         </div>
 
+        <div class="col-md-3">
+            <label class="form-label small fw-bold text-secondary text-uppercase mb-2">
+                <i class="ri-building-2-line me-1"></i> Employer
+            </label>
+            <select id="filterEmployer" class="form-select form-select-modern" onchange="loadData(1)">
+                <option value="all">All Employers</option>
+                <option value="Parkway">Parkway</option>
+                <option value="Katylink">Katylink</option>
+            </select>
+        </div>
+
         <div class="col-md-2">
             <label class="form-label small fw-bold text-secondary text-uppercase mb-2">
                 <i class="ri-list-check-2 me-1"></i> Entries
@@ -457,8 +468,9 @@
         const status = document.getElementById('filterStatus').value;
         const position = document.getElementById('filterPosition').value;
         const category = document.getElementById('filterCategory').value;
+        const employer = document.getElementById('filterEmployer').value;
 
-        const params = new URLSearchParams({ page, per_page: perPage, date: date || '', site: site || 'all', status: status || '', position: position || 'all', category: category || 'all' });
+        const params = new URLSearchParams({ page, per_page: perPage, date: date || '', site: site || 'all', status: status || '', position: position || 'all', category: category || 'all', employer: employer || 'all' });
 
         try {
             const res = await fetch(`${API_URL}?${params}`);
@@ -608,6 +620,7 @@
         document.getElementById('filterSite').value = 'all';
         document.getElementById('filterPosition').value = 'all';
         document.getElementById('filterCategory').value = 'all';
+        document.getElementById('filterEmployer').value = 'all';
         document.getElementById('filterStatus').value = '';
         document.getElementById('statusBadge').classList.add('d-none');
         loadData(1);
@@ -620,6 +633,7 @@
             status: document.getElementById('filterStatus').value || '',
             position: document.getElementById('filterPosition').value || 'all',
             category: document.getElementById('filterCategory').value || 'all',
+            employer: document.getElementById('filterEmployer').value || 'all',
         });
         window.location.href = `${EXPORT_URL}?${params.toString()}`;
     }

@@ -582,8 +582,17 @@
                                         id="employeeSiteSelect" class="form-select form-select-modern"></select></div>
                                 <div class="col-md-4"><label
                                         class="form-label small fw-bold text-secondary text-uppercase"
-                                        style="font-size: 0.65rem;">Employer</label><input type="text" name="employer"
+                                        style="font-size: 0.65rem;">Sponsor</label><input type="text" name="sponsor"
                                         class="form-control form-control-modern"></div>
+                                <div class="col-md-4"><label
+                                        class="form-label small fw-bold text-secondary text-uppercase"
+                                        style="font-size: 0.65rem;">Employer</label>
+                                    <select name="employer" class="form-select form-select-modern">
+                                        <option value="">— Select —</option>
+                                        <option value="Parkway">Parkway</option>
+                                        <option value="Katylink">Katylink</option>
+                                    </select>
+                                </div>
                                 <div class="col-md-6"><label
                                         class="form-label small fw-bold text-secondary text-uppercase"
                                         style="font-size: 0.65rem;">Email</label><input type="email" name="email"
@@ -654,10 +663,41 @@
                                         class="form-label small fw-bold text-secondary text-uppercase"
                                         style="font-size: 0.65rem;">Passport Expiry Date</label><input type="date"
                                         name="passport_expiry" class="form-control form-control-modern"></div>
+
+                                <!-- Passport document upload + view -->
+                                <div class="col-md-12">
+                                    <label class="form-label small fw-bold text-secondary text-uppercase"
+                                        style="font-size: 0.65rem;">Passport (PDF / Image)</label>
+                                    <div class="d-flex gap-2 align-items-center">
+                                        <input type="file" name="passport_document" id="passportDocInput"
+                                            class="form-control form-control-modern"
+                                            accept=".pdf,.png,.jpg,.jpeg">
+                                        <a href="#" target="_blank" id="passportDocLink"
+                                            class="btn btn-outline-info btn-sm d-none">
+                                            <i class="ri-eye-line"></i> View
+                                        </a>
+                                    </div>
+                                </div>
+
                                 <div class="col-md-12"><label
                                         class="form-label small fw-bold text-secondary text-uppercase"
                                         style="font-size: 0.65rem;">Visa Details</label><textarea name="visa_details"
                                         class="form-control form-control-modern" rows="2"></textarea></div>
+
+                                <!-- Visa document upload + view -->
+                                <div class="col-md-12">
+                                    <label class="form-label small fw-bold text-secondary text-uppercase"
+                                        style="font-size: 0.65rem;">Visa (PDF / Image)</label>
+                                    <div class="d-flex gap-2 align-items-center">
+                                        <input type="file" name="visa_document" id="visaDocInput"
+                                            class="form-control form-control-modern"
+                                            accept=".pdf,.png,.jpg,.jpeg">
+                                        <a href="#" target="_blank" id="visaDocLink"
+                                            class="btn btn-outline-info btn-sm d-none">
+                                            <i class="ri-eye-line"></i> View
+                                        </a>
+                                    </div>
+                                </div>
 
                                 <div class="col-md-12 mt-4">
                                     <h6 class="fw-bold small text-primary text-uppercase">Labour Card Details</h6>
@@ -670,6 +710,21 @@
                                         class="form-label small fw-bold text-secondary text-uppercase"
                                         style="font-size: 0.65rem;">Personal Nr. (MOL ID)</label><input type="text"
                                         name="mol_id" class="form-control form-control-modern"></div>
+
+                                <!-- Labour card document upload + view -->
+                                <div class="col-md-12">
+                                    <label class="form-label small fw-bold text-secondary text-uppercase"
+                                        style="font-size: 0.65rem;">Labour Card (PDF / Image)</label>
+                                    <div class="d-flex gap-2 align-items-center">
+                                        <input type="file" name="labour_card_document" id="labourDocInput"
+                                            class="form-control form-control-modern"
+                                            accept=".pdf,.png,.jpg,.jpeg">
+                                        <a href="#" target="_blank" id="labourDocLink"
+                                            class="btn btn-outline-info btn-sm d-none">
+                                            <i class="ri-eye-line"></i> View
+                                        </a>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                         {% if is_superuser %}
@@ -908,6 +963,7 @@
                 { label: 'Division', value: emp.department },
                 { label: 'Present Designation', value: emp.position },
                 { label: 'Category', value: isSuperuser ? emp.salary_grade : null },
+                { label: 'Sponsor', value: emp.sponsor },
                 { label: 'Employer', value: emp.employer },
                 { label: 'D.O.J.', value: emp.date_of_joining },
                 emp.resumption_date ? { label: '✅ Last Resumption Date', value: emp.resumption_date } : null,
@@ -1274,7 +1330,19 @@
 
             Object.keys(data).forEach(key => {
                 const el = f.querySelector(`[name="${key}"]`);
-                if (el) el.value = data[key] || '';
+                if (el && el.type !== 'file') el.value = data[key] || '';
+            });
+            // Show document view buttons when URLs are present
+            const docLinks = [
+                ['passportDocLink', data.passport_document_url],
+                ['visaDocLink', data.visa_document_url],
+                ['labourDocLink', data.labour_card_document_url],
+            ];
+            docLinks.forEach(([id, url]) => {
+                const a = document.getElementById(id);
+                if (!a) return;
+                if (url) { a.href = url; a.classList.remove('d-none'); }
+                else { a.href = '#'; a.classList.add('d-none'); }
             });
             originalEmployeeStatus = data.status || null;
             toggleResumptionDate(data.status || '');
@@ -1576,16 +1644,38 @@
         }
 
         const formData = new FormData(form);
-        const data = Object.fromEntries(formData.entries());
         const empId = document.getElementById('editEmployeeId').value;
+        const csrf = formData.get('csrfmiddlewaretoken');
         const btn = document.getElementById('saveEmployeeBtn');
+
+        const docFieldNames = ['passport_document', 'visa_document', 'labour_card_document'];
+        const hasFile = docFieldNames.some(n => {
+            const v = formData.get(n);
+            return v && v instanceof File && v.size > 0;
+        });
+
         btn.disabled = true;
         try {
-            const res = await fetch(`/api/attendance/employees/edit/${empId}/`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': data.csrfmiddlewaretoken },
-                body: JSON.stringify(data)
-            });
+            let res;
+            if (hasFile) {
+                docFieldNames.forEach(n => {
+                    const v = formData.get(n);
+                    if (!(v && v instanceof File && v.size > 0)) formData.delete(n);
+                });
+                res = await fetch(`/api/attendance/employees/edit/${empId}/`, {
+                    method: 'PUT',
+                    headers: { 'X-CSRFToken': csrf },
+                    body: formData,
+                });
+            } else {
+                const data = Object.fromEntries(formData.entries());
+                docFieldNames.forEach(n => { delete data[n]; });
+                res = await fetch(`/api/attendance/employees/edit/${empId}/`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+                    body: JSON.stringify(data),
+                });
+            }
             const result = await res.json();
             if (res.ok) {
                 addModal.hide();
