@@ -498,6 +498,480 @@ class DownloadEmployeeTemplateView(APIView):
         return response
 
 
+# ---------------------------------------------------------------------------
+# Bulk edit (template + upload)
+# ---------------------------------------------------------------------------
+
+# Column headers for the bulk-edit template. First column (Badge ID) is the
+# required lookup key. Empty cells in a row mean "leave existing value alone".
+# Every other column maps to an Employee field of the same logical name.
+BULK_EDIT_COLUMNS = [
+    'Badge ID',         # REQUIRED — primary key
+    'Name',
+    'Email',
+    'Phone',
+    'Division (Department)',
+    'Position',
+    'Category',
+    'Site Name',
+    'Sponsor',          # one of SPONSOR_CHOICES
+    'Employer',         # one of EMPLOYER_CHOICES
+    'Status',           # Active / Leave / Resigned / Terminated / No Renewal / Absconding / Other
+    'Job Description',
+    'Nationality',
+    'Gender',
+    'Marital Status',
+    'Religion',
+    'Date of Birth',            # YYYY-MM-DD
+    'Date of Joining',          # YYYY-MM-DD
+    'Passport Number',
+    'Passport Expiry',          # YYYY-MM-DD
+    'Visa Details',
+    'L.Card/CEC Nr',
+    'MOL ID',
+    'Housing Camp',
+    'Transportation',
+    # Status-conditional fields — fill these only when the Status column changes
+    'Resumption Date',          # required when leaving Leave → Active
+    'Last Working Date',        # required for any terminal status
+    'Termination Reason',       # required for Resigned / Terminated
+    'Leave Approval Date',      # required when going to Leave
+    'Leave Start Date',         # required when going to Leave
+    'Leave End Date',           # required when going to Leave
+    'Leave Type',               # required when going to Leave — Annual/Emergency/Unpaid/Hajj/Umrah
+    'Leave Ticket Eligible',    # Eligible / Not Eligible
+    'Leave Ticket Price',
+    # Optional salary fields (only applied if request user is superuser)
+    'Basic Salary',
+    'Gross Salary',
+]
+
+
+class BulkEditTemplateView(APIView):
+    """Generates an .xlsx template the admin can fill in to bulk-edit employees."""
+    permission_classes = [IsAdminUser | IsSiteAdmin]
+
+    def get(self, request):
+        import io
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment
+        from django.http import HttpResponse
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = 'Employees'
+
+        # Headers
+        ws.append(BULK_EDIT_COLUMNS)
+        header_fill = PatternFill(start_color='2563EB', end_color='2563EB', fill_type='solid')
+        header_font = Font(bold=True, color='FFFFFF', size=11)
+        for col_idx in range(1, len(BULK_EDIT_COLUMNS) + 1):
+            cell = ws.cell(row=1, column=col_idx)
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal='center', vertical='center')
+            ws.column_dimensions[cell.column_letter].width = max(16, len(BULK_EDIT_COLUMNS[col_idx - 1]) + 2)
+        ws.freeze_panes = 'A2'
+
+        # Instruction row
+        instruction = (
+            "Fill Badge ID for each row. Leave any other cell blank to keep the existing value. "
+            "When you change Status, also fill the conditional date(s) per Status. "
+            "Dates: YYYY-MM-DD."
+        )
+        ws.cell(row=2, column=1).value = instruction
+        ws.cell(row=2, column=1).alignment = Alignment(wrap_text=True, vertical='top')
+        ws.cell(row=2, column=1).font = Font(italic=True, color='6B7280')
+        ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=min(8, len(BULK_EDIT_COLUMNS)))
+        ws.row_dimensions[2].height = 32
+
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+        resp = HttpResponse(
+            output.read(),
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        )
+        resp['Content-Disposition'] = 'attachment; filename=bulk_edit_employees_template.xlsx'
+        return resp
+
+
+class BulkEditEmployeesView(APIView):
+    """Applies an uploaded bulk-edit .xlsx, per-row update keyed by Badge ID."""
+    permission_classes = [IsAdminUser | IsSiteAdmin]
+
+    # Maps spreadsheet column → Employee model field (simple direct assignment)
+    _SIMPLE_FIELD_MAP = {
+        'Name': 'name',
+        'Email': 'email',
+        'Phone': 'phone',
+        'Division (Department)': 'department',
+        'Position': 'position',
+        'Category': 'salary_grade',
+        'Job Description': 'job_description',
+        'Nationality': 'nationality',
+        'Gender': 'gender',
+        'Marital Status': 'marital_status',
+        'Religion': 'religion',
+        'Passport Number': 'passport_number',
+        'Visa Details': 'visa_details',
+        'L.Card/CEC Nr': 'labor_card_number',
+        'MOL ID': 'mol_id',
+        'Housing Camp': 'camp',
+        'Transportation': 'transportation',
+    }
+    _DATE_FIELD_MAP = {
+        'Date of Birth': 'date_of_birth',
+        'Date of Joining': 'date_of_joining',
+        'Passport Expiry': 'passport_expiry',
+        'Resumption Date': 'resumption_date',
+        'Last Working Date': 'last_working_date',
+        'Leave Approval Date': 'leave_approval_date',
+        'Leave Start Date': 'leave_start_date',
+        'Leave End Date': 'leave_end_date',
+    }
+    _DECIMAL_FIELD_MAP = {
+        'Basic Salary': 'basic_salary',
+        'Gross Salary': 'gross_salary',
+        'Leave Ticket Price': 'leave_ticket_price',
+    }
+
+    def post(self, request):
+        import openpyxl
+        from datetime import datetime, date
+
+        f = request.FILES.get('file')
+        if not f:
+            return Response({'error': 'No file uploaded. Use form-data with key "file".'}, status=400)
+
+        try:
+            wb = openpyxl.load_workbook(f, data_only=True)
+        except Exception as e:  # noqa: BLE001
+            return Response({'error': f'Could not read file: {e}'}, status=400)
+        ws = wb.active
+
+        # Build header index — header row may have an instruction row below it,
+        # but our generated template puts headers on row 1.
+        rows = list(ws.iter_rows(values_only=True))
+        if not rows:
+            return Response({'error': 'Empty spreadsheet.'}, status=400)
+        header = [str(c).strip() if c is not None else '' for c in rows[0]]
+        # Map header name → column index
+        col_index = {name: i for i, name in enumerate(header) if name}
+
+        if 'Badge ID' not in col_index:
+            return Response({'error': 'Required column "Badge ID" is missing.'}, status=400)
+
+        def get(row, name):
+            i = col_index.get(name)
+            if i is None or i >= len(row):
+                return None
+            v = row[i]
+            if v is None:
+                return None
+            s = str(v).strip()
+            return s or None
+
+        def coerce_date(s):
+            if not s:
+                return None
+            if isinstance(s, datetime):
+                return s.date()
+            if isinstance(s, date):
+                return s
+            for fmt in ('%Y-%m-%d', '%d/%m/%Y', '%m/%d/%Y'):
+                try:
+                    return datetime.strptime(str(s), fmt).date()
+                except ValueError:
+                    continue
+            return None
+
+        def coerce_decimal(s):
+            if not s:
+                return None
+            try:
+                from decimal import Decimal
+                return Decimal(str(s).replace(',', '').strip())
+            except Exception:  # noqa: BLE001
+                return None
+
+        def coerce_bool_eligible(s):
+            if not s:
+                return None
+            t = str(s).strip().lower()
+            if t in ('true', 'eligible', '1', 'yes'):
+                return True
+            if t in ('false', 'not eligible', '0', 'no'):
+                return False
+            return None
+
+        # Permission filter — site admins can only edit employees in their assigned sites
+        allowed_site_ids = None
+        if not request.user.is_superuser:
+            try:
+                allowed_site_ids = set(
+                    request.user.admin_profile.sites.values_list('id', flat=True)
+                )
+            except AdminProfile.DoesNotExist:
+                allowed_site_ids = set()
+
+        # Cache for site name lookups (case-insensitive)
+        site_cache = {s.name.lower(): s for s in Site.objects.all()}
+
+        TERMINAL_STATUSES = {'Resigned', 'Terminated', 'No Renewal', 'Absconding'}
+        MASTER_STATUSES = {'Active', 'Leave', 'Resigned', 'Terminated', 'No Renewal', 'Absconding', 'Other'}
+
+        results = {
+            'total_rows': 0,
+            'updated_count': 0,
+            'skipped_count': 0,
+            'errors': [],
+        }
+
+        # Skip the instruction row if it happens to come after the header (our
+        # generated template leaves cell A2 with text — but it has no Badge ID
+        # so the lookup will naturally fail; we treat it as a no-op skip).
+        for row_idx, row in enumerate(rows[1:], start=2):
+            if not any(c not in (None, '') for c in row):
+                continue  # fully empty row
+            results['total_rows'] += 1
+            badge = get(row, 'Badge ID')
+            if not badge:
+                # First data row of our template carries instruction text in col A
+                # without a real Badge ID — silently skip it instead of erroring.
+                results['skipped_count'] += 1
+                continue
+
+            try:
+                emp = Employee.objects.filter(badge_number=str(badge)).first()
+                if not emp:
+                    results['errors'].append({
+                        'row': row_idx, 'badge_number': badge,
+                        'error': 'Employee not found',
+                    })
+                    continue
+
+                # Site-admin scope guard
+                if allowed_site_ids is not None:
+                    if emp.site_id is None or emp.site_id not in allowed_site_ids:
+                        results['errors'].append({
+                            'row': row_idx, 'badge_number': badge,
+                            'error': 'Not permitted to edit this employee (outside your assigned sites)',
+                        })
+                        continue
+
+                # ── Simple text fields ───────────────────────────────────────
+                for col_name, field_name in self._SIMPLE_FIELD_MAP.items():
+                    v = get(row, col_name)
+                    if v is not None:
+                        setattr(emp, field_name, v)
+
+                # ── Date fields ──────────────────────────────────────────────
+                date_overrides = {}
+                for col_name, field_name in self._DATE_FIELD_MAP.items():
+                    raw = get(row, col_name)
+                    if raw is None:
+                        continue
+                    d = coerce_date(raw)
+                    if d is None:
+                        results['errors'].append({
+                            'row': row_idx, 'badge_number': badge,
+                            'error': f'Could not parse date in column "{col_name}": "{raw}"',
+                        })
+                        raise ValueError('skip')
+                    date_overrides[field_name] = d
+
+                # ── Decimal fields ───────────────────────────────────────────
+                # Salary fields only applied for superuser
+                for col_name, field_name in self._DECIMAL_FIELD_MAP.items():
+                    raw = get(row, col_name)
+                    if raw is None:
+                        continue
+                    if field_name in ('basic_salary', 'gross_salary') and not request.user.is_superuser:
+                        continue
+                    dec = coerce_decimal(raw)
+                    if dec is None:
+                        results['errors'].append({
+                            'row': row_idx, 'badge_number': badge,
+                            'error': f'Could not parse number in column "{col_name}": "{raw}"',
+                        })
+                        raise ValueError('skip')
+                    setattr(emp, field_name, dec)
+
+                # ── Sponsor / Employer (validated choices) ───────────────────
+                sponsor = get(row, 'Sponsor')
+                if sponsor is not None:
+                    if sponsor not in SPONSOR_CHOICES:
+                        results['errors'].append({
+                            'row': row_idx, 'badge_number': badge,
+                            'error': f'Invalid Sponsor "{sponsor}". Must be one of: {", ".join(SPONSOR_CHOICES)}',
+                        })
+                        raise ValueError('skip')
+                    emp.sponsor = sponsor
+
+                employer = get(row, 'Employer')
+                if employer is not None:
+                    if employer not in EMPLOYER_CHOICES:
+                        results['errors'].append({
+                            'row': row_idx, 'badge_number': badge,
+                            'error': f'Invalid Employer "{employer}". Must be one of: {", ".join(EMPLOYER_CHOICES)}',
+                        })
+                        raise ValueError('skip')
+                    emp.employer = employer
+
+                # ── Leave ticket eligible ────────────────────────────────────
+                ticket_raw = get(row, 'Leave Ticket Eligible')
+                if ticket_raw is not None:
+                    parsed = coerce_bool_eligible(ticket_raw)
+                    if parsed is None:
+                        results['errors'].append({
+                            'row': row_idx, 'badge_number': badge,
+                            'error': f'Invalid "Leave Ticket Eligible" value "{ticket_raw}". Use Eligible or Not Eligible.',
+                        })
+                        raise ValueError('skip')
+                    emp.leave_ticket_eligible = parsed
+
+                # ── Site by name ─────────────────────────────────────────────
+                site_name = get(row, 'Site Name')
+                old_site = emp.site
+                if site_name is not None:
+                    s_obj = site_cache.get(site_name.lower())
+                    if not s_obj:
+                        results['errors'].append({
+                            'row': row_idx, 'badge_number': badge,
+                            'error': f'Site "{site_name}" not found',
+                        })
+                        raise ValueError('skip')
+                    emp.site = s_obj
+
+                # ── Status + conditional fields ──────────────────────────────
+                new_status = get(row, 'Status')
+                if new_status is not None:
+                    if new_status not in MASTER_STATUSES:
+                        results['errors'].append({
+                            'row': row_idx, 'badge_number': badge,
+                            'error': f'Invalid Status "{new_status}". Must be one of: {", ".join(sorted(MASTER_STATUSES))}',
+                        })
+                        raise ValueError('skip')
+
+                    old_status = emp.status
+
+                    # Build the "effective" date values for this transition
+                    res_d = date_overrides.get('resumption_date')
+                    lwd   = date_overrides.get('last_working_date')
+                    l_app = date_overrides.get('leave_approval_date')
+                    l_st  = date_overrides.get('leave_start_date')
+                    l_en  = date_overrides.get('leave_end_date')
+                    l_typ = get(row, 'Leave Type')
+                    t_rsn = get(row, 'Termination Reason')
+
+                    is_resuming    = (old_status == 'Leave' and new_status == 'Active')
+                    is_terminating = (old_status not in TERMINAL_STATUSES and new_status in TERMINAL_STATUSES)
+                    is_starting_leave = (old_status != 'Leave' and new_status == 'Leave')
+                    is_resign_or_term = (old_status != new_status and new_status in ('Resigned', 'Terminated'))
+
+                    missing = []
+                    if is_resuming and not res_d:
+                        missing.append('Resumption Date')
+                    if is_terminating and not lwd:
+                        missing.append('Last Working Date')
+                    if is_resign_or_term and not t_rsn:
+                        missing.append('Termination Reason')
+                    if is_starting_leave:
+                        if not l_app: missing.append('Leave Approval Date')
+                        if not l_st:  missing.append('Leave Start Date')
+                        if not l_en:  missing.append('Leave End Date')
+                        if not l_typ: missing.append('Leave Type')
+                    if missing:
+                        results['errors'].append({
+                            'row': row_idx, 'badge_number': badge,
+                            'error': f'Status "{new_status}" requires: {", ".join(missing)}',
+                        })
+                        raise ValueError('skip')
+
+                    emp.status = new_status
+                    if is_resuming:
+                        emp.resumption_date = res_d
+                    # Clear leave/terminal artefacts when moving out of those states
+                    if new_status in TERMINAL_STATUSES:
+                        emp.last_working_date = lwd
+                    else:
+                        emp.last_working_date = None
+                    if new_status in ('Resigned', 'Terminated') and t_rsn:
+                        emp.termination_reason = t_rsn
+                    elif new_status not in ('Resigned', 'Terminated'):
+                        emp.termination_reason = None
+                    if new_status == 'Leave':
+                        emp.leave_approval_date = l_app
+                        emp.leave_start_date    = l_st
+                        emp.leave_end_date      = l_en
+                        emp.leave_type          = l_typ
+                    else:
+                        emp.leave_approval_date = None
+                        emp.leave_start_date    = None
+                        emp.leave_end_date      = None
+                        emp.leave_type          = None
+                        emp.leave_ticket_eligible = None
+                        emp.leave_ticket_price    = None
+
+                    # History row for the transition
+                    if old_status != new_status:
+                        EmployeeStatusHistory.objects.create(
+                            employee=emp,
+                            old_status=old_status,
+                            new_status=new_status,
+                            leave_approval_date=l_app if is_starting_leave else None,
+                            leave_start_date=l_st   if is_starting_leave else None,
+                            leave_end_date=l_en     if is_starting_leave else None,
+                            resumption_date=res_d   if is_resuming      else None,
+                            last_working_date=lwd   if is_terminating   else None,
+                            leave_type=l_typ        if is_starting_leave else None,
+                            note=(
+                                f"{old_status or '—'} → {new_status} (bulk edit)"
+                                + (f" — Reason: {t_rsn}"
+                                   if new_status in ('Resigned', 'Terminated') and t_rsn else '')
+                            ),
+                            changed_by=request.user if request.user.is_authenticated else None,
+                        )
+                else:
+                    # Status not in the row — still apply non-status date overrides
+                    # (DoB / DoJ / passport expiry). Skip status-conditional ones.
+                    for f_name in ('date_of_birth', 'date_of_joining', 'passport_expiry'):
+                        if f_name in date_overrides:
+                            setattr(emp, f_name, date_overrides[f_name])
+
+                # ── Site change history ──────────────────────────────────────
+                if (old_site and emp.site and old_site.id != emp.site_id) \
+                        or (old_site and not emp.site) \
+                        or (not old_site and emp.site):
+                    EmployeeSiteHistory.objects.create(
+                        employee=emp,
+                        old_site=old_site,
+                        new_site=emp.site,
+                        effective_from=timezone.localdate(),
+                        note=(
+                            f"{old_site.name if old_site else '—'} → "
+                            f"{emp.site.name if emp.site else '—'} (bulk edit)"
+                        ),
+                        changed_by=request.user if request.user.is_authenticated else None,
+                    )
+
+                emp.save()
+                results['updated_count'] += 1
+
+            except ValueError:
+                # Validation error already recorded above
+                continue
+            except Exception as e:  # noqa: BLE001
+                results['errors'].append({
+                    'row': row_idx, 'badge_number': badge,
+                    'error': str(e),
+                })
+
+        results['success'] = True
+        return Response(results)
+
+
 class AdminAddEmployeeView(APIView):
     permission_classes = [IsAdminUser]
 
