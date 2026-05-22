@@ -53,6 +53,13 @@ from django.http import FileResponse, Http404
 
 # ------------------ App Build API ------------------
 
+# Sponsor and Employer pickable values — single source of truth used by
+# AdminAdd/Edit views, Excel import validation, and the AttendanceStatsView
+# payload that drives the dashboard filter dropdowns.
+SPONSOR_CHOICES = ('Parkway', 'Katilink', 'ReadyMix', 'Mayadan', 'Jafza', 'Golden', 'Old Emp')
+EMPLOYER_CHOICES = ('PIC', 'KFD', 'Kami', 'PRMC')
+
+
 class UploadBuildView(APIView):
     permission_classes = [IsAdminUser]
 
@@ -245,7 +252,7 @@ class ImportEmployeesView(APIView):
             # Legacy "Employer" column in the spreadsheet maps to our renamed "sponsor" field.
             col_map['sponsor'] = find_col_index(['Sponsor', 'Employer'], header_row_1)
             if col_map['sponsor'] == -1: col_map['sponsor'] = find_col_index(['Sponsor', 'Employer'], header_row_2)
-            # New optional "Employer" column for the parent-company choice (Parkway / Katylink)
+            # New optional "Employer" column for the parent-company choice (PIC / KFD / Kami / PRMC)
             col_map['employer'] = find_col_index(['Employer Company', 'Parent Company', 'Company'], header_row_1)
             if col_map['employer'] == -1: col_map['employer'] = find_col_index(['Employer Company', 'Parent Company', 'Company'], header_row_2)
 
@@ -408,8 +415,11 @@ class ImportEmployeesView(APIView):
                     emp.sponsor = get_val_from_row(row, 'sponsor') or employer_name
                     # Optional new parent-company column ("Employer Company" / "Parent Company" / "Company")
                     raw_employer_choice = (get_val_from_row(row, 'employer') or '').strip()
-                    if raw_employer_choice in ('Parkway', 'Katylink'):
+                    if raw_employer_choice in EMPLOYER_CHOICES:
                         emp.employer = raw_employer_choice
+                    raw_sponsor_choice = (get_val_from_row(row, 'sponsor') or '').strip()
+                    if raw_sponsor_choice in SPONSOR_CHOICES:
+                        emp.sponsor = raw_sponsor_choice
                     emp.visa_details = get_val_from_row(row, 'visa_details')
 
                     emp.save()
@@ -593,7 +603,7 @@ class AdminAddEmployeeView(APIView):
                 mol_id=data.get('mol_id'),
                 job_description=data.get('job_description'),
                 sponsor=data.get('sponsor'),
-                employer=(data.get('employer') if data.get('employer') in ('Parkway', 'Katylink') else None),
+                employer=(data.get('employer') if data.get('employer') in EMPLOYER_CHOICES else None),
                 site=site,
                 gross_salary=parse_decimal(data.get('gross_salary')),
                 basic_salary=parse_decimal(data.get('basic_salary')),
@@ -778,7 +788,7 @@ class AdminEditEmployeeView(APIView):
             emp.job_description = data.get('job_description')
             emp.sponsor = data.get('sponsor')
             new_employer = data.get('employer')
-            emp.employer = new_employer if new_employer in ('Parkway', 'Katylink') else None
+            emp.employer = new_employer if new_employer in EMPLOYER_CHOICES else None
 
             # Document uploads (multipart) — only overwrite when a new file is sent
             if hasattr(request, 'FILES'):
@@ -1056,7 +1066,7 @@ class RegisterUserView(APIView):
         site_id = data.get("site")
         sponsor = data.get("sponsor") or ""
         employer_choice = data.get("employer") or ""
-        if employer_choice not in ('Parkway', 'Katylink'):
+        if employer_choice not in EMPLOYER_CHOICES:
             employer_choice = None
         nationality = data.get("nationality") or ""
         gender = data.get("gender") or ""
@@ -1774,7 +1784,8 @@ class AttendanceStatsView(APIView):
                     "sites": [{"id": s.id, "name": s.name} for s in all_sites],
                     "categories": unique_categories,
                     "statuses": unique_statuses,
-                    "employers": ['Parkway', 'Katylink'],
+                    "employers": list(EMPLOYER_CHOICES),
+                    "sponsors": list(SPONSOR_CHOICES),
                     "chart": {
                         "labels": chart_labels,
                         "data": chart_data
@@ -1880,7 +1891,7 @@ class EmployeeListView(APIView):
         if status_filter and status_filter != 'all':
             employees = employees.filter(status__iexact=status_filter)
 
-        # Filter by employer (parent company: Parkway / Katylink)
+        # Filter by employer (one of EMPLOYER_CHOICES)
         employer_filter = request.GET.get('employer')
         if employer_filter and employer_filter != 'all':
             employees = employees.filter(employer__iexact=employer_filter)
@@ -4133,7 +4144,8 @@ def monthly_report_view(request):
                 'end_index': page_obj.end_index(),
             },
             'sites': list(Site.objects.all().values('id', 'name')) if is_superuser else [],
-            'employers': ['Parkway', 'Katylink'],
+            'employers': list(EMPLOYER_CHOICES),
+            'sponsors': list(SPONSOR_CHOICES),
             'permissions': {
                 'is_superuser': is_superuser
             }
@@ -4341,7 +4353,7 @@ class AttendanceReportDataView(APIView):
         if position_filter and position_filter != 'all':
             employees = employees.filter(position__iexact=position_filter)
 
-        # Employer Filter (parent company: Parkway / Katylink)
+        # Employer Filter (one of EMPLOYER_CHOICES)
         if employer_filter and employer_filter != 'all':
             employees = employees.filter(employer__iexact=employer_filter)
 
@@ -4412,7 +4424,8 @@ class AttendanceReportDataView(APIView):
             'sites': sites_list,
             'positions': positions_list,
             'categories': sorted(list({c.strip().capitalize(): c.strip().capitalize() for c in (list(Employee.objects.exclude(category__isnull=True).exclude(category='').values_list('category', flat=True)) + list(Employee.objects.exclude(salary_grade__isnull=True).exclude(salary_grade='').values_list('salary_grade', flat=True))) if c and c.strip()}.values())),
-            'employers': ['Parkway', 'Katylink'],
+            'employers': list(EMPLOYER_CHOICES),
+            'sponsors': list(SPONSOR_CHOICES),
             'selected_site': site_id,
             'selected_date': selected_date.strftime('%Y-%m-%d'),
             'permissions': {'is_superuser': is_superuser},

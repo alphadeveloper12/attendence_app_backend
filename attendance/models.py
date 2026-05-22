@@ -51,11 +51,30 @@ class Employee(models.Model):
     mol_id = models.CharField(max_length=50, null=True, blank=True)  # MOL ID
     labor_card_number = models.CharField(max_length=50, null=True, blank=True)  # Labor Card/ Work Permit Numbers
     site = models.ForeignKey(Site, on_delete=models.SET_NULL, null=True, blank=True)  # Site
-    sponsor = models.CharField(max_length=100, null=True, blank=True)  # Sponsor (PIC or Sub contract) — previously named "employer"
-    employer = models.CharField(  # Parent company the employee is contracted under
+    # Sponsor — kept at max_length=100 because legacy free-text data (e.g. "PICDUB") lives here
+    # until admins reclassify it via the dropdown. New entries use the choices below.
+    sponsor = models.CharField(
+        max_length=100,
+        null=True, blank=True,
+        choices=[
+            ('Parkway', 'Parkway'),
+            ('Katilink', 'Katilink'),
+            ('ReadyMix', 'ReadyMix'),
+            ('Mayadan', 'Mayadan'),
+            ('Jafza', 'Jafza'),
+            ('Golden', 'Golden'),
+            ('Old Emp', 'Old Emp'),
+        ],
+    )
+    employer = models.CharField(  # Internal employer entity
         max_length=20,
         null=True, blank=True,
-        choices=[('Parkway', 'Parkway'), ('Katylink', 'Katylink')],
+        choices=[
+            ('PIC', 'PIC'),
+            ('KFD', 'KFD'),
+            ('Kami', 'Kami'),
+            ('PRMC', 'PRMC'),
+        ],
     )
 
     # Document uploads

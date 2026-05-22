@@ -286,10 +286,14 @@
                 id="employerDropdown">
                 <li><a class="dropdown-item py-2" href="#" onclick="filterEmployer('all', 'All Employers')"><i
                             class="ri-history-line"></i> All Employers</a></li>
-                <li><a class="dropdown-item py-2" href="#" onclick="filterEmployer('Parkway', 'Parkway')"><i
-                            class="ri-building-2-line"></i> Parkway</a></li>
-                <li><a class="dropdown-item py-2" href="#" onclick="filterEmployer('Katylink', 'Katylink')"><i
-                            class="ri-building-2-line"></i> Katylink</a></li>
+                <li><a class="dropdown-item py-2" href="#" onclick="filterEmployer('PIC', 'PIC')"><i
+                            class="ri-building-2-line"></i> PIC</a></li>
+                <li><a class="dropdown-item py-2" href="#" onclick="filterEmployer('KFD', 'KFD')"><i
+                            class="ri-building-2-line"></i> KFD</a></li>
+                <li><a class="dropdown-item py-2" href="#" onclick="filterEmployer('Kami', 'Kami')"><i
+                            class="ri-building-2-line"></i> Kami</a></li>
+                <li><a class="dropdown-item py-2" href="#" onclick="filterEmployer('PRMC', 'PRMC')"><i
+                            class="ri-building-2-line"></i> PRMC</a></li>
             </ul>
         </div>
         <button onclick="openAddModal()" class="btn btn-premium shadow-sm">
@@ -660,15 +664,27 @@
                                         id="employeeSiteSelect" class="form-select form-select-modern"></select></div>
                                 <div class="col-md-4"><label
                                         class="form-label small fw-bold text-secondary text-uppercase"
-                                        style="font-size: 0.65rem;">Sponsor</label><input type="text" name="sponsor"
-                                        class="form-control form-control-modern"></div>
+                                        style="font-size: 0.65rem;">Sponsor</label>
+                                    <select name="sponsor" class="form-select form-select-modern">
+                                        <option value="">— Select —</option>
+                                        <option value="Parkway">Parkway</option>
+                                        <option value="Katilink">Katilink</option>
+                                        <option value="ReadyMix">ReadyMix</option>
+                                        <option value="Mayadan">Mayadan</option>
+                                        <option value="Jafza">Jafza</option>
+                                        <option value="Golden">Golden</option>
+                                        <option value="Old Emp">Old Emp</option>
+                                    </select>
+                                </div>
                                 <div class="col-md-4"><label
                                         class="form-label small fw-bold text-secondary text-uppercase"
                                         style="font-size: 0.65rem;">Employer</label>
                                     <select name="employer" class="form-select form-select-modern">
                                         <option value="">— Select —</option>
-                                        <option value="Parkway">Parkway</option>
-                                        <option value="Katylink">Katylink</option>
+                                        <option value="PIC">PIC</option>
+                                        <option value="KFD">KFD</option>
+                                        <option value="Kami">Kami</option>
+                                        <option value="PRMC">PRMC</option>
                                     </select>
                                 </div>
                                 <div class="col-md-6"><label
