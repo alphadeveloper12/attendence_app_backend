@@ -45,7 +45,7 @@ from .utils import (
     THRESH, MARGIN, get_image_bytes
 )
 from .geofence import check_geofence
-from .models import Employee, Attendance, Site, FaceTemplate, AdminProfile, AppBuild, EmployeeStatusHistory
+from .models import Employee, Attendance, Site, FaceTemplate, AdminProfile, AppBuild, EmployeeStatusHistory, EmployeeSiteHistory
 from .serializers import *
 from .permissions import IsSiteAdmin
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -642,6 +642,17 @@ class AdminAddEmployeeView(APIView):
                     changed_by=request.user if request.user.is_authenticated else None,
                 )
 
+            # Record the initial site assignment so the Site History tab has a starting point
+            if site is not None:
+                EmployeeSiteHistory.objects.create(
+                    employee=new_emp,
+                    old_site=None,
+                    new_site=site,
+                    effective_from=parse_date(data.get('date_of_joining')) or timezone.localdate(),
+                    note='Initial site assignment',
+                    changed_by=request.user if request.user.is_authenticated else None,
+                )
+
             return Response({'success': True, 'message': 'Employee added successfully'})
             
         except Exception as e:
@@ -845,6 +856,8 @@ class AdminEditEmployeeView(APIView):
                 if 'labour_card_document' in request.FILES:
                     emp.labour_card_document = request.FILES['labour_card_document']
 
+            # Capture the old site BEFORE we overwrite it — needed to log a site-change row.
+            old_site = emp.site
             site_id = data.get('site')
             if site_id:
                 try:
@@ -853,6 +866,22 @@ class AdminEditEmployeeView(APIView):
                     emp.site = None
             else:
                 emp.site = None
+
+            # Site-change history (only on actual transition)
+            if (old_site and emp.site and old_site.id != emp.site.id) \
+                    or (old_site and not emp.site) \
+                    or (not old_site and emp.site):
+                EmployeeSiteHistory.objects.create(
+                    employee=emp,
+                    old_site=old_site,
+                    new_site=emp.site,
+                    effective_from=timezone.localdate(),
+                    note=(
+                        f"{old_site.name if old_site else '—'} → "
+                        f"{emp.site.name if emp.site else '—'}"
+                    ),
+                    changed_by=request.user if request.user.is_authenticated else None,
+                )
 
             emp.date_of_birth = parse_date(data.get('date_of_birth'))
             emp.date_of_joining = parse_date(data.get('date_of_joining'))
@@ -938,6 +967,53 @@ class EmployeeStatusHistoryView(APIView):
             'employee_name': emp.name,
             'current_status': emp.status,
             'history': results,
+        })
+
+
+class EmployeeSiteHistoryView(APIView):
+    """Returns the chronological site assignment history for one employee
+    as a timeline of [from_site, to_site, from_date, to_date] segments.
+    """
+    permission_classes = [IsAdminUser | IsSiteAdmin]
+
+    def get(self, request, employee_id):
+        try:
+            emp = Employee.objects.select_related('site').get(id=employee_id)
+        except Employee.DoesNotExist:
+            return Response({'error': 'Employee not found'}, status=404)
+
+        rows = list(
+            emp.site_history
+               .select_related('old_site', 'new_site', 'changed_by')
+               .order_by('effective_from', 'changed_at')
+        )
+
+        # Build segments: each transition row starts a new assignment that lasts
+        # until the next row's effective_from (or "now" for the latest one).
+        segments = []
+        for i, h in enumerate(rows):
+            start = h.effective_from
+            end = (rows[i + 1].effective_from - timedelta(days=1)
+                   if i + 1 < len(rows) else None)
+            segments.append({
+                'id': h.id,
+                'site_id': h.new_site.id if h.new_site else None,
+                'site_name': h.new_site.name if h.new_site else None,
+                'from_date': str(start) if start else None,
+                'to_date': str(end) if end else None,
+                'is_current': end is None,
+                'note': h.note,
+                'changed_at': h.changed_at.isoformat() if h.changed_at else None,
+                'changed_by': h.changed_by.username if h.changed_by else None,
+                'old_site_name': h.old_site.name if h.old_site else None,
+            })
+
+        return Response({
+            'employee_id': emp.id,
+            'employee_name': emp.name,
+            'current_site': emp.site.name if emp.site else None,
+            'current_site_id': emp.site.id if emp.site else None,
+            'segments': segments,
         })
 
 

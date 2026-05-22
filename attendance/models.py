@@ -141,6 +141,32 @@ class EmployeeStatusHistory(models.Model):
         return f"{self.employee.name}: {self.old_status} → {self.new_status} @ {self.changed_at:%Y-%m-%d}"
 
 
+class EmployeeSiteHistory(models.Model):
+    """Records every site assignment change for an employee.
+
+    Each row represents a transition from `old_site` to `new_site`. The
+    timeline can be derived by sorting rows by `effective_from` ascending:
+    the row N row's `new_site` is the assignment until row N+1's `effective_from`.
+    """
+    employee       = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name='site_history')
+    old_site       = models.ForeignKey(Site, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    new_site       = models.ForeignKey(Site, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    effective_from = models.DateField(default=timezone.localdate)
+    note           = models.CharField(max_length=255, null=True, blank=True)
+    changed_at     = models.DateTimeField(auto_now_add=True)
+    changed_by     = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+
+    class Meta:
+        ordering = ['-effective_from', '-changed_at']
+
+    def __str__(self):
+        return (
+            f"{self.employee.name}: "
+            f"{self.old_site.name if self.old_site else '—'} → "
+            f"{self.new_site.name if self.new_site else '—'} @ {self.effective_from}"
+        )
+
+
 class Attendance(models.Model):
     user = models.ForeignKey(Employee, on_delete=models.CASCADE)
     check_in_time = models.DateTimeField(null=True, blank=True)

@@ -441,6 +441,8 @@
                             data-bs-target="#employmentStatus">6. Employment Status</button></li>
                     <li class="nav-item flex-fill"><button class="nav-link w-100 py-2" data-bs-toggle="pill"
                             data-bs-target="#sickLeave">7. Sick Leave</button></li>
+                    <li class="nav-item flex-fill"><button class="nav-link w-100 py-2" data-bs-toggle="pill"
+                            data-bs-target="#siteHistory">8. Site History</button></li>
                 </ul>
 
                 <form id="addEmployeeForm">
@@ -842,6 +844,16 @@
                                 <div class="text-center py-4">
                                     <div class="spinner-border spinner-border-sm text-secondary"></div>
                                     <p class="text-muted small mt-2 mb-0">Loading sick leaves…</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 8. Site History — chronological site assignments -->
+                        <div class="tab-pane fade" id="siteHistory">
+                            <div id="siteHistoryContainer">
+                                <div class="text-center py-4">
+                                    <div class="spinner-border spinner-border-sm text-secondary"></div>
+                                    <p class="text-muted small mt-2 mb-0">Loading site history…</p>
                                 </div>
                             </div>
                         </div>
@@ -1454,7 +1466,66 @@
             }
             loadStatusHistory(empId);
             loadSickLeaves(empId);
+            loadSiteHistory(empId);
         } catch (e) { alert("Failed to load employee data."); }
+    }
+
+    // ---- Site History ----
+    async function loadSiteHistory(empId) {
+        const container = document.getElementById('siteHistoryContainer');
+        if (!container) return;
+        container.innerHTML = `<div class="text-center py-4"><div class="spinner-border spinner-border-sm text-secondary"></div><p class="text-muted small mt-2 mb-0">Loading site history…</p></div>`;
+        try {
+            const res = await fetch(`/api/attendance/employees/${empId}/site-history/`);
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Failed');
+            const segments = data.segments || [];
+            if (segments.length === 0) {
+                container.innerHTML = `<div class="text-center py-5">
+                    <div style="font-size:2.5rem;opacity:0.3;">🏗️</div>
+                    <h6 class="fw-bold text-secondary mt-3">No site history yet</h6>
+                    <p class="text-muted small mb-0">When this employee's site is changed, transitions will appear here as a timeline.</p>
+                </div>`;
+                return;
+            }
+            // Show newest-first
+            const ordered = segments.slice().reverse();
+            container.innerHTML = `
+                <div class="mb-3 pb-2 border-bottom">
+                    <span class="text-secondary small">Currently at:</span>
+                    <span class="badge rounded-pill bg-primary bg-opacity-10 text-primary fw-bold ms-1">
+                        <i class="ri-building-line me-1"></i>${data.current_site || '—'}
+                    </span>
+                </div>
+                <div class="d-flex flex-column gap-3">
+                    ${ordered.map(s => `
+                        <div class="border rounded-3 p-3 ${s.is_current ? 'border-primary' : ''}" style="background:#fafafa;">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <div class="fw-bold">
+                                    <i class="ri-building-line text-secondary me-1"></i>
+                                    ${s.site_name || '—'}
+                                    ${s.is_current ? '<span class="badge bg-primary ms-2">Current</span>' : ''}
+                                </div>
+                                <div class="text-secondary small">
+                                    <i class="ri-time-line me-1"></i>${new Date(s.changed_at).toLocaleString()}
+                                    ${s.changed_by ? ' · by ' + s.changed_by : ''}
+                                </div>
+                            </div>
+                            <div class="small">
+                                <span class="text-secondary">From:</span>
+                                <span class="font-monospace">${s.from_date || '—'}</span>
+                                <span class="text-secondary mx-2">→</span>
+                                <span class="text-secondary">To:</span>
+                                <span class="font-monospace">${s.to_date || '<span class="badge bg-success">present</span>'}</span>
+                            </div>
+                            ${s.old_site_name ? `<div class="text-muted small mt-1">Moved from <em>${s.old_site_name}</em></div>` : ''}
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        } catch (e) {
+            container.innerHTML = `<div class="text-danger small text-center py-4">Failed to load site history.</div>`;
+        }
     }
 
     // ---- Sick Leave ----
