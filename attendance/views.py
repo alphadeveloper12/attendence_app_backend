@@ -1037,6 +1037,89 @@ class EmployeeSickLeaveView(APIView):
         return Response({'success': True})
 
 
+class MarkDayView(APIView):
+    """Set an attendance day's status to present / absent / leave (no file required).
+
+    POST /api/attendance/employees/<id>/mark-day/
+        body: { "date": "YYYY-MM-DD", "action": "present"|"absent"|"leave" }
+
+    Notes:
+        - 'sick' marking remains on EmployeeSickLeaveView because it requires a certificate.
+        - This endpoint will NOT overwrite a real 'present' record produced by face-scan attendance:
+          if the existing record has a `check_in_time`, the admin must clear it first
+          (we don't want a click to nuke a verified attendance entry).
+    """
+    permission_classes = [IsAdminUser | IsSiteAdmin]
+
+    ALLOWED_ACTIONS = ('present', 'absent', 'leave')
+
+    def post(self, request, employee_id):
+        from datetime import datetime as _dt
+
+        try:
+            emp = Employee.objects.get(id=employee_id)
+        except Employee.DoesNotExist:
+            return Response({'error': 'Employee not found'}, status=404)
+
+        date_str = request.data.get('date')
+        action = (request.data.get('action') or '').strip().lower()
+
+        if not date_str:
+            return Response({'error': 'date is required (YYYY-MM-DD)'}, status=400)
+        if action not in self.ALLOWED_ACTIONS:
+            return Response(
+                {'error': f"action must be one of {', '.join(self.ALLOWED_ACTIONS)}"},
+                status=400,
+            )
+
+        try:
+            target_date = _dt.strptime(date_str, '%Y-%m-%d').date()
+        except ValueError:
+            return Response({'error': 'Invalid date format. Use YYYY-MM-DD'}, status=400)
+
+        if target_date > timezone.localdate():
+            return Response({'error': 'Cannot mark a future date'}, status=400)
+
+        record, created = Attendance.objects.get_or_create(
+            user=emp, date=target_date,
+            defaults={'status': action},
+        )
+
+        # Refuse to clobber a real face-scan check-in.
+        if (not created and record.check_in_time
+                and record.status == 'present' and action != 'present'):
+            return Response(
+                {'error': "This day has a real check-in time. Clear the attendance first if you want to change it."},
+                status=400,
+            )
+
+        # Clear sick-leave artefacts when leaving the 'sick' state
+        if record.status == 'sick' and action != 'sick':
+            if record.medical_certificate:
+                record.medical_certificate.delete(save=False)
+            record.medical_certificate = None
+            record.sick_leave_note = None
+            record.sick_leave_marked_at = None
+            record.sick_leave_marked_by = None
+
+        # Clear check-in/out when moving away from present/late
+        if action in ('absent', 'leave'):
+            record.check_in_time = None
+            record.check_out_time = None
+            record.late_minutes = 0
+            record.early_minutes = 0
+
+        record.status = action
+        record.save()
+
+        return Response({
+            'success': True,
+            'id': record.id,
+            'date': str(record.date),
+            'status': record.status,
+        }, status=200)
+
+
 class AdminDeleteEmployeeView(APIView):
     permission_classes = [IsAdminUser]
 
@@ -2475,17 +2558,44 @@ def admin_user_detail_view(request, user_id):
                 # Calendar/List View Data
                 # Map records by date string
                 records_by_date = {r.date.isoformat(): r for r in attendance_records}
-                
+
+                # Build the list of leave (start, end) intervals from all history
+                # plus the employee's current leave window (covers an in-progress leave
+                # that has not yet been turned back to Active).
+                leave_intervals = []
+                for h in EmployeeStatusHistory.objects.filter(
+                    employee=employee, new_status='Leave',
+                    leave_start_date__isnull=False, leave_end_date__isnull=False,
+                ).only('leave_start_date', 'leave_end_date'):
+                    leave_intervals.append((h.leave_start_date, h.leave_end_date))
+                if employee.leave_start_date and employee.leave_end_date:
+                    leave_intervals.append((employee.leave_start_date, employee.leave_end_date))
+
+                emp_site_name = employee.site.name if employee.site else None
+
                 # Generate calendar grid if needed, or just list
                 # For simplicity, we return the list of days in the range
                 calendar_days = []
                 curr = start_date
                 while curr <= end_date:
                     record = records_by_date.get(curr.isoformat())
+
+                    is_on_leave = any(s <= curr <= e for (s, e) in leave_intervals)
+
+                    # Effective status — explicit record beats inferred leave
+                    if record:
+                        eff_status = record.status
+                    elif is_on_leave:
+                        eff_status = 'leave'
+                    else:
+                        eff_status = None
+
                     day_data = {
                         'date': curr,
+                        'is_on_leave': is_on_leave,
+                        'site_name': emp_site_name,
                         'record': {
-                            'status': record.status if record else None,
+                            'status': eff_status,
                             'late_minutes': record.late_minutes if record else 0,
                             'early_minutes': record.early_minutes if record else 0,
                             'medical_certificate_url': (
@@ -2493,10 +2603,10 @@ def admin_user_detail_view(request, user_id):
                                 if record and record.medical_certificate else None
                             ),
                             'sick_leave_note': record.sick_leave_note if record else None,
-                        } if record else None,
+                        } if (record or is_on_leave) else None,
                         'slots': []
                     }
-                    
+
                     if record:
                         if record.check_in_time:
                             day_data['slots'].append({
@@ -2510,10 +2620,10 @@ def admin_user_detail_view(request, user_id):
                                 'time': timezone.localtime(record.check_out_time).strftime("%H:%M"),
                                 'status': 'present' if record.early_minutes == 0 else 'absent' # Logic simplification
                             })
-                    
+
                     calendar_days.append(day_data)
                     curr += timedelta(days=1)
-                    
+
                 data['calendar_days'] = calendar_days
 
             return JsonResponse(data)

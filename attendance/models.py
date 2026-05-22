@@ -151,7 +151,7 @@ class Attendance(models.Model):
     early_minutes = models.IntegerField(default=0)  # Store early going minutes
     normal_ot_hours = models.DecimalField(max_digits=5, decimal_places=2, default=0.00)
     special_ot_hours = models.DecimalField(max_digits=5, decimal_places=2, default=0.00)
-    status = models.CharField(max_length=10, choices=[('present', 'Present'), ('absent', 'Absent'), ('late', 'Late'), ('sick', 'Sick')])
+    status = models.CharField(max_length=10, choices=[('present', 'Present'), ('absent', 'Absent'), ('late', 'Late'), ('sick', 'Sick'), ('leave', 'Leave')])
     date = models.DateField(default=timezone.localdate)  # Track date for attendance, using localdate
     latitude = models.FloatField(null=True, blank=True)  # Store latitude
     longitude = models.FloatField(null=True, blank=True)  # Store longitude

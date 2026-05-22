@@ -1095,18 +1095,29 @@
                 </div>
             `;
         } else if (currentDate) {
-            // No record OR absent — offer "Mark Sick" button
+            // No record OR absent — offer all 4 marking actions
             const allMissing = Object.values(slots).every(s => !s.status);
             if (allMissing) {
                 html += `
-                    <div class="alert alert-warning rounded-4 mb-4 d-flex justify-content-between align-items-center">
+                    <div class="alert alert-warning rounded-4 mb-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
                         <div>
                             <strong>No attendance recorded</strong>
-                            <div class="small text-secondary">If the employee was sick, you can mark this day as sick leave with a medical certificate.</div>
+                            <div class="small text-secondary">Manually classify this day:</div>
                         </div>
-                        <button type="button" class="btn btn-sm btn-info text-white" onclick="quickMarkSick('${currentDate}')">
-                            <i class="ri-capsule-line"></i> Mark as Sick
-                        </button>
+                        <div class="d-flex gap-2 flex-wrap">
+                            <button type="button" class="btn btn-sm btn-success" onclick="markDay('${currentDate}','present')">
+                                <i class="ri-checkbox-circle-line"></i> Mark Present
+                            </button>
+                            <button type="button" class="btn btn-sm btn-danger" onclick="markDay('${currentDate}','absent')">
+                                <i class="ri-close-circle-line"></i> Mark Absent
+                            </button>
+                            <button type="button" class="btn btn-sm btn-warning text-dark" onclick="markDay('${currentDate}','leave')">
+                                <i class="ri-flight-takeoff-line"></i> Mark Leave
+                            </button>
+                            <button type="button" class="btn btn-sm btn-info text-white" onclick="quickMarkSick('${currentDate}')">
+                                <i class="ri-capsule-line"></i> Mark Sick…
+                            </button>
+                        </div>
                     </div>
                 `;
             }
@@ -1180,25 +1191,58 @@
             const dateObj = new Date(d.date);
             const isToday = new Date().toISOString().split('T')[0] === d.date;
 
-            const isSick = d.record && d.record.status === 'sick';
-            const isAbsentNoSlots = (!d.slots.length && !isSick);
+            const status = d.record ? d.record.status : null;
+            const isSick    = status === 'sick';
+            const isLeave   = status === 'leave' || d.is_on_leave;
+            const isPresent = status === 'present' || status === 'late';
+            const isAbsent  = status === 'absent';
+            const hasNoActivity = !d.slots.length && !isSick && !isLeave;
+
+            // Action menu — shown on hover/click; the row clicking goToDate stays as primary nav.
+            const actionsMenu = `
+                <div class="dropdown" onclick="event.stopPropagation()">
+                    <button class="btn btn-sm btn-light border w-100 dropdown-toggle py-1"
+                        type="button" data-bs-toggle="dropdown" aria-expanded="false"
+                        style="font-size: 0.7rem;">
+                        <i class="ri-more-2-line"></i> Mark…
+                    </button>
+                    <ul class="dropdown-menu shadow-sm" style="font-size:0.8rem;">
+                        <li><a class="dropdown-item" href="#" onclick="event.preventDefault(); markDay('${d.date}','present'); return false;"><i class="ri-checkbox-circle-line text-success me-1"></i> Mark Present</a></li>
+                        <li><a class="dropdown-item" href="#" onclick="event.preventDefault(); markDay('${d.date}','absent');  return false;"><i class="ri-close-circle-line text-danger me-1"></i> Mark Absent</a></li>
+                        <li><a class="dropdown-item" href="#" onclick="event.preventDefault(); markDay('${d.date}','leave');   return false;"><i class="ri-flight-takeoff-line text-warning me-1"></i> Mark Leave</a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><a class="dropdown-item" href="#" onclick="event.preventDefault(); quickMarkSick('${d.date}'); return false;"><i class="ri-capsule-line text-info me-1"></i> Mark Sick…</a></li>
+                    </ul>
+                </div>
+            `;
+
+            // Border + visual cue per status
+            const borderCls = isSick    ? 'border-info'
+                            : isLeave   ? 'border-warning'
+                            : isAbsent  ? 'border-danger'
+                            : isPresent ? 'border-success'
+                            : '';
+
             html += `
-                <div class="calendar-cell ${isToday ? 'today' : ''} ${isSick ? 'border-info' : ''}" onclick="goToDate('${d.date}')">
-                    <div class="d-flex justify-content-between mb-2">
+                <div class="calendar-cell ${isToday ? 'today' : ''} ${borderCls}" onclick="goToDate('${d.date}')">
+                    <div class="d-flex justify-content-between mb-1">
                         <span class="fw-bold fs-5">${dateObj.getDate()}</span>
                         <span class="small opacity-50 fw-semibold">${dateObj.toLocaleString('en-US', { month: 'short' })}</span>
                     </div>
+                    ${d.site_name ? `<div class="small text-secondary mb-2" style="font-size:0.65rem;"><i class="ri-building-line"></i> ${d.site_name}</div>` : ''}
                     <div class="d-flex flex-column gap-1">
                         ${isSick ? `
                             <div class="calendar-badge bg-info text-white">🤒 SICK</div>
-                            ${d.record.medical_certificate_url ? `<a href="${d.record.medical_certificate_url}" target="_blank" onclick="event.stopPropagation()" class="small text-info"><i class="ri-file-download-line"></i> Certificate</a>` : ''}
+                            ${d.record && d.record.medical_certificate_url ? `<a href="${d.record.medical_certificate_url}" target="_blank" onclick="event.stopPropagation()" class="small text-info"><i class="ri-file-download-line"></i> Certificate</a>` : ''}
                         ` : ''}
+                        ${isLeave && !isSick ? `<div class="calendar-badge bg-warning text-dark">🏖️ LEAVE</div>` : ''}
+                        ${isAbsent && !isSick && !isLeave ? `<div class="calendar-badge bg-danger text-white">ABSENT</div>` : ''}
                         ${d.slots.length > 0 ? d.slots.map(s => `
                             <div class="calendar-badge ${s.status === 'present' ? 'bg-success text-white' : 'bg-warning text-dark'}">
                                 ${s.name}: ${s.time}
                             </div>
-                        `).join('') : (isSick ? '' : '<div class="small text-muted py-2 opacity-50"><i>No activity</i></div>')}
-                        ${isAbsentNoSlots ? `<button type="button" class="btn btn-sm btn-outline-info mt-1" onclick="event.stopPropagation(); quickMarkSick('${d.date}')"><i class="ri-add-line"></i> Mark Sick</button>` : ''}
+                        `).join('') : (isSick || isLeave || isAbsent ? '' : '<div class="small text-muted py-1 opacity-50"><i>No activity</i></div>')}
+                        ${actionsMenu}
                     </div>
                 </div>
             `;
@@ -1526,6 +1570,25 @@
             if (tabBtn) bootstrap.Tab.getOrCreateInstance(tabBtn).show();
             openAddSickLeaveForm(dateStr);
         }).catch(() => {});
+    }
+
+    // Mark a single calendar day as present / absent / leave (no file)
+    async function markDay(dateStr, action) {
+        const labels = { present: 'Present', absent: 'Absent', leave: 'Leave' };
+        if (!labels[action]) return;
+        if (!confirm(`Mark ${dateStr} as ${labels[action]}?`)) return;
+        const csrf = document.querySelector('[name=csrfmiddlewaretoken]').value;
+        try {
+            const res = await fetch(`/api/attendance/employees/${USER_ID}/mark-day/`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+                body: JSON.stringify({ date: dateStr, action }),
+            });
+            const result = await res.json();
+            if (!res.ok) { alert(result.error || 'Failed'); return; }
+            // refresh whichever view is active
+            if (typeof loadAllData === 'function') loadAllData();
+        } catch (e) { alert('Network error'); }
     }
 
     function _statusBadge(s) {
