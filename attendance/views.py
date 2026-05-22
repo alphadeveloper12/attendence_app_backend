@@ -798,12 +798,23 @@ class AdminEditEmployeeView(APIView):
                 emp.termination_reason = new_termination_reason or emp.termination_reason
             else:
                 emp.termination_reason = None
-            emp.leave_approval_date = new_leave_approval
-            emp.leave_start_date    = new_leave_start
-            emp.leave_type            = new_leave_type
-            emp.leave_ticket_eligible = new_ticket_eligible
-            emp.leave_ticket_price    = new_ticket_price
-            emp.leave_end_date      = new_leave_end
+            # If the new status is *not* Leave, clear the leave window fields so they
+            # don't pollute future displays (calendar auto-LEAVE inference, etc.).
+            # The historical Leave start/end dates remain preserved in EmployeeStatusHistory.
+            if new_status == 'Leave':
+                emp.leave_approval_date   = new_leave_approval
+                emp.leave_start_date      = new_leave_start
+                emp.leave_end_date        = new_leave_end
+                emp.leave_type            = new_leave_type
+                emp.leave_ticket_eligible = new_ticket_eligible
+                emp.leave_ticket_price    = new_ticket_price
+            else:
+                emp.leave_approval_date   = None
+                emp.leave_start_date      = None
+                emp.leave_end_date        = None
+                emp.leave_type            = None
+                emp.leave_ticket_eligible = None
+                emp.leave_ticket_price    = None
             emp.nationality = data.get('nationality')
             emp.gender = data.get('gender')
             emp.marital_status = data.get('marital_status')
@@ -2559,17 +2570,54 @@ def admin_user_detail_view(request, user_id):
                 # Map records by date string
                 records_by_date = {r.date.isoformat(): r for r in attendance_records}
 
-                # Build the list of leave (start, end) intervals from all history
-                # plus the employee's current leave window (covers an in-progress leave
-                # that has not yet been turned back to Active).
+                # Build the list of leave (start, end) intervals.
+                #
+                # Rules:
+                #   1. History 'Leave' transitions are clamped by any subsequent
+                #      transition (Active resumption, terminal status, or a new Leave).
+                #      An employee who returned early shouldn't have the rest of the
+                #      planned leave window still showing as LEAVE on their calendar.
+                #   2. The employee's *current* leave_start_date / leave_end_date is
+                #      only used if status is still 'Leave'. Stale values from previous
+                #      leaves don't pollute the calendar.
                 leave_intervals = []
-                for h in EmployeeStatusHistory.objects.filter(
-                    employee=employee, new_status='Leave',
-                    leave_start_date__isnull=False, leave_end_date__isnull=False,
-                ).only('leave_start_date', 'leave_end_date'):
-                    leave_intervals.append((h.leave_start_date, h.leave_end_date))
-                if employee.leave_start_date and employee.leave_end_date:
-                    leave_intervals.append((employee.leave_start_date, employee.leave_end_date))
+                history_list = list(
+                    EmployeeStatusHistory.objects
+                    .filter(employee=employee)
+                    .order_by('changed_at')
+                )
+                for i, h in enumerate(history_list):
+                    if (h.new_status != 'Leave'
+                            or not h.leave_start_date or not h.leave_end_date):
+                        continue
+                    effective_end = h.leave_end_date
+                    for later in history_list[i + 1:]:
+                        if later.new_status == 'Leave':
+                            # A new leave started; clamp this one just before it.
+                            if later.leave_start_date:
+                                effective_end = min(
+                                    effective_end,
+                                    later.leave_start_date - timedelta(days=1),
+                                )
+                            break
+                        if later.new_status == 'Active' and later.resumption_date:
+                            effective_end = min(
+                                effective_end,
+                                later.resumption_date - timedelta(days=1),
+                            )
+                            break
+                        if later.new_status in ('Resigned', 'Terminated', 'No Renewal', 'Absconding'):
+                            if later.last_working_date:
+                                effective_end = min(effective_end, later.last_working_date)
+                            break
+                    if effective_end >= h.leave_start_date:
+                        leave_intervals.append((h.leave_start_date, effective_end))
+
+                if (employee.status == 'Leave'
+                        and employee.leave_start_date and employee.leave_end_date):
+                    leave_intervals.append(
+                        (employee.leave_start_date, employee.leave_end_date)
+                    )
 
                 emp_site_name = employee.site.name if employee.site else None
 
