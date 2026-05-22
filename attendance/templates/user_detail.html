@@ -948,9 +948,12 @@
             resumptionWrapper.style.display = 'none';
         }
 
-        // Show last working date whenever it exists — date employee left
+        // Show last working date only when the employee is actually in a terminal status.
+        // For Active employees, an old last_working_date is stale (e.g., reverted from a
+        // previous Resigned/Terminated state) and shouldn't be displayed.
+        const TERMINAL = ['Resigned', 'Terminated', 'No Renewal', 'Absconding'];
         const lastWorkingWrapper = document.getElementById('last-working-date-wrapper');
-        if (emp.last_working_date) {
+        if (emp.last_working_date && TERMINAL.includes(emp.status)) {
             document.getElementById('emp-last-working-date').textContent = emp.last_working_date;
             lastWorkingWrapper.style.display = '';
         } else {

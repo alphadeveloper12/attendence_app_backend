@@ -791,7 +791,13 @@ class AdminEditEmployeeView(APIView):
             emp.salary_grade = data.get('salary_grade')
             emp.status = new_status
             emp.resumption_date = new_resumption
-            emp.last_working_date = new_last_working
+            # last_working_date only applies to terminal statuses; clear it when the
+            # employee is moved back to a non-terminal state (e.g. Active after a
+            # reverted Resignation).
+            if new_status in TERMINAL_STATUSES:
+                emp.last_working_date = new_last_working
+            else:
+                emp.last_working_date = None
             # Only update termination_reason when the new status is Resigned/Terminated;
             # clear it if the employee is moved out of those statuses.
             if new_status in ('Resigned', 'Terminated'):
