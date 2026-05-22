@@ -565,6 +565,17 @@
                                         Date employee left
                                     </div>
                                 </div>
+                                <!-- Reason — shown only when status is Resigned or Terminated -->
+                                <div class="col-12" id="terminationReasonWrapper" style="display:none;">
+                                    <label class="form-label small fw-bold text-uppercase"
+                                        style="font-size:0.65rem;color:#dc2626;">
+                                        Reason <span style="color:#dc2626;">*</span>
+                                    </label>
+                                    <textarea name="termination_reason" id="terminationReasonInput"
+                                        rows="2" class="form-control form-control-modern"
+                                        style="border-color:#dc2626;"
+                                        placeholder="Why is the employee being marked as Resigned / Terminated?"></textarea>
+                                </div>
                                 <!-- Leave Dates — shown only when status is being set to Leave -->
                                 <div class="col-md-3 leave-date-field" id="leaveApprovalDateWrapper" style="display:none;">
                                     <label class="form-label small fw-bold text-uppercase"
@@ -1304,6 +1315,16 @@
         lastWrapper.style.display = isTerminating ? '' : 'none';
         lastInput.required = isTerminating;
 
+        // Reason — only when status is Resigned or Terminated (current or new)
+        const reasonWrapper = document.getElementById('terminationReasonWrapper');
+        const reasonInput   = document.getElementById('terminationReasonInput');
+        if (reasonWrapper && reasonInput) {
+            const needsReason = (newStatus === 'Resigned' || newStatus === 'Terminated');
+            reasonWrapper.style.display = needsReason ? '' : 'none';
+            // Required only when transitioning INTO Resigned/Terminated from a different status
+            reasonInput.required = needsReason && originalEmployeeStatus !== newStatus;
+        }
+
         // Leave Dates — only when transitioning INTO Leave
         const isStartingLeave = (originalEmployeeStatus !== 'Leave' && newStatus === 'Leave');
         const leaveFields = [
@@ -1660,6 +1681,20 @@
             document.getElementById('lastWorkingDateInput').focus();
             alert(`Please provide the last working date — the date the employee left as ${newStatus}.`);
             return;
+        }
+
+        // Reason validation — required when transitioning to Resigned or Terminated
+        const isResignOrTerminate = (
+            originalEmployeeStatus !== newStatus
+            && (newStatus === 'Resigned' || newStatus === 'Terminated')
+        );
+        if (isResignOrTerminate) {
+            const reason = (document.getElementById('terminationReasonInput').value || '').trim();
+            if (!reason) {
+                document.getElementById('terminationReasonInput').focus();
+                alert(`Please provide a reason for marking the employee as ${newStatus}.`);
+                return;
+            }
         }
 
         // Leave dates validation — required when transitioning to Leave

@@ -273,6 +273,15 @@
                         Last Working: <span id="emp-last-working-date">—</span>
                     </span>
                 </div>
+                <div class="col-12" id="termination-reason-wrapper" style="display:none;">
+                    <div class="mt-2 p-3 rounded-3 border"
+                        style="background:rgba(220,38,38,0.06);border-color:rgba(220,38,38,0.3) !important;">
+                        <div class="small fw-bold text-uppercase mb-1" style="color:#dc2626;font-size:0.7rem;">
+                            <i class="ri-error-warning-line me-1"></i> Reason
+                        </div>
+                        <div id="emp-termination-reason" style="color:#7f1d1d;white-space:pre-wrap;">—</div>
+                    </div>
+                </div>
                 <div class="col-auto" id="sick-leave-wrapper" style="display:none;">
                     <span class="badge rounded-pill px-3 py-2 fw-semibold"
                         style="background:rgba(13,202,240,0.1);color:#0dcaf0;border:1px solid rgba(13,202,240,0.3); cursor:pointer;"
@@ -486,6 +495,17 @@
                                     <div class="text-danger" style="font-size:0.7rem;margin-top:3px;">
                                         Date employee left
                                     </div>
+                                </div>
+                                <!-- Reason — shown only when status is Resigned or Terminated -->
+                                <div class="col-12" id="terminationReasonWrapper" style="display:none;">
+                                    <label class="form-label small fw-bold text-uppercase"
+                                        style="font-size:0.65rem;color:#dc2626;">
+                                        Reason <span style="color:#dc2626;">*</span>
+                                    </label>
+                                    <textarea name="termination_reason" id="terminationReasonInput"
+                                        rows="2" class="form-control form-control-modern"
+                                        style="border-color:#dc2626;"
+                                        placeholder="Why is the employee being marked as Resigned / Terminated?"></textarea>
                                 </div>
                                 <!-- Leave Dates — shown only when status is being set to Leave -->
                                 <div class="col-md-3 leave-date-field" id="leaveApprovalDateWrapper"
@@ -937,6 +957,17 @@
             lastWorkingWrapper.style.display = 'none';
         }
 
+        // Show termination reason — only when status is Resigned/Terminated and a reason exists
+        const reasonWrapper = document.getElementById('termination-reason-wrapper');
+        if (reasonWrapper) {
+            if (emp.termination_reason && (emp.status === 'Resigned' || emp.status === 'Terminated')) {
+                document.getElementById('emp-termination-reason').textContent = emp.termination_reason;
+                reasonWrapper.style.display = '';
+            } else {
+                reasonWrapper.style.display = 'none';
+            }
+        }
+
         // Show leave dates — only when employee is currently on Leave
         const leaveWrapper = document.getElementById('leave-dates-wrapper');
         if (emp.status === 'Leave' && (emp.leave_approval_date || emp.leave_start_date || emp.leave_end_date)) {
@@ -1266,6 +1297,15 @@
         const isTerminating = (wasNotTerminal && TERMINAL_STATUSES.includes(newStatus));
         lastWrapper.style.display = isTerminating ? '' : 'none';
         lastInput.required = isTerminating;
+
+        // Reason — only when status is Resigned or Terminated
+        const reasonWrapper = document.getElementById('terminationReasonWrapper');
+        const reasonInput = document.getElementById('terminationReasonInput');
+        if (reasonWrapper && reasonInput) {
+            const needsReason = (newStatus === 'Resigned' || newStatus === 'Terminated');
+            reasonWrapper.style.display = needsReason ? '' : 'none';
+            reasonInput.required = needsReason && originalEmployeeStatus !== newStatus;
+        }
 
         const isStartingLeave = (originalEmployeeStatus !== 'Leave' && newStatus === 'Leave');
         const leaveFields = [
@@ -1624,6 +1664,20 @@
             document.getElementById('lastWorkingDateInput').focus();
             alert(`Please provide the last working date.`);
             return;
+        }
+
+        // Reason validation — required when transitioning to Resigned or Terminated
+        const isResignOrTerminate = (
+            originalEmployeeStatus !== newStatus
+            && (newStatus === 'Resigned' || newStatus === 'Terminated')
+        );
+        if (isResignOrTerminate) {
+            const reason = (document.getElementById('terminationReasonInput').value || '').trim();
+            if (!reason) {
+                document.getElementById('terminationReasonInput').focus();
+                alert(`Please provide a reason for marking the employee as ${newStatus}.`);
+                return;
+            }
         }
 
         const isStartingLeave = (originalEmployeeStatus !== 'Leave' && newStatus === 'Leave');

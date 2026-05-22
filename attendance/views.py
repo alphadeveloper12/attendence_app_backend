@@ -546,12 +546,19 @@ class AdminAddEmployeeView(APIView):
                 else None
             )
             leave_ticket_price  = parse_decimal(data.get('leave_ticket_price')) if leave_ticket_eligible else None
+            termination_reason  = (data.get('termination_reason') or '').strip() or None
 
             # Validate last_working_date for terminal statuses
             TERMINAL_STATUSES = {'Resigned', 'Terminated', 'No Renewal', 'Absconding'}
             if status in TERMINAL_STATUSES and not last_working_date:
                 return Response(
                     {'error': f'Last working date is required when status is {status}.'},
+                    status=400,
+                )
+            # Reason required when status is Resigned or Terminated
+            if status in ('Resigned', 'Terminated') and not termination_reason:
+                return Response(
+                    {'error': f'Reason is required when status is {status}.'},
                     status=400,
                 )
 
@@ -584,6 +591,7 @@ class AdminAddEmployeeView(APIView):
                 status=status,
                 resumption_date=resumption_date,
                 last_working_date=last_working_date,
+                termination_reason=termination_reason,
                 leave_approval_date=leave_approval_date,
                 leave_start_date=leave_start_date,
                 leave_end_date=leave_end_date,
@@ -626,7 +634,11 @@ class AdminAddEmployeeView(APIView):
                     leave_type=leave_type,
                     leave_ticket_eligible=leave_ticket_eligible,
                     leave_ticket_price=leave_ticket_price,
-                    note='Initial status on employee creation',
+                    note=(
+                        f"Initial status on employee creation — Reason: {termination_reason}"
+                        if status in ('Resigned', 'Terminated') and termination_reason
+                        else 'Initial status on employee creation'
+                    ),
                     changed_by=request.user if request.user.is_authenticated else None,
                 )
 
@@ -654,6 +666,7 @@ class AdminEditEmployeeView(APIView):
                 'status': emp.status,
                 'resumption_date': str(emp.resumption_date) if emp.resumption_date else '',
                 'last_working_date': str(emp.last_working_date) if emp.last_working_date else '',
+                'termination_reason': emp.termination_reason or '',
                 'leave_approval_date': str(emp.leave_approval_date) if emp.leave_approval_date else '',
                 'leave_start_date': str(emp.leave_start_date) if emp.leave_start_date else '',
                 'leave_end_date': str(emp.leave_end_date) if emp.leave_end_date else '',
@@ -721,6 +734,7 @@ class AdminEditEmployeeView(APIView):
             )
             new_ticket_price     = parse_decimal(data.get('leave_ticket_price')) if new_ticket_eligible else None
             new_leave_end        = parse_date(data.get('leave_end_date'))
+            new_termination_reason = (data.get('termination_reason') or '').strip() or None
             old_status           = emp.status
 
             # Resumption date — required when bringing employee back from Leave to Active
@@ -737,6 +751,15 @@ class AdminEditEmployeeView(APIView):
             if is_terminating and not new_last_working:
                 return Response(
                     {'error': f'Last working date is required when status changes to {new_status}.'},
+                    status=400,
+                )
+            # Reason required when transitioning INTO Resigned or Terminated
+            is_resigned_or_terminated = (
+                old_status != new_status and new_status in ('Resigned', 'Terminated')
+            )
+            if is_resigned_or_terminated and not new_termination_reason:
+                return Response(
+                    {'error': f'Reason is required when status changes to {new_status}.'},
                     status=400,
                 )
 
@@ -769,6 +792,12 @@ class AdminEditEmployeeView(APIView):
             emp.status = new_status
             emp.resumption_date = new_resumption
             emp.last_working_date = new_last_working
+            # Only update termination_reason when the new status is Resigned/Terminated;
+            # clear it if the employee is moved out of those statuses.
+            if new_status in ('Resigned', 'Terminated'):
+                emp.termination_reason = new_termination_reason or emp.termination_reason
+            else:
+                emp.termination_reason = None
             emp.leave_approval_date = new_leave_approval
             emp.leave_start_date    = new_leave_start
             emp.leave_type            = new_leave_type
@@ -835,6 +864,9 @@ class AdminEditEmployeeView(APIView):
                     leave_ticket_price=new_ticket_price       if is_starting_leave else None,
                     note=(
                         f"{old_status or '—'} → {new_status}"
+                        + (f" — Reason: {new_termination_reason}"
+                           if new_status in ('Resigned', 'Terminated') and new_termination_reason
+                           else "")
                     ),
                     changed_by=request.user if request.user.is_authenticated else None,
                 )
@@ -2342,6 +2374,7 @@ def admin_user_detail_view(request, user_id):
                     'status': employee.status,
                     'resumption_date': str(employee.resumption_date) if employee.resumption_date else None,
                     'last_working_date': str(employee.last_working_date) if employee.last_working_date else None,
+                    'termination_reason': employee.termination_reason or None,
                     'leave_approval_date': str(employee.leave_approval_date) if employee.leave_approval_date else None,
                     'leave_start_date': str(employee.leave_start_date) if employee.leave_start_date else None,
                     'leave_end_date': str(employee.leave_end_date) if employee.leave_end_date else None,

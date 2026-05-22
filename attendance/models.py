@@ -95,6 +95,7 @@ class Employee(models.Model):
     status = models.CharField(max_length=50, null=True, blank=True)  # Active, Leave, Resigned, Terminated, No Renewal, Absconding, Other
     resumption_date = models.DateField(null=True, blank=True)    # Set when employee returns from Leave → Active
     last_working_date = models.DateField(null=True, blank=True)  # Set when employee leaves: Resigned/Terminated/No Renewal/Absconding
+    termination_reason = models.TextField(null=True, blank=True)  # Required when status → Resigned/Terminated
     leave_approval_date = models.DateField(null=True, blank=True)  # Repurposed: now stores Last Working Date before leave
     leave_start_date    = models.DateField(null=True, blank=True)  # First day of leave
     leave_end_date      = models.DateField(null=True, blank=True)  # Last day of leave (planned return on next day)
