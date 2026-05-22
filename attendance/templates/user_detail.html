@@ -1191,9 +1191,12 @@
             const dateObj = new Date(d.date);
             const isToday = new Date().toISOString().split('T')[0] === d.date;
 
+            // Trust the backend's effective status — it already resolves explicit
+            // Attendance rows over inferred leave days. Using `d.is_on_leave` here would
+            // override a manually marked Present/Absent day with LEAVE, which was the bug.
             const status = d.record ? d.record.status : null;
             const isSick    = status === 'sick';
-            const isLeave   = status === 'leave' || d.is_on_leave;
+            const isLeave   = status === 'leave';
             const isPresent = status === 'present' || status === 'late';
             const isAbsent  = status === 'absent';
             const hasNoActivity = !d.slots.length && !isSick && !isLeave;
