@@ -678,7 +678,22 @@
                                 <div class="col-md-4"><label
                                         class="form-label small fw-bold text-secondary text-uppercase"
                                         style="font-size: 0.65rem;">Project / Site</label><select name="site"
-                                        id="employeeSiteSelect" class="form-select form-select-modern"></select></div>
+                                        id="employeeSiteSelect" class="form-select form-select-modern"
+                                        onchange="onSiteChanged()"></select></div>
+                                <!-- Effective From — shown only when site selection actually changes -->
+                                <div class="col-md-4" id="siteEffectiveFromWrapper" style="display:none;">
+                                    <label class="form-label small fw-bold text-uppercase"
+                                        style="font-size:0.65rem;color:#dc2626;">
+                                        Effective From <span style="color:#dc2626;">*</span>
+                                    </label>
+                                    <input type="date" name="site_effective_from"
+                                        id="siteEffectiveFromInput"
+                                        class="form-control form-control-modern"
+                                        style="border-color:#dc2626;">
+                                    <div class="text-danger" style="font-size:0.7rem;margin-top:3px;">
+                                        From this date the calendar will show the new site
+                                    </div>
+                                </div>
                                 <div class="col-md-4"><label
                                         class="form-label small fw-bold text-secondary text-uppercase"
                                         style="font-size: 0.65rem;">Sponsor</label>
@@ -1184,15 +1199,28 @@
             }
 
             wrapper.classList.remove('d-none');
-            container.innerHTML = data.map(a => `
+            container.innerHTML = data.map(a => {
+                const isOnLeave = a.kind === 'on_leave';
+                const iconWrap = isOnLeave
+                    ? 'bg-warning bg-opacity-10 text-warning'
+                    : 'bg-danger bg-opacity-10 text-danger';
+                const icon = isOnLeave ? 'ri-flight-takeoff-line' : 'ri-error-warning-line';
+                const statusLabel = a.status || (isOnLeave ? 'Marked attendance while on Leave' : 'Out of Bounds');
+                const statusBadge = isOnLeave
+                    ? 'bg-warning bg-opacity-10 text-warning'
+                    : 'bg-danger bg-opacity-10 text-danger';
+                return `
                 <div class="d-flex align-items-center gap-3 mb-3 p-3 rounded-4 bg-light border border-white">
-                    <div class="bg-danger bg-opacity-10 text-danger p-2 rounded-circle"><i class="ri-error-warning-line"></i></div>
+                    <div class="${iconWrap} p-2 rounded-circle"><i class="${icon}"></i></div>
                     <div class="flex-grow-1">
-                        <div class="fw-bold text-dark">${a.user_name}</div>
+                        <div class="fw-bold text-dark">${a.user_name}
+                            <span class="badge rounded-pill ${statusBadge} ms-2" style="font-size:0.65rem;">${statusLabel}</span>
+                        </div>
                         <div class="small text-secondary">${a.site} • ${a.time}</div>
                     </div>
                     <a href="/api/attendance/dashboard/user/${a.user_id}/" class="btn btn-sm btn-white border rounded-3">Details</a>
-                </div>`).join('');
+                </div>`;
+            }).join('');
         } catch (e) { console.error(e); }
     }
 
@@ -1383,6 +1411,20 @@
 
     // Track original status when editing — needed to detect transitions
     let originalEmployeeStatus = null;
+    let originalEmployeeSiteId = '';
+
+    // Toggle the "Effective From" date picker visibility when site selection changes
+    function onSiteChanged() {
+        const sel = document.getElementById('employeeSiteSelect');
+        const wrap = document.getElementById('siteEffectiveFromWrapper');
+        const inp = document.getElementById('siteEffectiveFromInput');
+        if (!sel || !wrap || !inp) return;
+        const changed = String(sel.value) !== String(originalEmployeeSiteId || '');
+        wrap.style.display = changed ? '' : 'none';
+        inp.required = changed;
+        if (changed && !inp.value) inp.value = new Date().toISOString().split('T')[0];
+        if (!changed) inp.value = '';
+    }
 
     const TERMINAL_STATUSES = ['Resigned', 'Terminated', 'No Renewal', 'Absconding'];
 
@@ -1495,6 +1537,13 @@
             });
             // Remember original status — needed to detect Leave → Active transition
             originalEmployeeStatus = data.status || null;
+            // Remember original site for the Effective-From toggle
+            originalEmployeeSiteId = data.site || '';
+            // Hide the Effective From field unless the user later changes the site
+            const effWrap = document.getElementById('siteEffectiveFromWrapper');
+            const effInp  = document.getElementById('siteEffectiveFromInput');
+            if (effWrap) effWrap.style.display = 'none';
+            if (effInp)  { effInp.required = false; effInp.value = ''; }
             // Initially hide; will appear only if user changes Leave → Active
             toggleResumptionDate(data.status || '');
             // If currently on Leave, sync ticket-price visibility from current eligibility value
@@ -1814,6 +1863,18 @@
         const newStatus  = document.getElementById('employeeStatusSelect').value;
         const resumption = document.getElementById('resumptionDateInput').value;
         const lastWorking = document.getElementById('lastWorkingDateInput').value;
+
+        // Site-change → effective date required
+        const siteSel = document.getElementById('employeeSiteSelect');
+        const siteChanged = siteSel && String(siteSel.value) !== String(originalEmployeeSiteId || '');
+        if (siteChanged) {
+            const effFrom = document.getElementById('siteEffectiveFromInput').value;
+            if (!effFrom) {
+                document.getElementById('siteEffectiveFromInput').focus();
+                alert('Please provide the Effective From date for the new site assignment.');
+                return;
+            }
+        }
 
         // Resumption date validation — required when bringing back from Leave to Active
         const isResuming = (originalEmployeeStatus === 'Leave' && newStatus === 'Active');

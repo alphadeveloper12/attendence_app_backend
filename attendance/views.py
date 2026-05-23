@@ -514,6 +514,7 @@ BULK_EDIT_COLUMNS = [
     'Position',
     'Category',
     'Site Name',
+    'Site Effective From',      # required (date) when Site Name is being changed — YYYY-MM-DD
     'Sponsor',          # one of SPONSOR_CHOICES
     'Employer',         # one of EMPLOYER_CHOICES
     'Status',           # Active / Leave / Resigned / Terminated / No Renewal / Absconding / Other
@@ -941,14 +942,31 @@ class BulkEditEmployeesView(APIView):
                             setattr(emp, f_name, date_overrides[f_name])
 
                 # ── Site change history ──────────────────────────────────────
-                if (old_site and emp.site and old_site.id != emp.site_id) \
-                        or (old_site and not emp.site) \
-                        or (not old_site and emp.site):
+                site_changed = (
+                    (old_site and emp.site and old_site.id != emp.site_id)
+                    or (old_site and not emp.site)
+                    or (not old_site and emp.site)
+                )
+                if site_changed:
+                    eff_raw = get(row, 'Site Effective From')
+                    eff_from = coerce_date(eff_raw) if eff_raw else None
+                    if eff_raw and not eff_from:
+                        results['errors'].append({
+                            'row': row_idx, 'badge_number': badge,
+                            'error': f'Could not parse "Site Effective From": "{eff_raw}"',
+                        })
+                        raise ValueError('skip')
+                    if not eff_from:
+                        results['errors'].append({
+                            'row': row_idx, 'badge_number': badge,
+                            'error': 'Site Effective From is required when Site Name changes',
+                        })
+                        raise ValueError('skip')
                     EmployeeSiteHistory.objects.create(
                         employee=emp,
                         old_site=old_site,
                         new_site=emp.site,
-                        effective_from=timezone.localdate(),
+                        effective_from=eff_from,
                         note=(
                             f"{old_site.name if old_site else '—'} → "
                             f"{emp.site.name if emp.site else '—'} (bulk edit)"
@@ -1341,15 +1359,28 @@ class AdminEditEmployeeView(APIView):
             else:
                 emp.site = None
 
-            # Site-change history (only on actual transition)
-            if (old_site and emp.site and old_site.id != emp.site.id) \
-                    or (old_site and not emp.site) \
-                    or (not old_site and emp.site):
+            # Site-change history (only on actual transition).
+            # The frontend sends `site_effective_from` (YYYY-MM-DD) — required when site
+            # actually changes — so that calendar cards prior to that date keep showing
+            # the previous site, and only days from that date forward show the new one.
+            site_changed = (
+                (old_site and emp.site and old_site.id != emp.site.id)
+                or (old_site and not emp.site)
+                or (not old_site and emp.site)
+            )
+            if site_changed:
+                eff_from_raw = data.get('site_effective_from')
+                effective_from = parse_date(eff_from_raw) if eff_from_raw else timezone.localdate()
+                if not effective_from:
+                    return Response(
+                        {'error': 'Effective From date is required when changing the site.'},
+                        status=400,
+                    )
                 EmployeeSiteHistory.objects.create(
                     employee=emp,
                     old_site=old_site,
                     new_site=emp.site,
-                    effective_from=timezone.localdate(),
+                    effective_from=effective_from,
                     note=(
                         f"{old_site.name if old_site else '—'} → "
                         f"{emp.site.name if emp.site else '—'}"
@@ -2481,34 +2512,60 @@ class AttendanceStatsView(APIView):
 
 class AttendanceAlertsView(APIView):
     permission_classes = [IsAdminUser | IsSiteAdmin]
-    
+
     def get(self, request):
         today = timezone.localdate()
-        alerts = Attendance.objects.filter(
-            date=today, 
-            is_within_geofence=False
+        site_id = request.GET.get('site')
+
+        # ── Pool 1: Out-of-bounds (geofence failure) ─────────────────────────
+        geofence_alerts = Attendance.objects.filter(
+            date=today, is_within_geofence=False,
         ).select_related('user', 'user__site')
 
-        # Filter
-        site_id = request.GET.get('site')
+        # ── Pool 2: Employee currently on Leave but face-scanned today ───────
+        # An employee marked an attendance while the system has them on Leave —
+        # admin needs to know either to revoke leave or correct the attendance.
+        on_leave_alerts = (
+            Attendance.objects
+            .filter(date=today, user__status='Leave')
+            .filter(
+                Q(check_in_time__isnull=False) | Q(check_out_time__isnull=False)
+            )
+            .filter(
+                Q(user__leave_start_date__isnull=True)
+                | Q(user__leave_start_date__lte=today)
+            )
+            .filter(
+                Q(user__leave_end_date__isnull=True)
+                | Q(user__leave_end_date__gte=today)
+            )
+            .select_related('user', 'user__site')
+        )
+
+        # Site-admin scope filter
         if not request.user.is_superuser:
             try:
                 profile = AdminProfile.objects.get(user=request.user)
                 assigned_sites = profile.sites.all()
                 if site_id and site_id != 'all':
                     if not assigned_sites.filter(id=site_id).exists():
-                        alerts = alerts.none()
+                        geofence_alerts = geofence_alerts.none()
+                        on_leave_alerts = on_leave_alerts.none()
                     else:
-                        alerts = alerts.filter(user__site_id=site_id)
+                        geofence_alerts = geofence_alerts.filter(user__site_id=site_id)
+                        on_leave_alerts = on_leave_alerts.filter(user__site_id=site_id)
                 else:
-                    alerts = alerts.filter(user__site__in=assigned_sites)
+                    geofence_alerts = geofence_alerts.filter(user__site__in=assigned_sites)
+                    on_leave_alerts = on_leave_alerts.filter(user__site__in=assigned_sites)
             except AdminProfile.DoesNotExist:
-                alerts = alerts.none()
+                geofence_alerts = geofence_alerts.none()
+                on_leave_alerts = on_leave_alerts.none()
         elif site_id and site_id != 'all':
-            alerts = alerts.filter(user__site_id=site_id)
+            geofence_alerts = geofence_alerts.filter(user__site_id=site_id)
+            on_leave_alerts = on_leave_alerts.filter(user__site_id=site_id)
 
         data = []
-        for a in alerts:
+        for a in geofence_alerts:
             data.append({
                 "id": a.id,
                 "user_name": a.user.name,
@@ -2518,7 +2575,26 @@ class AttendanceAlertsView(APIView):
                 "time": a.check_in_time.strftime("%H:%M") if a.check_in_time else (a.check_out_time.strftime("%H:%M") if a.check_out_time else "-"),
                 "lat": a.latitude,
                 "long": a.longitude,
-                "status": "Out of Bounds"
+                "status": "Out of Bounds",
+                "kind": "geofence",
+            })
+
+        # Avoid duplicating the same Attendance row if it triggers both alerts
+        geofence_ids = {a["id"] for a in data}
+        for a in on_leave_alerts:
+            if a.id in geofence_ids:
+                continue
+            data.append({
+                "id": a.id,
+                "user_name": a.user.name,
+                "user_id": a.user.id,
+                "user_pic": a.user.profile_picture.url if a.user.profile_picture else None,
+                "site": a.user.site.name if a.user.site else "-",
+                "time": a.check_in_time.strftime("%H:%M") if a.check_in_time else (a.check_out_time.strftime("%H:%M") if a.check_out_time else "-"),
+                "lat": a.latitude,
+                "long": a.longitude,
+                "status": "Marked attendance while on Leave",
+                "kind": "on_leave",
             })
         return Response(data)
 
@@ -3175,13 +3251,66 @@ def admin_user_detail_view(request, user_id):
                         (employee.leave_start_date, employee.leave_end_date)
                     )
 
-                emp_site_name = employee.site.name if employee.site else None
+                # Per-day site resolution — picks the assignment that was effective
+                # on that day from EmployeeSiteHistory. Falls back to the current
+                # employee.site when the date predates any recorded history.
+                site_segments = list(
+                    employee.site_history
+                            .select_related('new_site')
+                            .order_by('effective_from')
+                )
+                fallback_site_name = employee.site.name if employee.site else None
+
+                def _site_for_day(d):
+                    matched = None
+                    for h in site_segments:
+                        if h.effective_from <= d:
+                            matched = h
+                        else:
+                            break
+                    if matched:
+                        return matched.new_site.name if matched.new_site else None
+                    return fallback_site_name
+
+                # Per-day employee status resolution from EmployeeStatusHistory
+                # (status changes are sequential by changed_at). For dates before any
+                # recorded change we use the employee's *current* status as a best-guess.
+                status_changes = list(
+                    EmployeeStatusHistory.objects
+                    .filter(employee=employee)
+                    .order_by('changed_at')
+                    .values('new_status', 'changed_at')
+                )
+
+                def _status_for_day(d):
+                    eff = None
+                    for ch in status_changes:
+                        if ch['changed_at'].date() <= d:
+                            eff = ch['new_status']
+                        else:
+                            break
+                    return eff or employee.status
+
+                # Trim days that fall after the employee's last working date when the
+                # employee is in a terminal status — they were no longer with the
+                # company on those days, so no card should render.
+                TERMINAL_TRIM = {'Resigned', 'Terminated', 'No Renewal', 'Absconding'}
+                terminal_cutoff = (
+                    employee.last_working_date
+                    if employee.status in TERMINAL_TRIM and employee.last_working_date
+                    else None
+                )
 
                 # Generate calendar grid if needed, or just list
                 # For simplicity, we return the list of days in the range
                 calendar_days = []
                 curr = start_date
                 while curr <= end_date:
+                    # Skip days after the employee's terminal cut-off
+                    if terminal_cutoff and curr > terminal_cutoff:
+                        curr += timedelta(days=1)
+                        continue
+
                     record = records_by_date.get(curr.isoformat())
 
                     is_on_leave = any(s <= curr <= e for (s, e) in leave_intervals)
@@ -3197,7 +3326,8 @@ def admin_user_detail_view(request, user_id):
                     day_data = {
                         'date': curr,
                         'is_on_leave': is_on_leave,
-                        'site_name': emp_site_name,
+                        'site_name': _site_for_day(curr),
+                        'employee_status': _status_for_day(curr),
                         'record': {
                             'status': eff_status,
                             'late_minutes': record.late_minutes if record else 0,
@@ -3292,7 +3422,9 @@ def admin_sites_view(request):
                 'worker_start': site.worker_start_time.strftime("%H:%M") if site.worker_start_time else "",
                 'worker_end': site.worker_end_time.strftime("%H:%M") if site.worker_end_time else "",
                 'office_day_off': site.office_day_off or "",
-                'worker_day_off': site.worker_day_off or ""
+                'worker_day_off': site.worker_day_off or "",
+                'has_geofence': bool(site.coordinates),
+                'geofence_filename': site.geofence_filename or "",
             })
             
         return JsonResponse({
@@ -3516,14 +3648,16 @@ def admin_add_site(request):
                 })
             
             coordinates = None
+            geofence_filename = None
             if 'kml_file' in request.FILES:
                 try:
                     kml_file = request.FILES['kml_file']
+                    geofence_filename = kml_file.name
                     tree = ET.parse(kml_file)
                     root = tree.getroot()
                     namespace = {'kml': 'http://www.opengis.net/kml/2.2'}
                     coords_elements = root.findall('.//kml:coordinates', namespace)
-                    
+
                     coords_list = []
                     for coord in coords_elements:
                         coords = coord.text.strip().split()
@@ -3532,7 +3666,7 @@ def admin_add_site(request):
                             if len(parts) >= 2:
                                 lon, lat = parts[0], parts[1]
                                 coords_list.append((float(lat), float(lon)))
-                    
+
                     if coords_list:
                         coordinates = coords_list
                 except Exception as e:
@@ -3546,8 +3680,9 @@ def admin_add_site(request):
             worker_day_off = request.POST.get("worker_day_off")
 
             Site.objects.create(
-                name=name, 
+                name=name,
                 coordinates=coordinates,
+                geofence_filename=geofence_filename,
                 office_start_time=office_start or "09:00:00",
                 office_end_time=office_end or "18:00:00",
                 worker_start_time=worker_start or "08:00:00",
@@ -3599,11 +3734,12 @@ def admin_edit_site(request, site_id):
             if 'kml_file' in request.FILES:
                 try:
                     kml_file = request.FILES['kml_file']
+                    site.geofence_filename = kml_file.name
                     tree = ET.parse(kml_file)
                     root = tree.getroot()
                     namespace = {'kml': 'http://www.opengis.net/kml/2.2'}
                     coords_elements = root.findall('.//kml:coordinates', namespace)
-                    
+
                     coords_list = []
                     for coord in coords_elements:
                         coords = coord.text.strip().split()
@@ -3612,7 +3748,7 @@ def admin_edit_site(request, site_id):
                             if len(parts) >= 2:
                                 lon, lat = parts[0], parts[1]
                                 coords_list.append((float(lat), float(lon)))
-                    
+
                     if coords_list:
                         site.coordinates = coords_list
                 except Exception as e:

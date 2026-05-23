@@ -331,6 +331,11 @@
                     </div>
                     <div class="mb-0">
                         <label class="form-label-premium">Update Geofence (Optional)</label>
+                        <div id="editExistingGeofenceFile" class="small mb-2 d-none p-2 rounded-2"
+                             style="background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe;">
+                            <i class="ri-file-text-line me-1"></i>
+                            Existing file: <span class="fw-bold font-monospace" id="editExistingGeofenceFileName">—</span>
+                        </div>
                         <input type="file" name="kml_file" class="form-control form-control-premium" accept=".kml">
                         <div class="small text-secondary mt-2"><i class="ri-alert-line text-warning me-1"></i> Uploading
                             a new file will replace existing coordinates.</div>
@@ -519,12 +524,14 @@
                 </td>
                 <td class="text-end pe-4">
                     <div class="d-flex gap-2 justify-content-end">
-                        <button onclick="showEditModal('${s.id}', '${s.name.replace(/'/g, "\\'")}', '${s.office_start}', '${s.office_end}', '${s.worker_start}', '${s.worker_end}', '${s.office_day_off.replace(/'/g, "\\'")}', '${s.worker_day_off.replace(/'/g, "\\'")}')" class="btn btn-sm btn-pro">
+                        <button onclick="showEditModal('${s.id}', '${s.name.replace(/'/g, "\\'")}', '${s.office_start}', '${s.office_end}', '${s.worker_start}', '${s.worker_end}', '${s.office_day_off.replace(/'/g, "\\'")}', '${s.worker_day_off.replace(/'/g, "\\'")}', '${(s.geofence_filename || '').replace(/'/g, "\\'")}')" class="btn btn-sm btn-pro">
                             <i class="ri-edit-line"></i> Edit
                         </button>
-                        <a href="${s.detail_url}" class="btn btn-sm btn-pro">
-                            <i class="ri-focus-line"></i> Map
-                        </a>
+                        ${s.has_geofence ? `
+                            <a href="${s.detail_url}" class="btn btn-sm btn-pro" title="See Geo Location on map">
+                                <i class="ri-map-pin-2-line"></i> See Geo Location
+                            </a>
+                        ` : ''}
                         <button onclick="confirmDeleteSite('${s.id}', '${s.name.replace(/'/g, "\\'")}')" class="btn btn-sm btn-pro text-danger">
                             <i class="ri-delete-bin-line"></i>
                         </button>
@@ -563,7 +570,7 @@
     const importModal = new bootstrap.Modal(document.getElementById('importModal'));
 
     function showAddModal() { addModal.show(); }
-    function showEditModal(id, name, offStart, offEnd, worStart, worEnd, officeDayOff, workerDayOff) {
+    function showEditModal(id, name, offStart, offEnd, worStart, worEnd, officeDayOff, workerDayOff, geofenceFilename) {
         document.getElementById('editSiteId').value = id;
         document.getElementById('editSiteName').value = name;
         document.getElementById('editOfficeStart').value = offStart || "";
@@ -572,6 +579,16 @@
         document.getElementById('editWorkerEnd').value = worEnd || "";
         document.getElementById('editOfficeDayOff').value = officeDayOff || "";
         document.getElementById('editWorkerDayOff').value = workerDayOff || "";
+        // Show the existing-file hint if there's a stored filename for this site
+        const wrap = document.getElementById('editExistingGeofenceFile');
+        const label = document.getElementById('editExistingGeofenceFileName');
+        if (geofenceFilename) {
+            label.textContent = geofenceFilename;
+            wrap.classList.remove('d-none');
+        } else {
+            label.textContent = '—';
+            wrap.classList.add('d-none');
+        }
         editModal.show();
     }
     function showImportModal() { importModal.show(); }

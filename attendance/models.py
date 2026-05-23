@@ -12,6 +12,7 @@ class Department(models.Model):
 class Site(models.Model):
     name = models.CharField(max_length=100, unique=True)
     coordinates = models.JSONField(null=True, blank=True)  # Store extracted coordinates
+    geofence_filename = models.CharField(max_length=255, null=True, blank=True)  # Original .kml filename
     geofence_lat = models.FloatField(null=True, blank=True)
     geofence_lng = models.FloatField(null=True, blank=True)
     geofence_radius_meters = models.FloatField(default=100.0)

@@ -601,7 +601,22 @@
                                 <div class="col-md-4"><label
                                         class="form-label small fw-bold text-secondary text-uppercase"
                                         style="font-size: 0.65rem;">Project / Site</label><select name="site"
-                                        id="employeeSiteSelect" class="form-select form-select-modern"></select></div>
+                                        id="employeeSiteSelect" class="form-select form-select-modern"
+                                        onchange="onSiteChanged()"></select></div>
+                                <!-- Effective From — shown only when site selection changes -->
+                                <div class="col-md-4" id="siteEffectiveFromWrapper" style="display:none;">
+                                    <label class="form-label small fw-bold text-uppercase"
+                                        style="font-size:0.65rem;color:#dc2626;">
+                                        Effective From <span style="color:#dc2626;">*</span>
+                                    </label>
+                                    <input type="date" name="site_effective_from"
+                                        id="siteEffectiveFromInput"
+                                        class="form-control form-control-modern"
+                                        style="border-color:#dc2626;">
+                                    <div class="text-danger" style="font-size:0.7rem;margin-top:3px;">
+                                        Calendar will show the new site from this date
+                                    </div>
+                                </div>
                                 <div class="col-md-4"><label
                                         class="form-label small fw-bold text-secondary text-uppercase"
                                         style="font-size: 0.65rem;">Sponsor</label>
@@ -881,6 +896,19 @@
 
     let addModal;
     let originalEmployeeStatus = null;
+    let originalEmployeeSiteId = '';
+
+    function onSiteChanged() {
+        const sel = document.getElementById('employeeSiteSelect');
+        const wrap = document.getElementById('siteEffectiveFromWrapper');
+        const inp = document.getElementById('siteEffectiveFromInput');
+        if (!sel || !wrap || !inp) return;
+        const changed = String(sel.value) !== String(originalEmployeeSiteId || '');
+        wrap.style.display = changed ? '' : 'none';
+        inp.required = changed;
+        if (changed && !inp.value) inp.value = new Date().toISOString().split('T')[0];
+        if (!changed) inp.value = '';
+    }
     const TERMINAL_STATUSES = ['Resigned', 'Terminated', 'No Renewal', 'Absconding'];
 
     document.addEventListener('DOMContentLoaded', () => {
@@ -1247,7 +1275,8 @@
                         <span class="fw-bold fs-5">${dateObj.getDate()}</span>
                         <span class="small opacity-50 fw-semibold">${dateObj.toLocaleString('en-US', { month: 'short' })}</span>
                     </div>
-                    ${d.site_name ? `<div class="small text-secondary mb-2" style="font-size:0.65rem;"><i class="ri-building-line"></i> ${d.site_name}</div>` : ''}
+                    ${d.site_name ? `<div class="small text-secondary mb-1" style="font-size:0.65rem;"><i class="ri-building-line"></i> ${d.site_name}</div>` : ''}
+                    ${d.employee_status ? `<div class="mb-2"><span class="badge rounded-pill ${_empStatusBadgeClass(d.employee_status)}" style="font-size:0.6rem;">${d.employee_status}</span></div>` : ''}
                     <div class="d-flex flex-column gap-1">
                         ${isSick ? `
                             <div class="calendar-badge bg-info text-white">🤒 SICK</div>
@@ -1459,6 +1488,11 @@
                 else { a.href = '#'; a.classList.add('d-none'); }
             });
             originalEmployeeStatus = data.status || null;
+            originalEmployeeSiteId = data.site || '';
+            const _effWrap = document.getElementById('siteEffectiveFromWrapper');
+            const _effInp  = document.getElementById('siteEffectiveFromInput');
+            if (_effWrap) _effWrap.style.display = 'none';
+            if (_effInp)  { _effInp.required = false; _effInp.value = ''; }
             toggleResumptionDate(data.status || '');
             if ((data.status || '') === 'Leave') {
                 toggleTicketPrice(data.leave_ticket_eligible || '');
@@ -1668,6 +1702,18 @@
         } catch (e) { alert('Network error'); }
     }
 
+    function _empStatusBadgeClass(s) {
+        const map = {
+            'Active':    'bg-success bg-opacity-10 text-success border border-success',
+            'Leave':     'bg-warning bg-opacity-10 text-warning border border-warning',
+            'Resigned':  'bg-danger bg-opacity-10 text-danger border border-danger',
+            'Terminated':'bg-danger bg-opacity-10 text-danger border border-danger',
+            'No Renewal':'bg-secondary bg-opacity-10 text-secondary border border-secondary',
+            'Absconding':'bg-dark bg-opacity-10 text-dark border border-dark',
+        };
+        return map[s] || 'bg-secondary bg-opacity-10 text-secondary';
+    }
+
     function _statusBadge(s) {
         const colors = {
             'Active': 'bg-success bg-opacity-10 text-success',
@@ -1790,6 +1836,18 @@
         const newStatus = document.getElementById('employeeStatusSelect').value;
         const resumption = document.getElementById('resumptionDateInput').value;
         const lastWorking = document.getElementById('lastWorkingDateInput').value;
+
+        // Site change → effective date required
+        const siteSel = document.getElementById('employeeSiteSelect');
+        const siteChanged = siteSel && String(siteSel.value) !== String(originalEmployeeSiteId || '');
+        if (siteChanged) {
+            const effFrom = document.getElementById('siteEffectiveFromInput').value;
+            if (!effFrom) {
+                document.getElementById('siteEffectiveFromInput').focus();
+                alert('Please provide the Effective From date for the new site assignment.');
+                return;
+            }
+        }
 
         const isResuming = (originalEmployeeStatus === 'Leave' && newStatus === 'Active');
         if (isResuming && !resumption) {
