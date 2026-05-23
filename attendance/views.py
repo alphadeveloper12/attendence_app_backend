@@ -3085,6 +3085,33 @@ def admin_user_detail_view(request, user_id):
             # Total sick leaves taken (across all time, not just filtered range)
             total_sick_count = Attendance.objects.filter(user=employee, status='sick').count()
 
+            # Resolve leave window — prefer the dates stored on the Employee row, but
+            # fall back to the most recent EmployeeStatusHistory entry with
+            # new_status='Leave'. This covers employees set to Leave via the Excel
+            # import (which sets `status` but doesn't always populate the dates).
+            _lv_approval = employee.leave_approval_date
+            _lv_start    = employee.leave_start_date
+            _lv_end      = employee.leave_end_date
+            _lv_type     = employee.leave_type
+            _lv_eligible = employee.leave_ticket_eligible
+            _lv_price    = employee.leave_ticket_price
+            if employee.status == 'Leave' and not (_lv_approval or _lv_start or _lv_end):
+                _last_leave_hist = (
+                    EmployeeStatusHistory.objects
+                    .filter(employee=employee, new_status='Leave')
+                    .order_by('-changed_at')
+                    .first()
+                )
+                if _last_leave_hist:
+                    _lv_approval = _lv_approval or _last_leave_hist.leave_approval_date
+                    _lv_start    = _lv_start    or _last_leave_hist.leave_start_date
+                    _lv_end      = _lv_end      or _last_leave_hist.leave_end_date
+                    _lv_type     = _lv_type     or _last_leave_hist.leave_type
+                    if _lv_eligible is None:
+                        _lv_eligible = _last_leave_hist.leave_ticket_eligible
+                    if _lv_price is None:
+                        _lv_price = _last_leave_hist.leave_ticket_price
+
             # Build Response Data
             data = {
                 'employee': {
@@ -3101,18 +3128,23 @@ def admin_user_detail_view(request, user_id):
                     'resumption_date': str(employee.resumption_date) if employee.resumption_date else None,
                     'last_working_date': str(employee.last_working_date) if employee.last_working_date else None,
                     'termination_reason': employee.termination_reason or None,
-                    'leave_approval_date': str(employee.leave_approval_date) if employee.leave_approval_date else None,
-                    'leave_start_date': str(employee.leave_start_date) if employee.leave_start_date else None,
-                    'leave_end_date': str(employee.leave_end_date) if employee.leave_end_date else None,
-                    'leave_type': employee.leave_type or None,
+                    # Leave dates: from Employee.leave_*, with EmployeeStatusHistory fallback.
+                    'leave_approval_date': str(_lv_approval) if _lv_approval else None,
+                    'leave_start_date':    str(_lv_start)    if _lv_start    else None,
+                    'leave_end_date':      str(_lv_end)      if _lv_end      else None,
+                    'leave_type':          _lv_type          or None,
                     'leave_ticket_eligible': (
-                        None if employee.leave_ticket_eligible is None
-                        else ('Eligible' if employee.leave_ticket_eligible else 'Not Eligible')
+                        None if _lv_eligible is None
+                        else ('Eligible' if _lv_eligible else 'Not Eligible')
                     ),
-                    'leave_ticket_price': str(employee.leave_ticket_price) if employee.leave_ticket_price is not None else None,
+                    'leave_ticket_price':  str(_lv_price) if _lv_price is not None else None,
                     'leave_total_days': (
-                        (employee.leave_end_date - employee.leave_start_date).days + 1
-                        if employee.leave_start_date and employee.leave_end_date else None
+                        (_lv_end - _lv_start).days + 1
+                        if _lv_start and _lv_end else None
+                    ),
+                    'leave_dates_missing': (
+                        employee.status == 'Leave'
+                        and not (_lv_approval or _lv_start or _lv_end)
                     ),
                     'profile_picture': employee.profile_picture.url if employee.profile_picture else None,
                     # Expanded Fields

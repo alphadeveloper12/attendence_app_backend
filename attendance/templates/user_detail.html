@@ -310,6 +310,14 @@
                         </span>
                     </div>
                 </div>
+                <!-- Shown when status='Leave' but no leave dates were ever recorded -->
+                <div class="col-12" id="leave-dates-missing-wrapper" style="display:none;">
+                    <div class="mt-2 p-2 rounded-2 small d-inline-flex align-items-center gap-2"
+                        style="background:rgba(217,119,6,0.08);color:#92400e;border:1px solid rgba(217,119,6,0.3);">
+                        <i class="ri-error-warning-line"></i>
+                        <span>Leave dates are not recorded for this employee. Edit the employee to add Start / End / Last Working Date.</span>
+                    </div>
+                </div>
             </div>
         </div>
         <div class="col-lg-4">
@@ -1011,15 +1019,24 @@
             }
         }
 
-        // Show leave dates — only when employee is currently on Leave
+        // Show leave dates — only when employee is currently on Leave.
+        // Backend backfills from EmployeeStatusHistory when Employee.leave_* are NULL,
+        // and sets `leave_dates_missing=true` when nothing could be found at all.
         const leaveWrapper = document.getElementById('leave-dates-wrapper');
+        const leaveMissingWrapper = document.getElementById('leave-dates-missing-wrapper');
         if (emp.status === 'Leave' && (emp.leave_approval_date || emp.leave_start_date || emp.leave_end_date)) {
             document.getElementById('emp-leave-approval').textContent = emp.leave_approval_date || '—';
             document.getElementById('emp-leave-start').textContent = emp.leave_start_date || '—';
             document.getElementById('emp-leave-end').textContent = emp.leave_end_date || '—';
             leaveWrapper.style.display = '';
+            if (leaveMissingWrapper) leaveMissingWrapper.style.display = 'none';
         } else {
             leaveWrapper.style.display = 'none';
+            // Show the "dates missing" hint when status is Leave but nothing was recorded
+            if (leaveMissingWrapper) {
+                leaveMissingWrapper.style.display =
+                    (emp.status === 'Leave' && emp.leave_dates_missing) ? '' : 'none';
+            }
         }
 
         const avatarCont = document.getElementById('profile-picture-container');
