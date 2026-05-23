@@ -3252,11 +3252,19 @@ def admin_user_detail_view(request, user_id):
                     )
 
                 # Per-day site resolution — picks the assignment that was effective
-                # on that day from EmployeeSiteHistory. Falls back to the current
-                # employee.site when the date predates any recorded history.
+                # on that day from EmployeeSiteHistory.
+                #
+                # Tie-breakers:
+                #   - day inside a recorded segment → that segment's new_site
+                #   - day BEFORE the earliest segment → the earliest segment's
+                #     `old_site` (i.e., what the employee was at before the first
+                #     recorded transition). This is what you want when admins
+                #     re-assign an employee today: past calendar days should keep
+                #     showing the previous site, not the new one.
+                #   - no history at all → fall back to current employee.site
                 site_segments = list(
                     employee.site_history
-                            .select_related('new_site')
+                            .select_related('new_site', 'old_site')
                             .order_by('effective_from')
                 )
                 fallback_site_name = employee.site.name if employee.site else None
@@ -3270,6 +3278,11 @@ def admin_user_detail_view(request, user_id):
                             break
                     if matched:
                         return matched.new_site.name if matched.new_site else None
+                    # Day predates the earliest recorded transition —
+                    # use that transition's old_site, not the current site.
+                    if site_segments:
+                        first = site_segments[0]
+                        return first.old_site.name if first.old_site else None
                     return fallback_site_name
 
                 # Per-day employee status resolution from EmployeeStatusHistory
