@@ -3220,6 +3220,21 @@ def admin_user_detail_view(request, user_id):
                     "longitude": record.longitude if record else None,
                 }
                 data['slots'] = slots
+                # Day-specific site assignment — used by the frontend to overlay the
+                # *correct* geofence polygon for this day, even if the employee has
+                # since been re-assigned to a different site.
+                _day_site = None
+                for h in employee.site_history.select_related('new_site', 'old_site').order_by('effective_from'):
+                    if h.effective_from <= current_date:
+                        _day_site = h.new_site
+                    else:
+                        if _day_site is None:
+                            _day_site = h.old_site  # day predates first transition
+                        break
+                if _day_site is None:
+                    _day_site = employee.site
+                data['day_site_id'] = _day_site.id if _day_site else None
+                data['day_site_name'] = _day_site.name if _day_site else None
                 # Sick-leave info for the day (if any)
                 if record and record.status == 'sick':
                     data['sick_leave'] = {

@@ -952,7 +952,9 @@
             renderStats(data.stats);
 
             if (currentFilter === 'daily') {
-                const siteId = data.employee.site_id;
+                // Prefer day_site_id (the site that was effective on the viewed
+                // date) — falls back to current employee.site_id if absent.
+                const siteId = data.day_site_id || data.employee.site_id;
                 renderDaily(data.slots, siteId, data.sick_leave, data.filter.current_date);
                 document.getElementById('view-title').textContent = `Activity Logs for ${formatDate(data.filter.current_date)}`;
             } else {
@@ -1320,32 +1322,52 @@
         const element = document.getElementById(elementId);
         if (!element) return;
 
+        // Hybrid (satellite + labels) by default — admins usually want to see
+        // the actual terrain when reviewing geofence breaches. All standard
+        // controls enabled (fullscreen / zoom / map-type).
         const map = new google.maps.Map(element, {
             center: { lat: lat, lng: lng },
-            zoom: 15,
-            disableDefaultUI: true,
+            zoom: 17,
+            mapTypeId: google.maps.MapTypeId.HYBRID,
+            mapTypeControl: true,
+            fullscreenControl: true,
+            zoomControl: true,
+            streetViewControl: false,
             styles: [{ "featureType": "poi", "stylers": [{ "visibility": "off" }] }]
         });
 
+        // User location — red dot to match the example screenshot
         new google.maps.Marker({
             position: { lat: lat, lng: lng },
             map: map,
-            icon: { url: "http://maps.google.com/mapfiles/ms/icons/blue-dot.png" }
+            icon: { url: "http://maps.google.com/mapfiles/ms/icons/red-dot.png" },
+            title: 'Attendance marked here',
         });
 
-        if (siteId) {
-            try {
-                const res = await fetch(`/api/attendance/api/sites/${siteId}/coordinates/`);
-                const data = await res.json();
-                if (data.success && data.has_coordinates) {
-                    const poly = new google.maps.Polygon({
-                        paths: data.coordinates,
-                        strokeColor: "#000000", strokeOpacity: 1.0, strokeWeight: 3, fillColor: "#000000", fillOpacity: 0.1
-                    });
-                    poly.setMap(map);
-                }
-            } catch (e) { }
-        }
+        if (!siteId) return;
+        try {
+            const res = await fetch(`/api/attendance/api/sites/${siteId}/coordinates/`);
+            const data = await res.json();
+            if (!data.success || !data.has_coordinates) return;
+
+            // Bright outline + translucent fill so the polygon is obvious on satellite
+            const poly = new google.maps.Polygon({
+                paths: data.coordinates,
+                strokeColor: '#2563eb',
+                strokeOpacity: 1.0,
+                strokeWeight: 3,
+                fillColor: '#3b82f6',
+                fillOpacity: 0.18,
+                clickable: false,
+            });
+            poly.setMap(map);
+
+            // Fit the viewport to include BOTH the geofence and the user marker
+            const bounds = new google.maps.LatLngBounds();
+            data.coordinates.forEach(p => bounds.extend(p));
+            bounds.extend({ lat: lat, lng: lng });
+            map.fitBounds(bounds, 40);
+        } catch (e) { /* network or parse failure — fall back to the default view */ }
     }
 
     function setFilter(type) {
