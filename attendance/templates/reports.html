@@ -537,7 +537,9 @@
         }
 
         tbody.innerHTML = rows.map(item => `
-            <tr>
+            <tr onclick="window.location='/api/attendance/dashboard/user/${item.id}/'"
+                style="cursor:pointer;"
+                title="Open ${item.name}'s detail page">
                 <td class="ps-4">
                     <div class="d-flex align-items-center gap-3">
                         <div class="avatar-circle">
@@ -565,7 +567,7 @@
                         <span class="text-danger"><i class="ri-logout-box-line me-1"></i>${item.check_out}</span>
                     </div>
                 </td>
-                <td class="text-end pe-4">
+                <td class="text-end pe-4" onclick="event.stopPropagation()">
                     ${(item.latitude && item.longitude && item.site_id)
                 ? `<button onclick="viewLocation(${item.site_id}, ${item.latitude}, ${item.longitude})"
                                 class="btn-view-map">
@@ -645,35 +647,77 @@
         document.getElementById('liveClock').innerText = now.toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
     }
 
+    // Track auxiliary site-center marker across opens so we can clean it up
+    let currentSiteMarker = null;
+
     async function viewLocation(siteId, lat, lng) {
         mapModalInstance.show();
         setTimeout(async () => {
             const mapEl = document.getElementById("map");
             if (!currentMap) {
-                currentMap = new google.maps.Map(mapEl, { center: { lat: lat, lng: lng }, zoom: 16 });
+                currentMap = new google.maps.Map(mapEl, {
+                    center: { lat: lat, lng: lng },
+                    zoom: 17,
+                    mapTypeId: google.maps.MapTypeId.HYBRID,
+                    mapTypeControl: true,
+                    fullscreenControl: true,
+                    zoomControl: true,
+                    streetViewControl: false,
+                });
             } else {
                 currentMap.setCenter({ lat: lat, lng: lng });
-                currentMap.setZoom(16);
+                currentMap.setZoom(17);
+                currentMap.setMapTypeId(google.maps.MapTypeId.HYBRID);
                 google.maps.event.trigger(currentMap, 'resize');
             }
+            // Clean up previous markers / polygon
             if (currentMarker) currentMarker.setMap(null);
+            if (currentSiteMarker) currentSiteMarker.setMap(null);
             if (currentPolygon) currentPolygon.setMap(null);
 
+            // Employee marker — red, like the reference screenshot
             currentMarker = new google.maps.Marker({
                 position: { lat: lat, lng: lng },
                 map: currentMap,
-                title: "Employee Location",
-                icon: { url: "http://maps.google.com/mapfiles/ms/icons/blue-dot.png" }
+                title: "Employee check-in location",
+                icon: { url: "http://maps.google.com/mapfiles/ms/icons/red-dot.png" }
             });
 
             try {
                 const response = await fetch(`/api/attendance/api/sites/${siteId}/coordinates/`);
                 const data = await response.json();
                 if (data.success && data.has_coordinates && data.coordinates.length > 0) {
-                    const boundaryCoords = data.coordinates;
-                    if (boundaryCoords[0].lat !== boundaryCoords[boundaryCoords.length - 1].lat) boundaryCoords.push(boundaryCoords[0]);
-                    currentPolygon = new google.maps.Polygon({ paths: boundaryCoords, strokeColor: "#ef4444", strokeOpacity: 0.8, strokeWeight: 2, fillColor: "#ef4444", fillOpacity: 0.2 });
+                    const boundaryCoords = data.coordinates.slice();
+                    if (boundaryCoords[0].lat !== boundaryCoords[boundaryCoords.length - 1].lat) {
+                        boundaryCoords.push(boundaryCoords[0]);
+                    }
+                    // Geofence polygon — bright blue, visible on satellite imagery
+                    currentPolygon = new google.maps.Polygon({
+                        paths: boundaryCoords,
+                        strokeColor: "#2563eb",
+                        strokeOpacity: 1.0,
+                        strokeWeight: 3,
+                        fillColor: "#3b82f6",
+                        fillOpacity: 0.18,
+                        clickable: false,
+                    });
                     currentPolygon.setMap(currentMap);
+
+                    // Site-center marker — blue dot at the polygon centroid
+                    if (data.center && data.center.lat && data.center.lng) {
+                        currentSiteMarker = new google.maps.Marker({
+                            position: { lat: data.center.lat, lng: data.center.lng },
+                            map: currentMap,
+                            title: "Site geofence center",
+                            icon: { url: "http://maps.google.com/mapfiles/ms/icons/blue-dot.png" }
+                        });
+                    }
+
+                    // Fit viewport to show both the geofence and the user marker
+                    const bounds = new google.maps.LatLngBounds();
+                    boundaryCoords.forEach(p => bounds.extend(p));
+                    bounds.extend({ lat: lat, lng: lng });
+                    currentMap.fitBounds(bounds, 40);
                 }
             } catch (error) { console.error("Map Error", error); }
         }, 300);
