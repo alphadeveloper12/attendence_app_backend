@@ -2908,11 +2908,22 @@ class AttendanceStatsView(APIView):
                     key = 'Other'
                 status_counts[key] += 1
 
+            # Absent Today = Active employees that didn't post any attendance
+            # record today. Counts within the same filter scope as the rest of
+            # the stats, so site/department/etc. narrow it down too.
+            today_user_ids = list(attendance.values_list('user_id', flat=True).distinct())
+            absent_today_count = (
+                employees.filter(status__iexact='Active')
+                         .exclude(id__in=today_user_ids)
+                         .count()
+            )
+
             return Response(
                 {
                     "total_employees": employees.count(),
                     "today_attendance_count": attendance.count(),
                     "late_count": attendance.filter(status='late').count(),
+                    "absent_today_count": absent_today_count,
                     "total_sites": all_sites.count(),
                     "sites": [{"id": s.id, "name": s.name} for s in all_sites],
                     "categories": unique_categories,
@@ -3272,18 +3283,24 @@ class EmployeeListView(APIView):
         # Default to a large number if not specified, but dashboard specifically sends per_page
         paginator.page_size = int(request.GET.get('per_page', 1000))
 
-        # Attendance Filter (Present/Late) - Apply after other filters but before pagination
+        # Attendance Filter (Present / Late / Absent) — applied after other
+        # filters but before pagination so the table reflects the KPI card
+        # the admin clicked.
         attendance_filter = request.GET.get('attendance_filter')
-        if attendance_filter in ['present', 'late']:
+        if attendance_filter in ('present', 'late'):
             today = timezone.localdate()
             attendance_qs = Attendance.objects.filter(date=today)
             if attendance_filter == 'late':
                 attendance_qs = attendance_qs.filter(status='late')
             else:
                 attendance_qs = attendance_qs.filter(status='present')
-            
             present_employee_ids = attendance_qs.values_list('user_id', flat=True)
             employees = employees.filter(id__in=present_employee_ids)
+        elif attendance_filter == 'absent':
+            # Active employees that didn't post any attendance today.
+            today = timezone.localdate()
+            today_ids = Attendance.objects.filter(date=today).values_list('user_id', flat=True).distinct()
+            employees = employees.filter(status__iexact='Active').exclude(id__in=today_ids)
 
         result_page = paginator.paginate_queryset(employees, request)
         
@@ -4982,18 +4999,21 @@ class ExportEmployeesView(APIView):
                 Q(badge_number__icontains=search)
             )
 
-        # Attendance Filter
+        # Attendance Filter — keep in lock-step with EmployeeListView
         attendance_filter = request.GET.get('attendance_filter')
-        if attendance_filter in ['present', 'late']:
+        if attendance_filter in ('present', 'late'):
             today = timezone.localdate()
             attendance_qs = Attendance.objects.filter(date=today)
             if attendance_filter == 'late':
                 attendance_qs = attendance_qs.filter(status='late')
             else:
                 attendance_qs = attendance_qs.filter(status='present')
-            
             employee_ids = attendance_qs.values_list('user_id', flat=True)
             employees = employees.filter(id__in=employee_ids)
+        elif attendance_filter == 'absent':
+            today = timezone.localdate()
+            today_ids = Attendance.objects.filter(date=today).values_list('user_id', flat=True).distinct()
+            employees = employees.filter(status__iexact='Active').exclude(id__in=today_ids)
 
         # Render every field on each Employee (shared with the selected-rows export)
         wb = _build_employee_workbook(employees, sheet_title='Filtered Employees')

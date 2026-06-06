@@ -395,12 +395,12 @@
         </div>
     </div>
     <div class="col-12 col-md-6 col-xl-3">
-        <div class="stat-card" id="card-late" onclick="filterByCard('late')">
+        <div class="stat-card" id="card-absent" onclick="filterByCard('absent')">
             <div class="card-body">
-                <div class="stat-icon-wrapper"><i class="ri-alarm-warning-line"></i></div>
+                <div class="stat-icon-wrapper"><i class="ri-user-unfollow-line"></i></div>
                 <div>
-                    <div class="stat-label">Late Arrivals</div>
-                    <div class="stat-value" id="stat-late">0</div>
+                    <div class="stat-label">Absent Today</div>
+                    <div class="stat-value" id="stat-absent">0</div>
                 </div>
             </div>
         </div>
@@ -1434,7 +1434,7 @@
 
             document.getElementById('stat-total-employees').textContent = data.total_employees;
             document.getElementById('stat-today-attendance').textContent = data.today_attendance_count;
-            document.getElementById('stat-late').textContent = data.late_count !== undefined ? data.late_count : '0';
+            document.getElementById('stat-absent').textContent = data.absent_today_count !== undefined ? data.absent_today_count : '0';
             document.getElementById('stat-total-sites').textContent = data.total_sites || '-';
 
             // Status breakdown — populate pills, hide the row entirely if backend
