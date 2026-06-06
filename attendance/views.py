@@ -45,7 +45,7 @@ from .utils import (
     THRESH, MARGIN, get_image_bytes
 )
 from .geofence import check_geofence
-from .models import Employee, Attendance, Site, FaceTemplate, AdminProfile, AppBuild, EmployeeStatusHistory, EmployeeSiteHistory, EmployeeAttachment
+from .models import Employee, Attendance, Site, FaceTemplate, AdminProfile, AppBuild, EmployeeStatusHistory, EmployeeSiteHistory, EmployeeAttachment, EmployeeSalaryHistory
 from .serializers import *
 from .permissions import IsSiteAdmin
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -1108,10 +1108,36 @@ class AdminAddEmployeeView(APIView):
                 site=site,
                 gross_salary=parse_decimal(data.get('gross_salary')),
                 basic_salary=parse_decimal(data.get('basic_salary')),
+                accommodation_allowance=parse_decimal(data.get('accommodation_allowance')),
+                transport_allowance=parse_decimal(data.get('transport_allowance')),
+                food_allowance=parse_decimal(data.get('food_allowance')),
+                fixed_ot_allowance=parse_decimal(data.get('fixed_ot_allowance')),
+                other_allowance=parse_decimal(data.get('other_allowance')),
+                salary_reduction=parse_decimal(data.get('salary_reduction')),
+                salary_remarks=data.get('salary_remarks') or None,
                 category=data.get('category', 'worker'),
                 camp=data.get('camp'),
                 transportation=data.get('transportation')
             )
+
+            # Record initial salary snapshot when any salary component is provided
+            if any([new_emp.basic_salary, new_emp.gross_salary, new_emp.accommodation_allowance,
+                    new_emp.transport_allowance, new_emp.food_allowance, new_emp.fixed_ot_allowance,
+                    new_emp.other_allowance, new_emp.salary_reduction]):
+                EmployeeSalaryHistory.objects.create(
+                    employee=new_emp,
+                    basic_salary=new_emp.basic_salary,
+                    accommodation_allowance=new_emp.accommodation_allowance,
+                    transport_allowance=new_emp.transport_allowance,
+                    food_allowance=new_emp.food_allowance,
+                    fixed_ot_allowance=new_emp.fixed_ot_allowance,
+                    other_allowance=new_emp.other_allowance,
+                    salary_reduction=new_emp.salary_reduction,
+                    gross_salary=new_emp.gross_salary,
+                    remarks=new_emp.salary_remarks or 'Initial salary on employee creation',
+                    effective_from=parse_date(data.get('date_of_joining')) or timezone.localdate(),
+                    changed_by=request.user if request.user.is_authenticated else None,
+                )
 
             # Record initial status as history when relevant dates are present
             if status and (resumption_date or last_working_date or leave_approval_date or leave_start_date or leave_end_date):
@@ -1203,6 +1229,13 @@ class AdminEditEmployeeView(APIView):
             if request.user.is_superuser:
                 data['gross_salary'] = str(emp.gross_salary) if emp.gross_salary else ''
                 data['basic_salary'] = str(emp.basic_salary) if emp.basic_salary else ''
+                data['accommodation_allowance'] = str(emp.accommodation_allowance) if emp.accommodation_allowance is not None else ''
+                data['transport_allowance'] = str(emp.transport_allowance) if emp.transport_allowance is not None else ''
+                data['food_allowance'] = str(emp.food_allowance) if emp.food_allowance is not None else ''
+                data['fixed_ot_allowance'] = str(emp.fixed_ot_allowance) if emp.fixed_ot_allowance is not None else ''
+                data['other_allowance'] = str(emp.other_allowance) if emp.other_allowance is not None else ''
+                data['salary_reduction'] = str(emp.salary_reduction) if emp.salary_reduction is not None else ''
+                data['salary_remarks'] = emp.salary_remarks or ''
                 data['salary_grade'] = emp.salary_grade
             return Response(data)
         except Employee.DoesNotExist:
@@ -1398,6 +1431,16 @@ class AdminEditEmployeeView(APIView):
             if request.user.is_superuser:
                 emp.gross_salary = parse_decimal(data.get('gross_salary'))
                 emp.basic_salary = parse_decimal(data.get('basic_salary'))
+                # Salary components — only overwrite when the request actually
+                # includes the key, so saving an unrelated field (e.g., status)
+                # doesn't wipe components that aren't on the current form view.
+                for k in ('accommodation_allowance', 'transport_allowance',
+                          'food_allowance', 'fixed_ot_allowance',
+                          'other_allowance', 'salary_reduction'):
+                    if k in data:
+                        setattr(emp, k, parse_decimal(data.get(k)))
+                if 'salary_remarks' in data:
+                    emp.salary_remarks = data.get('salary_remarks') or None
                 emp.salary_grade = data.get('salary_grade', emp.salary_grade)
 
             emp.save()
@@ -1523,6 +1566,155 @@ class EmployeeSiteHistoryView(APIView):
             'current_site_id': emp.site.id if emp.site else None,
             'segments': segments,
         })
+
+
+class EmployeeSalaryHistoryView(APIView):
+    """List or append salary-change snapshots for an employee.
+
+    GET  /api/attendance/employees/<id>/salary-history/  → current + history
+    POST /api/attendance/employees/<id>/salary-history/  → append an increment.
+        Body (any subset, plus optional 'remarks' and 'effective_from'):
+            basic_salary, accommodation_allowance, transport_allowance,
+            food_allowance, fixed_ot_allowance, other_allowance,
+            salary_reduction, gross_salary
+        Empty / missing fields keep their current value on the Employee row.
+    """
+    permission_classes = [IsAdminUser]
+
+    _COMPONENTS = (
+        'basic_salary',
+        'accommodation_allowance',
+        'transport_allowance',
+        'food_allowance',
+        'fixed_ot_allowance',
+        'other_allowance',
+        'salary_reduction',
+        'gross_salary',
+    )
+
+    @staticmethod
+    def _dec(v):
+        if v is None:
+            return None
+        s = str(v).strip()
+        if not s:
+            return None
+        try:
+            from decimal import Decimal
+            return Decimal(s.replace(',', ''))
+        except Exception:  # noqa: BLE001
+            return None
+
+    @staticmethod
+    def _str(v):
+        return str(v) if v is not None else None
+
+    def get(self, request, employee_id):
+        try:
+            emp = Employee.objects.get(id=employee_id)
+        except Employee.DoesNotExist:
+            return Response({'error': 'Employee not found'}, status=404)
+
+        rows = (
+            emp.salary_history
+               .select_related('changed_by')
+               .order_by('-effective_from', '-changed_at')
+        )
+        history = []
+        for h in rows:
+            history.append({
+                'id': h.id,
+                'basic_salary': self._str(h.basic_salary),
+                'accommodation_allowance': self._str(h.accommodation_allowance),
+                'transport_allowance': self._str(h.transport_allowance),
+                'food_allowance': self._str(h.food_allowance),
+                'fixed_ot_allowance': self._str(h.fixed_ot_allowance),
+                'other_allowance': self._str(h.other_allowance),
+                'salary_reduction': self._str(h.salary_reduction),
+                'gross_salary': self._str(h.gross_salary),
+                'remarks': h.remarks or '',
+                'effective_from': str(h.effective_from) if h.effective_from else None,
+                'changed_at': h.changed_at.isoformat() if h.changed_at else None,
+                'changed_by': h.changed_by.username if h.changed_by else None,
+            })
+
+        return Response({
+            'employee_id': emp.id,
+            'current': {
+                'basic_salary': self._str(emp.basic_salary),
+                'accommodation_allowance': self._str(emp.accommodation_allowance),
+                'transport_allowance': self._str(emp.transport_allowance),
+                'food_allowance': self._str(emp.food_allowance),
+                'fixed_ot_allowance': self._str(emp.fixed_ot_allowance),
+                'other_allowance': self._str(emp.other_allowance),
+                'salary_reduction': self._str(emp.salary_reduction),
+                'gross_salary': self._str(emp.gross_salary),
+                'remarks': emp.salary_remarks or '',
+            },
+            'count': len(history),
+            'history': history,
+        })
+
+    def post(self, request, employee_id):
+        from datetime import datetime as _dt
+
+        try:
+            emp = Employee.objects.get(id=employee_id)
+        except Employee.DoesNotExist:
+            return Response({'error': 'Employee not found'}, status=404)
+
+        data = request.data
+        provided = {}
+        for k in self._COMPONENTS:
+            raw = data.get(k)
+            if raw is None or str(raw).strip() == '':
+                continue
+            v = self._dec(raw)
+            if v is None:
+                return Response({'error': f'Could not parse number for "{k}".'}, status=400)
+            provided[k] = v
+
+        if not provided:
+            return Response(
+                {'error': 'Provide at least one salary component to record an increment.'},
+                status=400,
+            )
+
+        eff_from_raw = (data.get('effective_from') or '').strip()
+        if eff_from_raw:
+            try:
+                effective_from = _dt.strptime(eff_from_raw, '%Y-%m-%d').date()
+            except ValueError:
+                return Response({'error': 'effective_from must be YYYY-MM-DD.'}, status=400)
+        else:
+            effective_from = timezone.localdate()
+
+        remarks = (data.get('remarks') or '').strip() or None
+
+        # Apply changes to the live Employee row, then snapshot.
+        for k, v in provided.items():
+            setattr(emp, k, v)
+        emp.save()
+
+        snap = EmployeeSalaryHistory.objects.create(
+            employee=emp,
+            basic_salary=emp.basic_salary,
+            accommodation_allowance=emp.accommodation_allowance,
+            transport_allowance=emp.transport_allowance,
+            food_allowance=emp.food_allowance,
+            fixed_ot_allowance=emp.fixed_ot_allowance,
+            other_allowance=emp.other_allowance,
+            salary_reduction=emp.salary_reduction,
+            gross_salary=emp.gross_salary,
+            remarks=remarks,
+            effective_from=effective_from,
+            changed_by=request.user if request.user.is_authenticated else None,
+        )
+        return Response({
+            'success': True,
+            'id': snap.id,
+            'effective_from': str(snap.effective_from),
+        }, status=201)
 
 
 class EmployeeAttachmentsView(APIView):

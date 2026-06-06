@@ -114,7 +114,16 @@ class Employee(models.Model):
     ])
     basic_salary = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     category = models.CharField(max_length=20, choices=[('staff', 'Staff'), ('worker', 'Worker')], default='worker')
-    
+
+    # Salary components (Accommodation / Transport / Food / Fixed OT / Others / Salary Reduction / Remarks)
+    accommodation_allowance = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    transport_allowance     = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    food_allowance          = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    fixed_ot_allowance      = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    other_allowance         = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    salary_reduction        = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    salary_remarks          = models.TextField(null=True, blank=True)
+
     def __str__(self):
         return self.name
 
@@ -187,6 +196,35 @@ class EmployeeAttachment(models.Model):
 
     def __str__(self):
         return f"{self.employee.name} — {self.name}"
+
+
+class EmployeeSalaryHistory(models.Model):
+    """Snapshot of an employee's salary components after each increment / change.
+
+    A row stores the *new* component values plus an optional remarks note and
+    the effective date. The previous values can be read by looking at the row
+    immediately before this one (or from the Employee row itself for the initial
+    state, although we usually log an explicit initial row too).
+    """
+    employee     = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name='salary_history')
+    basic_salary            = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    accommodation_allowance = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    transport_allowance     = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    food_allowance          = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    fixed_ot_allowance      = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    other_allowance         = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    salary_reduction        = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    gross_salary            = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    remarks                 = models.TextField(null=True, blank=True)
+    effective_from          = models.DateField(default=timezone.localdate)
+    changed_at              = models.DateTimeField(auto_now_add=True)
+    changed_by              = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+
+    class Meta:
+        ordering = ['-effective_from', '-changed_at']
+
+    def __str__(self):
+        return f"{self.employee.name} salary @ {self.effective_from}"
 
 
 class Attendance(models.Model):

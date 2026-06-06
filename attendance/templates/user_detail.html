@@ -762,19 +762,68 @@
                         {% if is_superuser %}
                         <div class="tab-pane fade" id="salary">
                             <div class="row g-3">
-                                <div class="col-md-6"><label
-                                        class="form-label small fw-bold text-secondary text-uppercase"
-                                        style="font-size: 0.65rem;">Basic Salary</label><input type="number" step="0.01"
-                                        name="basic_salary" class="form-control form-control-modern" placeholder="0.00">
+                                <div class="col-md-4"><label class="form-label small fw-bold text-secondary text-uppercase" style="font-size:0.65rem;">Basic Salary</label>
+                                    <input type="number" step="0.01" name="basic_salary" class="form-control form-control-modern" placeholder="0.00"></div>
+                                <div class="col-md-4"><label class="form-label small fw-bold text-secondary text-uppercase" style="font-size:0.65rem;">Accommodation / CCA</label>
+                                    <input type="number" step="0.01" name="accommodation_allowance" class="form-control form-control-modern" placeholder="0.00"></div>
+                                <div class="col-md-4"><label class="form-label small fw-bold text-secondary text-uppercase" style="font-size:0.65rem;">Transport Allowance</label>
+                                    <input type="number" step="0.01" name="transport_allowance" class="form-control form-control-modern" placeholder="0.00"></div>
+                                <div class="col-md-4"><label class="form-label small fw-bold text-secondary text-uppercase" style="font-size:0.65rem;">Food Allowance</label>
+                                    <input type="number" step="0.01" name="food_allowance" class="form-control form-control-modern" placeholder="0.00"></div>
+                                <div class="col-md-4"><label class="form-label small fw-bold text-secondary text-uppercase" style="font-size:0.65rem;">Fixed OT Allowance</label>
+                                    <input type="number" step="0.01" name="fixed_ot_allowance" class="form-control form-control-modern" placeholder="0.00"></div>
+                                <div class="col-md-4"><label class="form-label small fw-bold text-secondary text-uppercase" style="font-size:0.65rem;">Others</label>
+                                    <input type="number" step="0.01" name="other_allowance" class="form-control form-control-modern" placeholder="0.00"></div>
+                                <div class="col-md-4"><label class="form-label small fw-bold text-secondary text-uppercase" style="font-size:0.65rem;">Salary Reduction</label>
+                                    <input type="number" step="0.01" name="salary_reduction" class="form-control form-control-modern" placeholder="0.00"></div>
+                                <div class="col-md-4"><label class="form-label small fw-bold text-secondary text-uppercase" style="font-size:0.65rem;">Gross Salary</label>
+                                    <input type="number" step="0.01" name="gross_salary" class="form-control form-control-modern" placeholder="0.00"></div>
+                                <div class="col-md-12"><label class="form-label small fw-bold text-secondary text-uppercase" style="font-size:0.65rem;">Remarks</label>
+                                    <textarea name="salary_remarks" rows="2" class="form-control form-control-modern" placeholder="Any notes about the current salary structure"></textarea></div>
+                            </div>
+
+                            <!-- Increment toolbar -->
+                            <div class="d-flex justify-content-between align-items-center mt-4 mb-2 pb-2 border-bottom">
+                                <h6 class="fw-bold small text-primary text-uppercase mb-0">Salary History</h6>
+                                <button type="button" class="btn btn-sm btn-outline-primary" onclick="openAddIncrementForm()">
+                                    <i class="ri-arrow-up-circle-line"></i> Add Increment
+                                </button>
+                            </div>
+
+                            <div id="addIncrementForm" class="border rounded-3 p-3 mb-3" style="display:none; background:#f0fdf4;">
+                                <div class="small text-muted mb-2">Fill any subset of components. Empty fields keep the current value.</div>
+                                <div class="row g-2">
+                                    <div class="col-md-3"><label class="form-label small fw-bold text-uppercase" style="font-size:0.6rem;color:#15803d;">Basic Salary</label>
+                                        <input type="number" step="0.01" id="incBasic" class="form-control form-control-sm" placeholder="—"></div>
+                                    <div class="col-md-3"><label class="form-label small fw-bold text-uppercase" style="font-size:0.6rem;color:#15803d;">Accommodation</label>
+                                        <input type="number" step="0.01" id="incAccom" class="form-control form-control-sm" placeholder="—"></div>
+                                    <div class="col-md-3"><label class="form-label small fw-bold text-uppercase" style="font-size:0.6rem;color:#15803d;">Transport</label>
+                                        <input type="number" step="0.01" id="incTransport" class="form-control form-control-sm" placeholder="—"></div>
+                                    <div class="col-md-3"><label class="form-label small fw-bold text-uppercase" style="font-size:0.6rem;color:#15803d;">Food</label>
+                                        <input type="number" step="0.01" id="incFood" class="form-control form-control-sm" placeholder="—"></div>
+                                    <div class="col-md-3"><label class="form-label small fw-bold text-uppercase" style="font-size:0.6rem;color:#15803d;">Fixed OT</label>
+                                        <input type="number" step="0.01" id="incFixedOT" class="form-control form-control-sm" placeholder="—"></div>
+                                    <div class="col-md-3"><label class="form-label small fw-bold text-uppercase" style="font-size:0.6rem;color:#15803d;">Others</label>
+                                        <input type="number" step="0.01" id="incOther" class="form-control form-control-sm" placeholder="—"></div>
+                                    <div class="col-md-3"><label class="form-label small fw-bold text-uppercase" style="font-size:0.6rem;color:#dc2626;">Salary Reduction</label>
+                                        <input type="number" step="0.01" id="incReduction" class="form-control form-control-sm" placeholder="—"></div>
+                                    <div class="col-md-3"><label class="form-label small fw-bold text-uppercase" style="font-size:0.6rem;color:#15803d;">Gross</label>
+                                        <input type="number" step="0.01" id="incGross" class="form-control form-control-sm" placeholder="—"></div>
+                                    <div class="col-md-4"><label class="form-label small fw-bold text-uppercase" style="font-size:0.6rem;">Effective From</label>
+                                        <input type="date" id="incEffectiveFrom" class="form-control form-control-sm"></div>
+                                    <div class="col-md-8"><label class="form-label small fw-bold text-uppercase" style="font-size:0.6rem;">Remarks</label>
+                                        <input type="text" id="incRemarks" class="form-control form-control-sm" placeholder="e.g. Yearly increment, COLA, promotion adjustment"></div>
                                 </div>
-                                <div class="col-md-3"><label
-                                        class="form-label small fw-bold text-secondary text-uppercase"
-                                        style="font-size: 0.65rem;">Gross Salary</label><input type="number" step="0.01"
-                                        name="gross_salary" class="form-control form-control-modern" placeholder="0.00">
+                                <div class="text-end mt-2">
+                                    <button type="button" class="btn btn-sm btn-light" onclick="closeAddIncrementForm()">Cancel</button>
+                                    <button type="button" class="btn btn-sm btn-success" id="incSubmitBtn" onclick="submitIncrement()">Save Increment</button>
                                 </div>
-                                <div class="col-md-12">
-                                    <p class="text-muted small">Note: Other salary components can be viewed in the full
-                                        reports.</p>
+                            </div>
+
+                            <div id="salaryHistoryContainer">
+                                <div class="text-center py-4">
+                                    <div class="spinner-border spinner-border-sm text-secondary"></div>
+                                    <p class="text-muted small mt-2 mb-0">Loading salary history…</p>
                                 </div>
                             </div>
                         </div>
@@ -1540,7 +1589,119 @@
             loadSickLeaves(empId);
             loadSiteHistory(empId);
             loadAttachments(empId);
+            loadSalaryHistory(empId);
         } catch (e) { alert("Failed to load employee data."); }
+    }
+
+    // ---- Salary History ----
+    function _fmtAmt(v) { return (v != null && v !== '') ? Number(v).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2}) : '—'; }
+
+    async function loadSalaryHistory(empId) {
+        const container = document.getElementById('salaryHistoryContainer');
+        if (!container) return;
+        container.innerHTML = `<div class="text-center py-4"><div class="spinner-border spinner-border-sm text-secondary"></div><p class="text-muted small mt-2 mb-0">Loading salary history…</p></div>`;
+        try {
+            const res = await fetch(`/api/attendance/employees/${empId}/salary-history/`);
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Failed');
+            const items = data.history || [];
+            if (items.length === 0) {
+                container.innerHTML = `<div class="text-center py-5">
+                    <div style="font-size:2.5rem;opacity:0.3;">💰</div>
+                    <h6 class="fw-bold text-secondary mt-3">No salary changes recorded yet</h6>
+                    <p class="text-muted small mb-0">Click "Add Increment" above to log a salary change.</p>
+                </div>`;
+                return;
+            }
+            container.innerHTML = `<div class="d-flex flex-column gap-3">
+                ${items.map(h => `
+                    <div class="border rounded-3 p-3" style="background:#fafafa;">
+                        <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+                            <div>
+                                <span class="badge rounded-pill bg-primary bg-opacity-10 text-primary fw-bold">
+                                    <i class="ri-calendar-line me-1"></i>${h.effective_from || '—'}
+                                </span>
+                                ${h.remarks ? `<span class="ms-2 text-secondary small fst-italic">${h.remarks}</span>` : ''}
+                            </div>
+                            <div class="text-secondary small">
+                                ${h.changed_at ? new Date(h.changed_at).toLocaleString() : ''}
+                                ${h.changed_by ? ' · by ' + h.changed_by : ''}
+                            </div>
+                        </div>
+                        <div class="row g-2 small">
+                            <div class="col-md-3"><span class="text-secondary">Basic:</span> <span class="fw-bold font-monospace">${_fmtAmt(h.basic_salary)}</span></div>
+                            <div class="col-md-3"><span class="text-secondary">Accommodation:</span> <span class="fw-bold font-monospace">${_fmtAmt(h.accommodation_allowance)}</span></div>
+                            <div class="col-md-3"><span class="text-secondary">Transport:</span> <span class="fw-bold font-monospace">${_fmtAmt(h.transport_allowance)}</span></div>
+                            <div class="col-md-3"><span class="text-secondary">Food:</span> <span class="fw-bold font-monospace">${_fmtAmt(h.food_allowance)}</span></div>
+                            <div class="col-md-3"><span class="text-secondary">Fixed OT:</span> <span class="fw-bold font-monospace">${_fmtAmt(h.fixed_ot_allowance)}</span></div>
+                            <div class="col-md-3"><span class="text-secondary">Others:</span> <span class="fw-bold font-monospace">${_fmtAmt(h.other_allowance)}</span></div>
+                            <div class="col-md-3"><span class="text-secondary">Reduction:</span> <span class="fw-bold font-monospace text-danger">${_fmtAmt(h.salary_reduction)}</span></div>
+                            <div class="col-md-3"><span class="text-secondary">Gross:</span> <span class="fw-bold font-monospace text-success">${_fmtAmt(h.gross_salary)}</span></div>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>`;
+        } catch (e) {
+            container.innerHTML = `<div class="text-danger small text-center py-4">Failed to load salary history.</div>`;
+        }
+    }
+
+    function openAddIncrementForm() {
+        const form = document.getElementById('addIncrementForm');
+        if (!form) return;
+        ['incBasic','incAccom','incTransport','incFood','incFixedOT','incOther','incReduction','incGross','incRemarks'].forEach(id => {
+            const el = document.getElementById(id); if (el) el.value = '';
+        });
+        const eff = document.getElementById('incEffectiveFrom');
+        if (eff) eff.value = new Date().toISOString().split('T')[0];
+        form.style.display = '';
+    }
+    function closeAddIncrementForm() {
+        const form = document.getElementById('addIncrementForm');
+        if (form) form.style.display = 'none';
+    }
+
+    async function submitIncrement() {
+        const empId = document.getElementById('editEmployeeId').value || USER_ID;
+        const payload = {
+            basic_salary:            document.getElementById('incBasic').value,
+            accommodation_allowance: document.getElementById('incAccom').value,
+            transport_allowance:     document.getElementById('incTransport').value,
+            food_allowance:          document.getElementById('incFood').value,
+            fixed_ot_allowance:      document.getElementById('incFixedOT').value,
+            other_allowance:         document.getElementById('incOther').value,
+            salary_reduction:        document.getElementById('incReduction').value,
+            gross_salary:            document.getElementById('incGross').value,
+            effective_from:          document.getElementById('incEffectiveFrom').value,
+            remarks:                 document.getElementById('incRemarks').value,
+        };
+        const anyValue = ['basic_salary','accommodation_allowance','transport_allowance','food_allowance','fixed_ot_allowance','other_allowance','salary_reduction','gross_salary']
+            .some(k => (payload[k] || '').toString().trim() !== '');
+        if (!anyValue) { alert('Enter at least one salary component.'); return; }
+
+        const csrf = document.querySelector('[name=csrfmiddlewaretoken]').value;
+        const btn = document.getElementById('incSubmitBtn');
+        btn.disabled = true;
+        try {
+            const res = await fetch(`/api/attendance/employees/${empId}/salary-history/`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+                body: JSON.stringify(payload),
+            });
+            const result = await res.json();
+            if (!res.ok) { alert(result.error || 'Failed'); return; }
+            closeAddIncrementForm();
+            loadSalaryHistory(empId);
+            // Mirror new values into the Salary tab inputs by reloading the employee record
+            try {
+                const r = await fetch(`/api/attendance/employees/edit/${empId}/`);
+                const fresh = await r.json();
+                const f = document.querySelector('#addEmployeeForm');
+                ['basic_salary','accommodation_allowance','transport_allowance','food_allowance','fixed_ot_allowance','other_allowance','salary_reduction','gross_salary','salary_remarks']
+                    .forEach(k => { const el = f.querySelector(`[name="${k}"]`); if (el) el.value = fresh[k] || ''; });
+            } catch (_) {}
+        } catch (e) { alert('Network error'); }
+        finally { btn.disabled = false; }
     }
 
     // ---- Attachments ----
