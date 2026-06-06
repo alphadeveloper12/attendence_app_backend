@@ -22,6 +22,7 @@ urlpatterns = [
 
     # Job categories + distribution list (PIC manpower view)
     path('job-categories/', JobCategoryListView.as_view(), name='job-categories'),
+    path('departments/', DepartmentListView.as_view(), name='departments'),
     path('distribution/', ManpowerDistributionView.as_view(), name='manpower-distribution'),
     path('distribution/export/', ManpowerDistributionExportView.as_view(), name='manpower-distribution-export'),
     path('dashboard/distribution-list/', admin_distribution_list_view, name='admin-distribution-list'),

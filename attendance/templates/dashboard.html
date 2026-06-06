@@ -793,8 +793,13 @@
                                 </div>
                                 <div class="col-md-6"><label
                                         class="form-label small fw-bold text-secondary text-uppercase"
-                                        style="font-size: 0.65rem;">Division (Department)</label><input type="text"
-                                        name="department" class="form-control form-control-modern"></div>
+                                        style="font-size: 0.65rem;">Division (Department)</label>
+                                    <input type="text" name="department" id="employeeDepartmentInput"
+                                        list="departmentDatalist" autocomplete="off"
+                                        class="form-control form-control-modern"
+                                        placeholder="Start typing to search…">
+                                    <datalist id="departmentDatalist"></datalist>
+                                </div>
                                 <div class="col-md-6"><label
                                         class="form-label small fw-bold text-secondary text-uppercase"
                                         style="font-size: 0.65rem;">Present Designation (Position)</label><input
@@ -1336,6 +1341,7 @@
         loadEmployees();
         loadAlerts();
         populateCategoryDatalist();
+        populateDepartmentDatalist();
 
         addModal = new bootstrap.Modal(document.getElementById('addModal'));
         viewModal = new bootstrap.Modal(document.getElementById('viewModal'));
@@ -1783,6 +1789,27 @@
             const safe = (c.name || '').replace(/"/g, '&quot;');
             const dept = (c.department || '').replace(/"/g, '&quot;');
             return `<option value="${safe}"${dept ? ` label="${dept}"` : ''}>${dept ? dept + ' — ' + safe : safe}</option>`;
+        }).join('');
+    }
+
+    // ---- Searchable Department datalist ----
+    let _departmentCache = null;
+    async function _fetchDepartmentList() {
+        if (_departmentCache) return _departmentCache;
+        try {
+            const res = await fetch('/api/attendance/departments/');
+            const data = await res.json();
+            _departmentCache = data.results || [];
+        } catch (e) { _departmentCache = []; }
+        return _departmentCache;
+    }
+    async function populateDepartmentDatalist() {
+        const dl = document.getElementById('departmentDatalist');
+        if (!dl) return;
+        const items = await _fetchDepartmentList();
+        dl.innerHTML = items.map(d => {
+            const safe = (d.name || '').replace(/"/g, '&quot;');
+            return `<option value="${safe}">${safe}</option>`;
         }).join('');
     }
 

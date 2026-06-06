@@ -53,11 +53,14 @@
 <!-- Filter bar -->
 <div class="card border-0 shadow-sm mb-3">
     <div class="card-body d-flex flex-wrap gap-2 align-items-end">
-        <div>
+        <div id="siteFilterWrapper">
             <label class="form-label small fw-bold text-secondary text-uppercase mb-1">Site</label>
             <select id="siteFilter" class="form-select form-select-sm" onchange="loadDistribution()">
                 <option value="all">All Sites</option>
             </select>
+        </div>
+        <div id="resourceNote" class="small text-muted" style="display:none;">
+            <i class="ri-information-line"></i> Manpower Resources is a roster summary — not broken down per site.
         </div>
         <div class="flex-grow-1"></div>
         <button onclick="downloadExcel()" class="btn btn-success btn-sm">
@@ -88,9 +91,22 @@
                 document.querySelectorAll('#distTabs button').forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
                 currentType = btn.getAttribute('data-tab');
+                // Site filter is irrelevant for the Resources summary
+                const siteWrap = document.getElementById('siteFilterWrapper');
+                const note = document.getElementById('resourceNote');
+                if (currentType === 'resource') {
+                    if (siteWrap) siteWrap.style.display = 'none';
+                    if (note) note.style.display = '';
+                } else {
+                    if (siteWrap) siteWrap.style.display = '';
+                    if (note) note.style.display = 'none';
+                }
                 loadDistribution();
             });
         });
+        // Apply initial visibility (the default tab is 'resource')
+        document.getElementById('siteFilterWrapper').style.display = (currentType === 'resource') ? 'none' : '';
+        document.getElementById('resourceNote').style.display = (currentType === 'resource') ? '' : 'none';
         startClock();
         loadDistribution();
     });
@@ -132,9 +148,12 @@
     }
 
     function renderTable(data) {
+        // Resources sheet uses a simpler layout (no per-site columns)
+        if ((data.employee_type || '') === 'resource') {
+            return renderResourceTable(data);
+        }
         const sites = data.sites || [];
         let html = `<table class="dist-table table table-bordered mb-0">`;
-        // Header
         html += `<thead><tr>
             <th>Sr.</th>
             <th class="trade-name">Trade</th>
@@ -168,6 +187,38 @@
 
         html += `</tbody><tfoot><tr class="subtotal-row">
             <td colspan="${sites.length + 3}" class="text-end">Grand Total</td>
+            <td class="num fw-bold">${_fmt(data.grand_total)}</td>
+        </tr></tfoot></table>`;
+        document.getElementById('distContainer').innerHTML = html;
+    }
+
+    function renderResourceTable(data) {
+        let html = `<table class="dist-table table table-bordered mb-0">`;
+        html += `<thead><tr>
+            <th style="width:60px;">Sr.</th>
+            <th class="trade-name">Trade</th>
+            <th style="width:120px;">Count</th>
+        </tr></thead><tbody>`;
+        let sr = 1;
+        for (const row of (data.rows || [])) {
+            if (row.kind === 'dept') {
+                html += `<tr class="dept-row"><td colspan="3">${row.name}</td></tr>`;
+            } else if (row.kind === 'trade') {
+                html += `<tr>
+                    <td class="num">${sr++}</td>
+                    <td class="trade-name">${row.name}</td>
+                    <td class="num fw-bold">${_fmt(row.count)}</td>
+                </tr>`;
+            } else if (row.kind === 'subtotal') {
+                html += `<tr class="subtotal-row">
+                    <td></td>
+                    <td>TOTAL</td>
+                    <td class="num">${_fmt(row.count)}</td>
+                </tr>`;
+            }
+        }
+        html += `</tbody><tfoot><tr class="subtotal-row">
+            <td colspan="2" class="text-end">Grand Total</td>
             <td class="num fw-bold">${_fmt(data.grand_total)}</td>
         </tr></tfoot></table>`;
         document.getElementById('distContainer').innerHTML = html;

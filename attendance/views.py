@@ -5822,6 +5822,65 @@ class JobCategoryListView(APIView):
         return Response({'count': len(items), 'results': items})
 
 
+class DepartmentListView(APIView):
+    """Distinct department list for the searchable Division/Department dropdown.
+
+    Pulls departments out of JobCategory and out of existing Employee rows, then
+    splits any label that joins two departments with " and " or " & " into
+    separate options (e.g. "Drivers and Operators" → "Drivers" + "Operators").
+    """
+    permission_classes = [IsAdminUser | IsSiteAdmin]
+
+    _SPLIT_RE = None  # lazily compiled
+
+    @classmethod
+    def _split_label(cls, raw):
+        """Yield one or more cleaned department names from a single raw label."""
+        import re
+        if cls._SPLIT_RE is None:
+            # split on " and " (case-insensitive, whole word) or " & "
+            cls._SPLIT_RE = re.compile(r'\s+(?:and|&)\s+', re.IGNORECASE)
+        if not raw:
+            return
+        for part in cls._SPLIT_RE.split(raw):
+            p = (part or '').strip(' -–—,;')
+            if p:
+                yield p
+
+    def get(self, request):
+        # Distinct values from both tables
+        from_cats = (
+            JobCategory.objects
+            .filter(is_active=True)
+            .exclude(department__isnull=True).exclude(department='')
+            .values_list('department', flat=True).distinct()
+        )
+        from_emps = (
+            Employee.objects
+            .exclude(department__isnull=True).exclude(department='')
+            .values_list('department', flat=True).distinct()
+        )
+
+        # Dedupe case-insensitively while preserving the first-seen casing
+        seen = {}
+        for raw in list(from_cats) + list(from_emps):
+            for part in self._split_label(raw):
+                key = part.lower()
+                if key not in seen:
+                    seen[key] = part
+
+        # Optional ?q= substring filter
+        q = (request.GET.get('q') or '').strip().lower()
+        items = sorted(seen.values(), key=lambda s: s.lower())
+        if q:
+            items = [d for d in items if q in d.lower()]
+
+        return Response({
+            'count': len(items),
+            'results': [{'name': d} for d in items],
+        })
+
+
 def _distribution_employee_qs(request):
     """Apply site-admin scope to the employee queryset used by the
     distribution endpoints, so site admins only count their own sites."""
@@ -5837,22 +5896,73 @@ def _distribution_employee_qs(request):
 
 def _distribution_payload(request, employee_type):
     """Build the distribution table for a single employee_type ('staff' /
-    'worker' / 'resource'). Returns dict ready for JSON or Excel rendering.
+    'worker' / 'resource').
 
-    Structure:
-        {
-          'employee_type': 'staff',
-          'sites':   [{id, name}, ...],     # dynamic — from Site model
-          'rows': [
-            {kind: 'dept', name: ...},
-            {kind: 'trade', category_id, department, name, counts: {site_id: n}, leave, total},
-            {kind: 'subtotal', department, counts: {...}, leave, total},
-            ...
-          ],
-          'grand_total': N,
-        }
+    The Resources sheet in the source workbooks uses a DIFFERENT layout —
+    just Trade → Total count per department, no site breakdown. We honour
+    that here:
+
+        Staff / Worker payload (full matrix):
+          { employee_type, sites: [...], rows: [
+              {kind:'dept', name:...},
+              {kind:'trade', counts: {site_id: n}, leave, total},
+              {kind:'subtotal', counts: {...}, leave, total} ], grand_total }
+
+        Resource payload (flat):
+          { employee_type:'resource', sites: [],   # always empty
+            rows: [
+              {kind:'dept', name:...},
+              {kind:'trade', count: N},
+              {kind:'subtotal', count: N} ], grand_total }
     """
     from collections import OrderedDict, defaultdict
+
+    # --- RESOURCE: simple Trade → Total count layout ---------------------
+    if employee_type == 'resource':
+        emps = _distribution_employee_qs(request).values('salary_grade', 'position', 'status')
+        by_trade = defaultdict(int)
+        for e in emps:
+            key = ((e['salary_grade'] or '').strip().lower()
+                   or (e['position'] or '').strip().lower())
+            if not key:
+                continue
+            by_trade[key] += 1
+        cats = list(JobCategory.objects.filter(
+            is_active=True, employee_type='resource',
+        ).order_by('sheet_order', 'name'))
+
+        rows = []
+        grand_total = 0
+        current_dept = None
+        dept_total = 0
+        for cat in cats:
+            if cat.department != current_dept:
+                if current_dept is not None:
+                    rows.append({'kind': 'subtotal', 'department': current_dept, 'count': dept_total})
+                current_dept = cat.department
+                dept_total = 0
+                rows.append({'kind': 'dept', 'name': cat.department or '—'})
+            n = by_trade.get(cat.name.strip().lower(), 0)
+            grand_total += n
+            dept_total += n
+            rows.append({
+                'kind': 'trade',
+                'category_id': cat.id,
+                'department': cat.department or '',
+                'name': cat.name,
+                'count': n,
+            })
+        if current_dept is not None:
+            rows.append({'kind': 'subtotal', 'department': current_dept, 'count': dept_total})
+
+        return {
+            'employee_type': 'resource',
+            'sites': [],
+            'rows': rows,
+            'grand_total': grand_total,
+            'selected_site': 'all',
+        }
+    # --- STAFF / WORKER: full site × trade matrix ------------------------
 
     # Live site columns — dynamic, NOT hard-coded from the spreadsheet.
     site_id_filter = request.GET.get('site')
@@ -6015,7 +6125,50 @@ class ManpowerDistributionExportView(APIView):
         # Date
         ws.cell(row=1, column=4, value=f"Date: {timezone.localdate().isoformat()}")
 
-        # Column header — dynamic site columns
+        # Resource sheet uses a flat layout (no site columns / no leave column)
+        if t == 'resource':
+            headers = ['Sr. No.', 'Department', 'Trade', 'Count']
+            for c, h in enumerate(headers, start=1):
+                cell = ws.cell(row=3, column=c, value=h)
+                cell.fill = header_fill; cell.font = header_font
+                cell.alignment = center; cell.border = border
+            r = 4
+            sr = 1
+            current_dept = ''
+            for row in data['rows']:
+                if row['kind'] == 'dept':
+                    current_dept = row['name']
+                    cell = ws.cell(row=r, column=1, value=current_dept)
+                    ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=len(headers))
+                    cell.fill = dept_fill; cell.font = dept_font
+                    r += 1
+                elif row['kind'] == 'trade':
+                    ws.cell(row=r, column=1, value=sr).border = border
+                    ws.cell(row=r, column=2, value=row.get('department', '')).border = border
+                    ws.cell(row=r, column=3, value=row['name']).border = border
+                    ws.cell(row=r, column=4, value=row['count']).border = border
+                    sr += 1; r += 1
+                elif row['kind'] == 'subtotal':
+                    ws.cell(row=r, column=3, value='TOTAL').font = subtotal_font
+                    cell = ws.cell(row=r, column=4, value=row['count'])
+                    cell.font = subtotal_font; cell.fill = subtotal_fill; cell.border = border
+                    ws.cell(row=r, column=3).fill = subtotal_fill
+                    ws.cell(row=r, column=3).border = border
+                    r += 1
+            ws.column_dimensions['B'].width = 32
+            ws.column_dimensions['C'].width = 40
+            ws.freeze_panes = 'A4'
+            # Skip the rest of the staff/worker layout
+            out = io.BytesIO()
+            wb.save(out); out.seek(0)
+            resp = HttpResponse(
+                out.read(),
+                content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            )
+            resp['Content-Disposition'] = f'attachment; filename=manpower_resources_{timezone.localdate()}.xlsx'
+            return resp
+
+        # Staff / worker — dynamic site columns
         sites = data['sites']
         headers = ['Sr. No.', 'Trade'] + [s['name'] for s in sites] + ['Leave', 'Total']
         for c, h in enumerate(headers, start=1):
