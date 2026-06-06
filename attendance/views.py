@@ -45,7 +45,7 @@ from .utils import (
     THRESH, MARGIN, get_image_bytes
 )
 from .geofence import check_geofence
-from .models import Employee, Attendance, Site, FaceTemplate, AdminProfile, AppBuild, EmployeeStatusHistory, EmployeeSiteHistory, EmployeeAttachment, EmployeeSalaryHistory
+from .models import Employee, Attendance, Site, FaceTemplate, AdminProfile, AppBuild, EmployeeStatusHistory, EmployeeSiteHistory, EmployeeAttachment, EmployeeSalaryHistory, JobCategory
 from .serializers import *
 from .permissions import IsSiteAdmin
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -5784,3 +5784,304 @@ class EmployeeAttendanceHistoryView(APIView):
             
         except Employee.DoesNotExist:
             return Response({'error': 'Employee not found'}, status=404)
+
+
+# ---------------------------------------------------------------------------
+# Job Categories + Distribution List
+# ---------------------------------------------------------------------------
+
+class JobCategoryListView(APIView):
+    """List job categories. Used by searchable category dropdowns.
+
+    Query params:
+        q    — substring (case-insensitive) match against name / department
+        type — 'staff' | 'worker' | 'resource' | omit for all
+        limit — default 200, max 2000
+    """
+    permission_classes = [IsAdminUser | IsSiteAdmin]
+
+    def get(self, request):
+        qs = JobCategory.objects.filter(is_active=True)
+        q = (request.GET.get('q') or '').strip()
+        t = (request.GET.get('type') or '').strip().lower()
+        if t in ('staff', 'worker', 'resource'):
+            qs = qs.filter(employee_type=t)
+        if q:
+            qs = qs.filter(Q(name__icontains=q) | Q(department__icontains=q))
+        try:
+            limit = max(1, min(int(request.GET.get('limit') or 200), 2000))
+        except ValueError:
+            limit = 200
+        qs = qs[:limit]
+        items = [{
+            'id': c.id,
+            'name': c.name,
+            'department': c.department or '',
+            'employee_type': c.employee_type,
+        } for c in qs]
+        return Response({'count': len(items), 'results': items})
+
+
+def _distribution_employee_qs(request):
+    """Apply site-admin scope to the employee queryset used by the
+    distribution endpoints, so site admins only count their own sites."""
+    qs = Employee.objects.select_related('site').all()
+    if not request.user.is_superuser:
+        try:
+            profile = AdminProfile.objects.get(user=request.user)
+            qs = qs.filter(site__in=profile.sites.all())
+        except AdminProfile.DoesNotExist:
+            qs = qs.none()
+    return qs
+
+
+def _distribution_payload(request, employee_type):
+    """Build the distribution table for a single employee_type ('staff' /
+    'worker' / 'resource'). Returns dict ready for JSON or Excel rendering.
+
+    Structure:
+        {
+          'employee_type': 'staff',
+          'sites':   [{id, name}, ...],     # dynamic — from Site model
+          'rows': [
+            {kind: 'dept', name: ...},
+            {kind: 'trade', category_id, department, name, counts: {site_id: n}, leave, total},
+            {kind: 'subtotal', department, counts: {...}, leave, total},
+            ...
+          ],
+          'grand_total': N,
+        }
+    """
+    from collections import OrderedDict, defaultdict
+
+    # Live site columns — dynamic, NOT hard-coded from the spreadsheet.
+    site_id_filter = request.GET.get('site')
+    sites_qs = Site.objects.all().order_by('name')
+    if site_id_filter and site_id_filter != 'all':
+        try:
+            sites_qs = sites_qs.filter(id=int(site_id_filter))
+        except (ValueError, TypeError):
+            pass
+    if not request.user.is_superuser:
+        try:
+            profile = AdminProfile.objects.get(user=request.user)
+            sites_qs = sites_qs.filter(id__in=profile.sites.values_list('id', flat=True))
+        except AdminProfile.DoesNotExist:
+            sites_qs = sites_qs.none()
+    site_list = list(sites_qs.values('id', 'name'))
+    site_ids = [s['id'] for s in site_list]
+
+    # All categories of the requested type, sheet-ordered, grouped by department.
+    cats = list(JobCategory.objects.filter(
+        is_active=True, employee_type=employee_type,
+    ).order_by('sheet_order', 'name'))
+
+    # Pre-aggregate employee counts: (category_name_lower, site_id_or_None, status)
+    emps = _distribution_employee_qs(request).values(
+        'salary_grade', 'position', 'site_id', 'status'
+    )
+
+    # Build a lookup keyed by lowercase trade name → site_id → count
+    by_trade = defaultdict(lambda: defaultdict(int))
+    leave_by_trade = defaultdict(int)
+    for e in emps:
+        sg = (e['salary_grade'] or '').strip().lower()
+        po = (e['position'] or '').strip().lower()
+        key = sg or po
+        if not key:
+            continue
+        if (e['status'] or '').strip() == 'Leave':
+            leave_by_trade[key] += 1
+            continue
+        by_trade[key][e['site_id']] += 1
+
+    rows = []
+    grand_total = 0
+    current_dept = None
+    dept_totals = defaultdict(int)
+    dept_site_counts = defaultdict(lambda: defaultdict(int))
+    dept_leave = defaultdict(int)
+    for cat in cats:
+        if cat.department != current_dept:
+            # flush previous subtotal
+            if current_dept is not None:
+                sub_counts = {sid: dept_site_counts[current_dept].get(sid, 0) for sid in site_ids}
+                sub_total = sum(sub_counts.values()) + dept_leave[current_dept]
+                rows.append({
+                    'kind': 'subtotal',
+                    'department': current_dept,
+                    'counts': sub_counts,
+                    'leave': dept_leave[current_dept],
+                    'total': sub_total,
+                })
+            current_dept = cat.department
+            rows.append({'kind': 'dept', 'name': cat.department or '—'})
+
+        key = cat.name.strip().lower()
+        per_site = by_trade.get(key, {})
+        counts = {sid: per_site.get(sid, 0) for sid in site_ids}
+        leave = leave_by_trade.get(key, 0)
+        total = sum(counts.values()) + leave
+        grand_total += total
+        rows.append({
+            'kind': 'trade',
+            'category_id': cat.id,
+            'department': cat.department or '',
+            'name': cat.name,
+            'counts': counts,
+            'leave': leave,
+            'total': total,
+        })
+        for sid, n in counts.items():
+            dept_site_counts[cat.department][sid] += n
+        dept_leave[cat.department] += leave
+        dept_totals[cat.department] += total
+
+    # flush final subtotal
+    if current_dept is not None:
+        sub_counts = {sid: dept_site_counts[current_dept].get(sid, 0) for sid in site_ids}
+        sub_total = sum(sub_counts.values()) + dept_leave[current_dept]
+        rows.append({
+            'kind': 'subtotal',
+            'department': current_dept,
+            'counts': sub_counts,
+            'leave': dept_leave[current_dept],
+            'total': sub_total,
+        })
+
+    return {
+        'employee_type': employee_type,
+        'sites': site_list,
+        'rows': rows,
+        'grand_total': grand_total,
+        'selected_site': site_id_filter or 'all',
+    }
+
+
+class ManpowerDistributionView(APIView):
+    """GET /api/attendance/distribution/?type=staff|worker|resource (&site=ID)
+    Returns a tabular JSON payload mirroring the PIC manpower sheets layout
+    but with sites read live from the Site table.
+    """
+    permission_classes = [IsAdminUser | IsSiteAdmin]
+
+    def get(self, request):
+        t = (request.GET.get('type') or 'staff').lower()
+        if t not in ('staff', 'worker', 'resource'):
+            return Response({'error': "type must be 'staff', 'worker' or 'resource'"}, status=400)
+        return Response(_distribution_payload(request, t))
+
+
+class ManpowerDistributionExportView(APIView):
+    """GET /api/attendance/distribution/export/?type=...&site=...
+    Excel download in the same row layout (Sr.No | Trade | <Site columns> | Leave | Total).
+    """
+    permission_classes = [IsAdminUser | IsSiteAdmin]
+
+    _TITLE = {
+        'staff':    'PIC Group — DEPT-WISE / TRADE-WISE / PROJECT-WISE STRENGTH OF STAFF',
+        'worker':   'PIC Group — DEPT-WISE / TRADE-WISE / PROJECT-WISE STRENGTH OF WORKERS',
+        'resource': 'MANPOWER RESOURCES',
+    }
+
+    def get(self, request):
+        import io
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+        from django.http import HttpResponse
+
+        t = (request.GET.get('type') or 'staff').lower()
+        if t not in ('staff', 'worker', 'resource'):
+            return HttpResponse('Bad type', status=400)
+        data = _distribution_payload(request, t)
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = {'staff': 'Staff', 'worker': 'Workers', 'resource': 'Resources'}[t]
+
+        thin = Side(border_style='thin', color='999999')
+        border = Border(top=thin, bottom=thin, left=thin, right=thin)
+        title_font = Font(bold=True, size=12)
+        header_fill = PatternFill(start_color='2563EB', end_color='2563EB', fill_type='solid')
+        header_font = Font(bold=True, color='FFFFFF')
+        dept_fill = PatternFill(start_color='F3F4F6', end_color='F3F4F6', fill_type='solid')
+        dept_font = Font(bold=True)
+        subtotal_fill = PatternFill(start_color='FEF3C7', end_color='FEF3C7', fill_type='solid')
+        subtotal_font = Font(bold=True)
+        center = Alignment(horizontal='center', vertical='center', wrap_text=True)
+
+        # Title row
+        ws.cell(row=1, column=1, value=self._TITLE[t]).font = title_font
+        # Date
+        ws.cell(row=1, column=4, value=f"Date: {timezone.localdate().isoformat()}")
+
+        # Column header — dynamic site columns
+        sites = data['sites']
+        headers = ['Sr. No.', 'Trade'] + [s['name'] for s in sites] + ['Leave', 'Total']
+        for c, h in enumerate(headers, start=1):
+            cell = ws.cell(row=3, column=c, value=h)
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = center
+            cell.border = border
+
+        r = 4
+        sr = 1
+        for row in data['rows']:
+            if row['kind'] == 'dept':
+                cell = ws.cell(row=r, column=1, value=row['name'])
+                ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=len(headers))
+                cell.fill = dept_fill
+                cell.font = dept_font
+                r += 1
+            elif row['kind'] == 'trade':
+                ws.cell(row=r, column=1, value=sr).border = border
+                ws.cell(row=r, column=2, value=row['name']).border = border
+                for ci, s in enumerate(sites, start=3):
+                    ws.cell(row=r, column=ci, value=row['counts'].get(s['id'], 0)).border = border
+                ws.cell(row=r, column=len(headers) - 1, value=row['leave']).border = border
+                ws.cell(row=r, column=len(headers), value=row['total']).border = border
+                sr += 1
+                r += 1
+            elif row['kind'] == 'subtotal':
+                ws.cell(row=r, column=2, value='TOTAL').font = subtotal_font
+                for ci, s in enumerate(sites, start=3):
+                    cell = ws.cell(row=r, column=ci, value=row['counts'].get(s['id'], 0))
+                    cell.font = subtotal_font
+                    cell.fill = subtotal_fill
+                    cell.border = border
+                cell = ws.cell(row=r, column=len(headers) - 1, value=row['leave'])
+                cell.font = subtotal_font; cell.fill = subtotal_fill; cell.border = border
+                cell = ws.cell(row=r, column=len(headers), value=row['total'])
+                cell.font = subtotal_font; cell.fill = subtotal_fill; cell.border = border
+                ws.cell(row=r, column=2).fill = subtotal_fill
+                ws.cell(row=r, column=2).border = border
+                r += 1
+
+        # Auto column widths
+        for col_idx, h in enumerate(headers, start=1):
+            letter = openpyxl.utils.get_column_letter(col_idx)
+            ws.column_dimensions[letter].width = max(10, len(h) + 2)
+        ws.column_dimensions['B'].width = 36
+        ws.freeze_panes = 'C4'
+
+        out = io.BytesIO()
+        wb.save(out)
+        out.seek(0)
+        resp = HttpResponse(
+            out.read(),
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        )
+        resp['Content-Disposition'] = f'attachment; filename=manpower_{t}_{timezone.localdate()}.xlsx'
+        return resp
+
+
+@login_required(login_url='admin-login')
+def admin_distribution_list_view(request):
+    """Renders the Distribution List page skeleton — the tabs populate via AJAX."""
+    if not request.user.is_staff:
+        return redirect('admin-login')
+    is_superuser = request.user.is_superuser
+    return render(request, 'distribution_list.html', {
+        'is_superuser': is_superuser,
+    })

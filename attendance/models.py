@@ -178,6 +178,32 @@ class EmployeeSiteHistory(models.Model):
         )
 
 
+class JobCategory(models.Model):
+    """A canonical job category / trade name, grouped by department + employee type.
+
+    Seeded from the PIC manpower spreadsheets — admins assign these to employees
+    via the Category dropdown, and the Distribution List page groups counts by
+    department and trade to mirror those sheets dynamically.
+    """
+    EMP_TYPE_CHOICES = [
+        ('staff', 'Staff'),
+        ('worker', 'Worker'),
+        ('resource', 'Manpower Resource'),
+    ]
+    name          = models.CharField(max_length=200)
+    department    = models.CharField(max_length=200, null=True, blank=True)
+    employee_type = models.CharField(max_length=10, choices=EMP_TYPE_CHOICES, default='worker')
+    sheet_order   = models.IntegerField(default=0)
+    is_active     = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ['employee_type', 'sheet_order', 'name']
+        unique_together = [('name', 'employee_type')]
+
+    def __str__(self):
+        return f"[{self.get_employee_type_display()}] {self.department or '—'} → {self.name}"
+
+
 class EmployeeAttachment(models.Model):
     """Free-form file attachments admins upload against an employee.
 

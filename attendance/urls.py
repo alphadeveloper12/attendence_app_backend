@@ -19,6 +19,12 @@ urlpatterns = [
     path('employees/<int:employee_id>/site-history/', EmployeeSiteHistoryView.as_view(), name='admin-employee-site-history'),
     path('employees/<int:employee_id>/attachments/', EmployeeAttachmentsView.as_view(), name='admin-employee-attachments'),
     path('employees/<int:employee_id>/salary-history/', EmployeeSalaryHistoryView.as_view(), name='admin-employee-salary-history'),
+
+    # Job categories + distribution list (PIC manpower view)
+    path('job-categories/', JobCategoryListView.as_view(), name='job-categories'),
+    path('distribution/', ManpowerDistributionView.as_view(), name='manpower-distribution'),
+    path('distribution/export/', ManpowerDistributionExportView.as_view(), name='manpower-distribution-export'),
+    path('dashboard/distribution-list/', admin_distribution_list_view, name='admin-distribution-list'),
     path('employees/<int:employee_id>/sick-leave/', EmployeeSickLeaveView.as_view(), name='admin-employee-sick-leave'),
     path('employees/<int:employee_id>/mark-day/', MarkDayView.as_view(), name='admin-employee-mark-day'),
     path('employees/delete/<int:employee_id>/', AdminDeleteEmployeeView.as_view(), name='admin-delete-employee'),

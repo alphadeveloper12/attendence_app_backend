@@ -186,6 +186,10 @@
                     class="nav-item {% if 'monthly-report' in request.path %}active{% endif %}">
                     <span class="nav-icon">🗓️</span> Monthly Report
                 </a>
+                <a href="{% url 'admin-distribution-list' %}"
+                    class="nav-item {% if 'distribution-list' in request.path %}active{% endif %}">
+                    <span class="nav-icon">📊</span> Distribution List
+                </a>
                 <a href="{% url 'admin-user-face' %}"
                     class="nav-item {% if 'user-face' in request.path %}active{% endif %}">
                     <span class="nav-icon">👤</span> User Face

@@ -270,7 +270,11 @@
                 <i class="ri-user-settings-line me-1"></i> All Categories
             </button>
             <ul class="dropdown-menu dropdown-menu-end shadow-lg border-0 rounded-4 dropdown-menu-scrollable"
-                id="categoryDropdown">
+                id="categoryDropdown" style="min-width: 320px; max-height: 420px; overflow-y: auto;">
+                <li class="px-2 py-2 sticky-top bg-white" style="border-bottom:1px solid #e5e7eb;">
+                    <input type="text" id="categorySearchInput" class="form-control form-control-sm"
+                        placeholder="Search categories…" oninput="filterCategoryDropdown()">
+                </li>
                 <li><a class="dropdown-item py-2" href="#" onclick="filterCategory('all', 'All Categories')"><i
                             class="ri-history-line"></i> All Categories</a></li>
             </ul>
@@ -797,8 +801,13 @@
                                         type="text" name="position" class="form-control form-control-modern"></div>
                                 <div class="col-md-4"><label
                                         class="form-label small fw-bold text-secondary text-uppercase"
-                                        style="font-size: 0.65rem;">Category</label><input type="text"
-                                        name="salary_grade" class="form-control form-control-modern"></div>
+                                        style="font-size: 0.65rem;">Category</label>
+                                    <input type="text" name="salary_grade" id="employeeCategoryInput"
+                                        list="categoryDatalist" autocomplete="off"
+                                        class="form-control form-control-modern"
+                                        placeholder="Start typing to search…">
+                                    <datalist id="categoryDatalist"></datalist>
+                                </div>
                                 <div class="col-md-4"><label
                                         class="form-label small fw-bold text-secondary text-uppercase"
                                         style="font-size: 0.65rem;">Project / Site</label><select name="site"
@@ -1326,6 +1335,7 @@
         loadStats();
         loadEmployees();
         loadAlerts();
+        populateCategoryDatalist();
 
         addModal = new bootstrap.Modal(document.getElementById('addModal'));
         viewModal = new bootstrap.Modal(document.getElementById('viewModal'));
@@ -1390,14 +1400,10 @@
                 });
             }
 
-            // Load categories
-            const categoryList = document.getElementById('categoryDropdown');
-            categoryList.innerHTML = `<li><a class="dropdown-item" href="#" onclick="filterCategory('all', 'All Categories')"><i class="ri-history-line text-secondary"></i> All Categories</a></li>`;
-            if (data.categories) {
-                data.categories.forEach(c => {
-                    categoryList.innerHTML += `<li><a class="dropdown-item" href="#" onclick="filterCategory('${c}', '${c}')"><i class="ri-user-settings-line text-secondary"></i> ${c}</a></li>`;
-                });
-            }
+            // Load categories — keep the search input pinned at the top,
+            // then list everything from JobCategory plus any legacy values
+            // surfaced from existing employees (via the stats endpoint).
+            await populateCategoryDropdown(data.categories || []);
         } catch (e) { console.error(e); }
     }
 
@@ -1715,6 +1721,92 @@
         loadStats();
         loadEmployees();
         loadAlerts();
+    }
+
+    // ---- Searchable Category dropdown (top bar) ----
+    // We cache the full JobCategory list so the search input filters client-side.
+    let _categoryCache = null;
+    async function _fetchCategoryList() {
+        if (_categoryCache) return _categoryCache;
+        try {
+            const res = await fetch('/api/attendance/job-categories/?limit=2000');
+            const data = await res.json();
+            _categoryCache = data.results || [];
+        } catch (e) {
+            _categoryCache = [];
+        }
+        return _categoryCache;
+    }
+
+    async function populateCategoryDropdown(legacyValues) {
+        const ul = document.getElementById('categoryDropdown');
+        // Find / keep the search header + "All Categories" item, then re-render the rest
+        const cats = await _fetchCategoryList();
+        // Merge cats with legacy free-text values surfaced by the stats endpoint
+        const have = new Set(cats.map(c => (c.name || '').toLowerCase()));
+        const legacyExtra = (legacyValues || []).filter(c => c && !have.has(c.toLowerCase())).map(c => ({ name: c, department: '' }));
+        const all = [...cats, ...legacyExtra];
+
+        const html = [
+            `<li class="px-2 py-2 sticky-top bg-white" style="border-bottom:1px solid #e5e7eb;">
+                <input type="text" id="categorySearchInput" class="form-control form-control-sm"
+                    placeholder="Search categories…" oninput="filterCategoryDropdown()">
+            </li>`,
+            `<li><a class="dropdown-item py-2" href="#" onclick="filterCategory('all', 'All Categories')"><i class="ri-history-line text-secondary"></i> All Categories</a></li>`,
+        ];
+        // Group by department for readability
+        const byDept = {};
+        for (const c of all) {
+            const d = c.department || 'Other';
+            (byDept[d] = byDept[d] || []).push(c);
+        }
+        for (const dept of Object.keys(byDept).sort()) {
+            html.push(`<li class="dropdown-header small text-secondary text-uppercase fw-bold mt-1" data-cat-dept="${dept}">${dept}</li>`);
+            for (const c of byDept[dept]) {
+                const safe = c.name.replace(/'/g, "\\'");
+                html.push(`<li class="cat-item" data-cat-name="${c.name.toLowerCase()}" data-cat-dept-key="${dept.toLowerCase()}">
+                    <a class="dropdown-item py-2" href="#" onclick="filterCategory('${safe}', '${safe}')">
+                        <i class="ri-user-settings-line text-secondary"></i> ${c.name}
+                    </a>
+                </li>`);
+            }
+        }
+        ul.innerHTML = html.join('');
+    }
+
+    async function populateCategoryDatalist() {
+        const dl = document.getElementById('categoryDatalist');
+        if (!dl) return;
+        const cats = await _fetchCategoryList();
+        // <option> with `value` and `label` is the searchable dropdown native UX
+        dl.innerHTML = cats.map(c => {
+            const safe = (c.name || '').replace(/"/g, '&quot;');
+            const dept = (c.department || '').replace(/"/g, '&quot;');
+            return `<option value="${safe}"${dept ? ` label="${dept}"` : ''}>${dept ? dept + ' — ' + safe : safe}</option>`;
+        }).join('');
+    }
+
+    function filterCategoryDropdown() {
+        const q = (document.getElementById('categorySearchInput').value || '').trim().toLowerCase();
+        const items = document.querySelectorAll('#categoryDropdown .cat-item');
+        const headers = document.querySelectorAll('#categoryDropdown [data-cat-dept]');
+        if (!q) {
+            items.forEach(i => i.style.display = '');
+            headers.forEach(h => h.style.display = '');
+            return;
+        }
+        // Hide unmatched items, then hide section headers whose section is empty.
+        items.forEach(i => {
+            const match = i.getAttribute('data-cat-name').includes(q) ||
+                          i.getAttribute('data-cat-dept-key').includes(q);
+            i.style.display = match ? '' : 'none';
+        });
+        headers.forEach(h => {
+            const dept = (h.getAttribute('data-cat-dept') || '').toLowerCase();
+            const anyVisible = Array.from(document.querySelectorAll(`#categoryDropdown .cat-item[data-cat-dept-key="${dept}"]`))
+                .some(el => el.style.display !== 'none');
+            h.style.display = anyVisible ? '' : 'none';
+        });
     }
 
     function filterEmployer(employer, label) {

@@ -606,8 +606,13 @@
                                         type="text" name="position" class="form-control form-control-modern"></div>
                                 <div class="col-md-4"><label
                                         class="form-label small fw-bold text-secondary text-uppercase"
-                                        style="font-size: 0.65rem;">Category</label><input type="text"
-                                        name="salary_grade" class="form-control form-control-modern"></div>
+                                        style="font-size: 0.65rem;">Category</label>
+                                    <input type="text" name="salary_grade" id="employeeCategoryInput"
+                                        list="categoryDatalist" autocomplete="off"
+                                        class="form-control form-control-modern"
+                                        placeholder="Start typing to search…">
+                                    <datalist id="categoryDatalist"></datalist>
+                                </div>
                                 <div class="col-md-4"><label
                                         class="form-label small fw-bold text-secondary text-uppercase"
                                         style="font-size: 0.65rem;">Project / Site</label><select name="site"
@@ -1545,11 +1550,30 @@
         out.value = days + (days === 1 ? ' day' : ' days');
     }
 
+    // Populate the Category <datalist> from JobCategory the first time the modal opens
+    let _categoryDatalistReady = false;
+    async function _populateCategoryDatalist() {
+        if (_categoryDatalistReady) return;
+        const dl = document.getElementById('categoryDatalist');
+        if (!dl) return;
+        try {
+            const res = await fetch('/api/attendance/job-categories/?limit=2000');
+            const data = await res.json();
+            dl.innerHTML = (data.results || []).map(c => {
+                const safe = (c.name || '').replace(/"/g, '&quot;');
+                const dept = (c.department || '').replace(/"/g, '&quot;');
+                return `<option value="${safe}"${dept ? ` label="${dept}"` : ''}>${dept ? dept + ' — ' + safe : safe}</option>`;
+            }).join('');
+            _categoryDatalistReady = true;
+        } catch (e) { /* keep input as plain text fallback */ }
+    }
+
     async function editEmployee(empId) {
         document.getElementById('addModalTitle').textContent = 'Edit Employee';
         document.getElementById('saveEmployeeBtn').textContent = 'Update Employee';
         document.getElementById('editEmployeeId').value = empId;
         addModal.show();
+        _populateCategoryDatalist();
         try {
             const res = await fetch(`/api/attendance/employees/edit/${empId}/`);
             const data = await res.json();
