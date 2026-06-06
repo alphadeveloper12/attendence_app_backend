@@ -5909,11 +5909,13 @@ def _distribution_payload(request, employee_type):
 
     # --- RESOURCE: simple Trade → Total count layout ---------------------
     if employee_type == 'resource':
-        emps = _distribution_employee_qs(request).values('salary_grade', 'position', 'status')
+        emps = _distribution_employee_qs(request).values('position', 'salary_grade', 'status')
         by_trade = defaultdict(int)
         for e in emps:
-            key = ((e['salary_grade'] or '').strip().lower()
-                   or (e['position'] or '').strip().lower())
+            # Match by Position first (the new seeded-trade field), then fall
+            # back to legacy salary_grade for employees imported before the swap.
+            key = ((e['position'] or '').strip().lower()
+                   or (e['salary_grade'] or '').strip().lower())
             if not key:
                 continue
             by_trade[key] += 1
@@ -5978,16 +5980,18 @@ def _distribution_payload(request, employee_type):
 
     # Pre-aggregate employee counts: (category_name_lower, site_id_or_None, status)
     emps = _distribution_employee_qs(request).values(
-        'salary_grade', 'position', 'site_id', 'status'
+        'position', 'salary_grade', 'site_id', 'status'
     )
 
-    # Build a lookup keyed by lowercase trade name → site_id → count
+    # Build a lookup keyed by lowercase trade name → site_id → count.
+    # Match by Position first (the new seeded-trade field), with legacy
+    # salary_grade as a fall-back for employees imported before the UI swap.
     by_trade = defaultdict(lambda: defaultdict(int))
     leave_by_trade = defaultdict(int)
     for e in emps:
-        sg = (e['salary_grade'] or '').strip().lower()
         po = (e['position'] or '').strip().lower()
-        key = sg or po
+        sg = (e['salary_grade'] or '').strip().lower()
+        key = po or sg
         if not key:
             continue
         if (e['status'] or '').strip() == 'Leave':

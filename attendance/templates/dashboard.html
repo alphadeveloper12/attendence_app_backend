@@ -819,16 +819,37 @@
                                 </div>
                                 <div class="col-md-6"><label
                                         class="form-label small fw-bold text-secondary text-uppercase"
-                                        style="font-size: 0.65rem;">Present Designation (Position)</label><input
-                                        type="text" name="position" class="form-control form-control-modern"></div>
+                                        style="font-size: 0.65rem;">Present Designation (Position)</label>
+                                    <div class="dropdown w-100">
+                                        <button type="button" id="employeePositionBtn"
+                                            class="btn form-control form-control-modern text-start dropdown-toggle d-flex justify-content-between align-items-center"
+                                            data-bs-toggle="dropdown" data-bs-auto-close="outside">
+                                            <span id="employeePositionLabel" class="text-secondary">Select position…</span>
+                                        </button>
+                                        <input type="hidden" name="position" id="employeePositionValue">
+                                        <ul class="dropdown-menu w-100 shadow-lg border-0 rounded-3"
+                                            style="max-height: 360px; overflow-y: auto;">
+                                            <li class="px-2 py-2 sticky-top bg-white" style="border-bottom:1px solid #e5e7eb;">
+                                                <input type="text" id="employeePositionSearch"
+                                                    class="form-control form-control-sm"
+                                                    placeholder="Search positions…"
+                                                    oninput="filterEmployeePositionList()">
+                                            </li>
+                                            <li><a class="dropdown-item py-2 text-secondary"
+                                                   href="#" onclick="selectEmployeePosition('', '— Clear —'); return false;">
+                                                <i class="ri-close-line"></i> Clear selection
+                                            </a></li>
+                                            <li id="employeePositionListAnchor"></li>
+                                        </ul>
+                                    </div>
+                                </div>
                                 <div class="col-md-4"><label
                                         class="form-label small fw-bold text-secondary text-uppercase"
                                         style="font-size: 0.65rem;">Category</label>
-                                    <input type="text" name="salary_grade" id="employeeCategoryInput"
-                                        list="categoryDatalist" autocomplete="off"
-                                        class="form-control form-control-modern"
-                                        placeholder="Start typing to search…">
-                                    <datalist id="categoryDatalist"></datalist>
+                                    <select name="category" class="form-select form-select-modern">
+                                        <option value="worker">Worker</option>
+                                        <option value="staff">Staff</option>
+                                    </select>
                                 </div>
                                 <div class="col-md-4"><label
                                         class="form-label small fw-bold text-secondary text-uppercase"
@@ -1798,15 +1819,54 @@
     }
 
     async function populateCategoryDatalist() {
-        const dl = document.getElementById('categoryDatalist');
-        if (!dl) return;
+        // Function name kept for backward-compat with existing callers — it now
+        // populates the Position dropdown with all seeded JobCategory trades
+        // (Category is just Staff/Worker, a fixed <select> in the modal).
+        const anchor = document.getElementById('employeePositionListAnchor');
+        if (!anchor) return;
         const cats = await _fetchCategoryList();
-        // <option> with `value` and `label` is the searchable dropdown native UX
-        dl.innerHTML = cats.map(c => {
-            const safe = (c.name || '').replace(/"/g, '&quot;');
-            const dept = (c.department || '').replace(/"/g, '&quot;');
-            return `<option value="${safe}"${dept ? ` label="${dept}"` : ''}>${dept ? dept + ' — ' + safe : safe}</option>`;
-        }).join('');
+        let next = anchor.nextElementSibling;
+        while (next && next.classList && next.classList.contains('pos-option-item')) {
+            const toRemove = next; next = next.nextElementSibling; toRemove.remove();
+        }
+        const frag = document.createDocumentFragment();
+        for (const c of cats) {
+            const li = document.createElement('li');
+            li.className = 'pos-option-item';
+            li.setAttribute('data-pos-name', (c.name || '').toLowerCase());
+            li.setAttribute('data-pos-dept', (c.department || '').toLowerCase());
+            const safe = (c.name || '').replace(/'/g, "\\'");
+            const dept = c.department ? `<span class="text-secondary small ms-1">· ${c.department}</span>` : '';
+            li.innerHTML = `<a class="dropdown-item py-2" href="#"
+                onclick="selectEmployeePosition('${safe}', '${safe}'); return false;">
+                <i class="ri-briefcase-line text-secondary me-1"></i>${c.name}${dept}
+            </a>`;
+            frag.appendChild(li);
+        }
+        anchor.parentNode.insertBefore(frag, anchor.nextSibling);
+    }
+
+    function selectEmployeePosition(value, label) {
+        const valEl = document.getElementById('employeePositionValue');
+        const lblEl = document.getElementById('employeePositionLabel');
+        if (valEl) valEl.value = value || '';
+        if (lblEl) {
+            lblEl.textContent = label || 'Select position…';
+            lblEl.className = value ? 'fw-semibold text-dark' : 'text-secondary';
+        }
+        const btn = document.getElementById('employeePositionBtn');
+        const inst = btn && bootstrap.Dropdown.getInstance(btn);
+        if (inst) inst.hide();
+    }
+
+    function filterEmployeePositionList() {
+        const q = (document.getElementById('employeePositionSearch').value || '').trim().toLowerCase();
+        document.querySelectorAll('.pos-option-item').forEach(li => {
+            const name = li.getAttribute('data-pos-name') || '';
+            const dept = li.getAttribute('data-pos-dept') || '';
+            const match = !q || name.includes(q) || dept.includes(q);
+            li.style.display = match ? '' : 'none';
+        });
     }
 
     // ---- Searchable Department dropdown (Bootstrap-style, in the edit/add modal) ----
@@ -2109,10 +2169,12 @@
                 const el = f.querySelector(`[name="${key}"]`);
                 if (el && el.type !== 'file') el.value = data[key] || '';
             });
-            // Department is a Bootstrap-dropdown widget, not a normal input —
-            // restore its label/value pair explicitly.
+            // Department + Position are Bootstrap-dropdown widgets, not normal inputs —
+            // restore their label/value pairs explicitly.
             await populateDepartmentDatalist();
             selectEmployeeDepartment(data.department || '', data.department || 'Select department…');
+            await populateCategoryDatalist();
+            selectEmployeePosition(data.position || '', data.position || 'Select position…');
             // (Legacy passport/visa/labour file inputs were removed — file uploads
             // now live in the Attachments tab and are managed by loadAttachments().)
             // Remember original status — needed to detect Leave → Active transition
@@ -2764,9 +2826,11 @@
         document.getElementById('saveEmployeeBtn').textContent = 'Save Employee';
         document.getElementById('addEmployeeForm').reset();
         document.getElementById('editEmployeeId').value = '';
-        // Reset the Bootstrap-dropdown Department widget (form.reset() doesn't touch it)
+        // Reset the Bootstrap-dropdown widgets (form.reset() doesn't touch them)
         selectEmployeeDepartment('', 'Select department…');
         populateDepartmentDatalist();
+        selectEmployeePosition('', 'Select position…');
+        populateCategoryDatalist();
         originalEmployeeStatus = null; // No original — adding new employee
         toggleResumptionDate('Active'); // Always hidden when adding new
         addModal.show();
