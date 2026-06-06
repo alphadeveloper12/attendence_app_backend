@@ -211,44 +211,71 @@
     </div>
 </div>
 
-<!-- Employment status breakdown (across the filtered set) -->
-<div class="d-flex flex-wrap gap-2 mb-3 px-2" id="statusBreakdown" style="display:none;">
-    <span class="rounded-pill px-3 py-2 small fw-semibold"
+<!-- Employment status breakdown — click to filter -->
+<div class="d-flex flex-wrap gap-2 mb-3 px-2 align-items-center" id="statusBreakdown" style="display:none;">
+    <button type="button" data-emp-status="all"
+        onclick="filterByEmpStatus('all')"
+        class="status-pill rounded-pill px-3 py-2 small fw-semibold border-0"
+        style="background:rgba(59,130,246,0.12);color:#1d4ed8;">
+        <i class="ri-list-check me-1"></i> All
+    </button>
+    <button type="button" data-emp-status="Active"
+        onclick="filterByEmpStatus('Active')"
+        class="status-pill rounded-pill px-3 py-2 small fw-semibold border-0"
         style="background:rgba(34,197,94,0.12);color:#15803d;">
         <i class="ri-checkbox-circle-line me-1"></i> Active:
         <span class="ms-1 fw-bold" id="status-count-Active">0</span>
-    </span>
-    <span class="rounded-pill px-3 py-2 small fw-semibold"
+    </button>
+    <button type="button" data-emp-status="Leave"
+        onclick="filterByEmpStatus('Leave')"
+        class="status-pill rounded-pill px-3 py-2 small fw-semibold border-0"
         style="background:rgba(217,119,6,0.12);color:#b45309;">
         <i class="ri-flight-takeoff-line me-1"></i> Leave:
         <span class="ms-1 fw-bold" id="status-count-Leave">0</span>
-    </span>
-    <span class="rounded-pill px-3 py-2 small fw-semibold"
+    </button>
+    <button type="button" data-emp-status="Resigned"
+        onclick="filterByEmpStatus('Resigned')"
+        class="status-pill rounded-pill px-3 py-2 small fw-semibold border-0"
         style="background:rgba(220,38,38,0.12);color:#b91c1c;">
         <i class="ri-logout-box-r-line me-1"></i> Resigned:
         <span class="ms-1 fw-bold" id="status-count-Resigned">0</span>
-    </span>
-    <span class="rounded-pill px-3 py-2 small fw-semibold"
+    </button>
+    <button type="button" data-emp-status="Terminated"
+        onclick="filterByEmpStatus('Terminated')"
+        class="status-pill rounded-pill px-3 py-2 small fw-semibold border-0"
         style="background:rgba(220,38,38,0.12);color:#b91c1c;">
         <i class="ri-close-circle-line me-1"></i> Terminated:
         <span class="ms-1 fw-bold" id="status-count-Terminated">0</span>
-    </span>
-    <span class="rounded-pill px-3 py-2 small fw-semibold"
+    </button>
+    <button type="button" data-emp-status="No Renewal"
+        onclick="filterByEmpStatus('No Renewal')"
+        class="status-pill rounded-pill px-3 py-2 small fw-semibold border-0"
         style="background:rgba(107,114,128,0.12);color:#374151;">
         <i class="ri-file-history-line me-1"></i> No Renewal:
         <span class="ms-1 fw-bold" id="status-count-No-Renewal">0</span>
-    </span>
-    <span class="rounded-pill px-3 py-2 small fw-semibold"
+    </button>
+    <button type="button" data-emp-status="Absconding"
+        onclick="filterByEmpStatus('Absconding')"
+        class="status-pill rounded-pill px-3 py-2 small fw-semibold border-0"
         style="background:rgba(31,41,55,0.12);color:#111827;">
         <i class="ri-user-unfollow-line me-1"></i> Absconding:
         <span class="ms-1 fw-bold" id="status-count-Absconding">0</span>
-    </span>
-    <span class="rounded-pill px-3 py-2 small fw-semibold"
+    </button>
+    <button type="button" data-emp-status="Other"
+        onclick="filterByEmpStatus('Other')"
+        class="status-pill rounded-pill px-3 py-2 small fw-semibold border-0"
         style="background:rgba(99,102,241,0.12);color:#4338ca;">
         <i class="ri-more-line me-1"></i> Other:
         <span class="ms-1 fw-bold" id="status-count-Other">0</span>
-    </span>
+    </button>
 </div>
+
+<style>
+    .status-pill { transition: transform 120ms ease, box-shadow 120ms ease, opacity 120ms ease; cursor: pointer; }
+    .status-pill:hover { transform: translateY(-1px); }
+    .status-pill.is-active { box-shadow: 0 0 0 2px currentColor inset, 0 4px 12px rgba(0,0,0,0.08); transform: translateY(-1px); }
+    .status-pill.is-dim { opacity: 0.55; }
+</style>
 
 <!-- Table Header Actions -->
 <div class="d-flex justify-content-between align-items-center mb-4 px-2">
@@ -295,6 +322,26 @@
     let filterInitialized = false;
     let searchTimer;
     let currentPage = 1;
+    let currentEmpStatus = 'all';
+
+    // Click handler for the employment-status pills
+    function filterByEmpStatus(value) {
+        // Click the active pill again to clear
+        if (currentEmpStatus === value && value !== 'all') value = 'all';
+        currentEmpStatus = value || 'all';
+        syncStatusPillStyles();
+        loadData(1);
+    }
+
+    function syncStatusPillStyles() {
+        const pills = document.querySelectorAll('.status-pill');
+        const sel = currentEmpStatus || 'all';
+        pills.forEach(p => {
+            const v = p.getAttribute('data-emp-status');
+            p.classList.toggle('is-active', v === sel);
+            p.classList.toggle('is-dim', sel !== 'all' && v !== sel && v !== 'all');
+        });
+    }
 
     document.addEventListener('DOMContentLoaded', () => {
         startTime();
@@ -319,7 +366,10 @@
         const search = document.getElementById('searchInput').value;
         const perPage = document.getElementById('perPageFilter').value;
 
-        const params = new URLSearchParams({ site, status, search, page, per_page: perPage });
+        const params = new URLSearchParams({
+            site, status, search, page, per_page: perPage,
+            emp_status: currentEmpStatus || 'all',
+        });
 
         try {
             const res = await fetch(`?${params.toString()}`, {
@@ -357,6 +407,7 @@
                 };
                 ['Active', 'Leave', 'Resigned', 'Terminated', 'No Renewal', 'Absconding', 'Other'].forEach(s => set(s, sc[s] || 0));
                 breakdown.style.display = 'flex';
+                syncStatusPillStyles();
             }
 
         } catch (e) {
@@ -434,6 +485,7 @@
         document.getElementById('siteFilter').value = 'all';
         document.getElementById('statusFilter').value = 'all';
         document.getElementById('searchInput').value = '';
+        currentEmpStatus = 'all';
         loadData(1);
     }
 
@@ -441,7 +493,7 @@
         const site = document.getElementById('siteFilter').value;
         const status = document.getElementById('statusFilter').value;
         const search = document.getElementById('searchInput').value;
-        const url = `/api/attendance/dashboard/user-face/export/?site=${site}&status=${status}&search=${search}`;
+        const url = `/api/attendance/dashboard/user-face/export/?site=${site}&status=${status}&search=${search}&emp_status=${encodeURIComponent(currentEmpStatus || 'all')}`;
         window.location.href = url;
     }
 

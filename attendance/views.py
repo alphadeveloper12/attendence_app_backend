@@ -2904,7 +2904,8 @@ def admin_user_face_view(request):
 
     # Get filters
     site_filter = request.GET.get('site', 'all')
-    status_filter = request.GET.get('status', 'all') # 'enrolled', 'not_enrolled', 'all'
+    status_filter = request.GET.get('status', 'all') # 'enrolled', 'not_enrolled', 'all' (face enrollment)
+    emp_status_filter = request.GET.get('emp_status', 'all')  # employment status (Active / Leave / etc.)
     search_query = request.GET.get('search', '')
 
     employees = Employee.objects.select_related("site").order_by('name')
@@ -2938,9 +2939,27 @@ def admin_user_face_view(request):
     # Search Filtering
     if search_query:
         employees = employees.filter(
-            Q(name__icontains=search_query) | 
+            Q(name__icontains=search_query) |
             Q(badge_number__icontains=search_query)
         )
+
+    # Employment-status breakdown — computed BEFORE the emp_status filter so the
+    # admin can always see the per-status totals within the site / search / face
+    # context and use them as quick filters.
+    _MASTER = ['Active', 'Leave', 'Resigned', 'Terminated', 'No Renewal', 'Absconding', 'Other']
+    status_counts = {s: 0 for s in _MASTER}
+    for raw_status in employees.values_list('status', flat=True):
+        key = (raw_status or '').strip() or 'Other'
+        if key not in status_counts:
+            key = 'Other'
+        status_counts[key] += 1
+
+    # Employment status quick-filter (Active / Leave / Resigned / …)
+    if emp_status_filter and emp_status_filter != 'all':
+        if emp_status_filter == 'Other':
+            employees = employees.exclude(status__in=_MASTER[:-1])  # everything not in the 6 named ones
+        else:
+            employees = employees.filter(status__iexact=emp_status_filter)
 
     # Pagination
     per_page = request.GET.get('per_page', 20)
@@ -2987,15 +3006,8 @@ def admin_user_face_view(request):
                 'detail_url': reverse('admin-user-detail', args=[emp.id])
             })
 
-        # Breakdown by employment status across the full filtered set
-        # (not just the current page).
-        _MASTER = ['Active', 'Leave', 'Resigned', 'Terminated', 'No Renewal', 'Absconding', 'Other']
-        status_counts = {s: 0 for s in _MASTER}
-        for raw_status in employees.values_list('status', flat=True):
-            key = (raw_status or '').strip() or 'Other'
-            if key not in status_counts:
-                key = 'Other'
-            status_counts[key] += 1
+        # status_counts was computed earlier (before the emp_status filter)
+        # so the breakdown shows totals within the site/search/face context.
 
         return JsonResponse({
             'employees': employee_data,
@@ -3011,6 +3023,7 @@ def admin_user_face_view(request):
             'filters': {
                 'site': site_filter,
                 'status': status_filter,
+                'emp_status': emp_status_filter,
                 'search': search_query,
                 'per_page': per_page
             },
@@ -4354,11 +4367,20 @@ class ExportFaceEnrollmentView(APIView):
         elif status_filter == 'not_enrolled':
             employees = employees.filter(face_embedding__isnull=True)
 
+        # Employment-status quick-filter (same param the page uses)
+        emp_status_filter = request.GET.get('emp_status', 'all')
+        if emp_status_filter and emp_status_filter != 'all':
+            _MASTER = ['Active', 'Leave', 'Resigned', 'Terminated', 'No Renewal', 'Absconding']
+            if emp_status_filter == 'Other':
+                employees = employees.exclude(status__in=_MASTER)
+            else:
+                employees = employees.filter(status__iexact=emp_status_filter)
+
         # Search
         search = request.GET.get('search')
         if search:
             employees = employees.filter(
-                Q(name__icontains=search) | 
+                Q(name__icontains=search) |
                 Q(badge_number__icontains=search)
             )
 
