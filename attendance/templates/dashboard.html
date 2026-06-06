@@ -1200,6 +1200,9 @@
 {% endblock %}
 
 {% block scripts %}
+<!-- Google Maps JS API — required by the Geofence Alert details modal -->
+<script
+    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDSFQyDq5VpsbAXjsie3xZKvah0__PCyBc&libraries=geometry"></script>
 <script>
     // Parity State & Logic
     let currentSiteId = 'all';
@@ -1403,9 +1406,18 @@
         setTimeout(() => renderAlertDetailsMap(a), 250);
     }
 
-    async function renderAlertDetailsMap(a) {
+    async function renderAlertDetailsMap(a, attempt = 0) {
         const el = document.getElementById('alertDetailsMap');
-        if (!el || typeof google === 'undefined') return;
+        if (!el) return;
+        // Google Maps JS loads asynchronously — retry up to ~3 s if not ready yet.
+        if (typeof google === 'undefined' || !google.maps) {
+            if (attempt < 30) {
+                setTimeout(() => renderAlertDetailsMap(a, attempt + 1), 100);
+            } else {
+                el.innerHTML = '<div class="text-center text-danger small py-5">Map failed to load. Check internet connection.</div>';
+            }
+            return;
+        }
         const center = { lat: Number(a.lat) || 25.0058, lng: Number(a.long) || 55.4364 };
 
         if (!alertDetailsMap) {
