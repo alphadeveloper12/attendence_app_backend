@@ -263,20 +263,51 @@
             </ul>
         </div>
 
-        <!-- Category Filter -->
+        <!-- Position Filter (was: Category) -->
+        <div class="dropdown">
+            <button class="btn btn-white border shadow-sm dropdown-toggle rounded-3 px-3 py-2 fw-semibold" type="button"
+                id="positionFilterBtn" data-bs-toggle="dropdown">
+                <i class="ri-briefcase-line me-1"></i> All Positions
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end shadow-lg border-0 rounded-4 dropdown-menu-scrollable"
+                id="positionDropdown" style="min-width: 320px; max-height: 420px; overflow-y: auto;">
+                <li class="px-2 py-2 sticky-top bg-white" style="border-bottom:1px solid #e5e7eb;">
+                    <input type="text" id="positionSearchInput" class="form-control form-control-sm"
+                        placeholder="Search positions…" oninput="filterPositionDropdown()">
+                </li>
+                <li><a class="dropdown-item py-2" href="#" onclick="filterPosition('all', 'All Positions')"><i
+                            class="ri-history-line"></i> All Positions</a></li>
+            </ul>
+        </div>
+
+        <!-- Department Filter (NEW, searchable) -->
+        <div class="dropdown">
+            <button class="btn btn-white border shadow-sm dropdown-toggle rounded-3 px-3 py-2 fw-semibold" type="button"
+                id="departmentFilterBtn" data-bs-toggle="dropdown">
+                <i class="ri-building-2-line me-1"></i> All Departments
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end shadow-lg border-0 rounded-4 dropdown-menu-scrollable"
+                id="departmentFilterDropdown" style="min-width: 320px; max-height: 420px; overflow-y: auto;">
+                <li class="px-2 py-2 sticky-top bg-white" style="border-bottom:1px solid #e5e7eb;">
+                    <input type="text" id="departmentSearchInput" class="form-control form-control-sm"
+                        placeholder="Search departments…" oninput="filterDepartmentDropdown()">
+                </li>
+                <li><a class="dropdown-item py-2" href="#" onclick="filterDepartment('all', 'All Departments')"><i
+                            class="ri-history-line"></i> All Departments</a></li>
+            </ul>
+        </div>
+
+        <!-- Category Filter (NEW — Staff / Worker enum) -->
         <div class="dropdown">
             <button class="btn btn-white border shadow-sm dropdown-toggle rounded-3 px-3 py-2 fw-semibold" type="button"
                 id="categoryFilterBtn" data-bs-toggle="dropdown">
                 <i class="ri-user-settings-line me-1"></i> All Categories
             </button>
-            <ul class="dropdown-menu dropdown-menu-end shadow-lg border-0 rounded-4 dropdown-menu-scrollable"
-                id="categoryDropdown" style="min-width: 320px; max-height: 420px; overflow-y: auto;">
-                <li class="px-2 py-2 sticky-top bg-white" style="border-bottom:1px solid #e5e7eb;">
-                    <input type="text" id="categorySearchInput" class="form-control form-control-sm"
-                        placeholder="Search categories…" oninput="filterCategoryDropdown()">
-                </li>
-                <li><a class="dropdown-item py-2" href="#" onclick="filterCategory('all', 'All Categories')"><i
-                            class="ri-history-line"></i> All Categories</a></li>
+            <ul class="dropdown-menu dropdown-menu-end shadow-lg border-0 rounded-4"
+                id="categoryDropdown" style="min-width: 200px;">
+                <li><a class="dropdown-item py-2" href="#" onclick="filterCategory('all', 'All Categories')"><i class="ri-history-line text-secondary"></i> All Categories</a></li>
+                <li><a class="dropdown-item py-2" href="#" onclick="filterCategory('staff', 'Staff')"><i class="ri-user-star-line text-secondary"></i> Staff</a></li>
+                <li><a class="dropdown-item py-2" href="#" onclick="filterCategory('worker', 'Worker')"><i class="ri-team-line text-secondary"></i> Worker</a></li>
             </ul>
         </div>
 
@@ -1357,7 +1388,9 @@
     // Parity State & Logic
     let currentSiteId = 'all';
     let currentStatus = 'all';
-    let currentCategory = 'all';
+    let currentPosition = 'all';     // trade name (was previously called category)
+    let currentDepartment = 'all';   // Employee.department
+    let currentCategory = 'all';     // Employee.category enum — 'staff' / 'worker'
     let currentEmployer = 'all';
     let currentAttendanceFilter = 'total';
     let currentPage = 1;
@@ -1378,8 +1411,9 @@
         loadStats();
         loadEmployees();
         loadAlerts();
-        populateCategoryDatalist();
-        populateDepartmentDatalist();
+        populateCategoryDatalist();     // modal Position dropdown
+        populateDepartmentDatalist();   // modal Department dropdown
+        populateDepartmentDropdown();   // top-bar Department filter
 
         addModal = new bootstrap.Modal(document.getElementById('addModal'));
         viewModal = new bootstrap.Modal(document.getElementById('viewModal'));
@@ -1388,7 +1422,7 @@
 
     async function loadStats() {
         try {
-            const res = await fetch(`/api/attendance/stats/?site=${currentSiteId}&status=${currentStatus}&category=${currentCategory}&employer=${currentEmployer}`);
+            const res = await fetch(`/api/attendance/stats/?site=${currentSiteId}&status=${currentStatus}&position=${encodeURIComponent(currentPosition)}&department=${encodeURIComponent(currentDepartment)}&category=${currentCategory}&employer=${currentEmployer}`);
             const data = await res.json();
 
             document.getElementById('stat-total-employees').textContent = data.total_employees;
@@ -1475,7 +1509,7 @@
             if (dateInput && !dateInput.value) dateInput.value = _todayIso();
             const dateParam = dateInput ? dateInput.value : '';
 
-            const res = await fetch(`/api/attendance/alerts/?site=${currentSiteId}&status=${currentStatus}&category=${currentCategory}&employer=${currentEmployer}&date=${encodeURIComponent(dateParam)}`);
+            const res = await fetch(`/api/attendance/alerts/?site=${currentSiteId}&status=${currentStatus}&position=${encodeURIComponent(currentPosition)}&department=${encodeURIComponent(currentDepartment)}&category=${currentCategory}&employer=${currentEmployer}&date=${encodeURIComponent(dateParam)}`);
             const payload = await res.json();
             // Backend now wraps alerts in { date, alerts: [...] }; tolerate the old
             // shape (a bare array) in case the client is loaded against an older API.
@@ -1670,7 +1704,7 @@
         tbody.innerHTML = '<tr><td colspan="13" class="text-center py-5"><div class="spinner-border spinner-border-sm text-primary"></div></td></tr>';
 
         try {
-            const res = await fetch(`/api/attendance/employees/?page=${currentPage}&site=${currentSiteId}&status=${currentStatus}&category=${currentCategory}&employer=${currentEmployer}&search=${query}&per_page=${rowsPerPage}&attendance_filter=${currentAttendanceFilter}`);
+            const res = await fetch(`/api/attendance/employees/?page=${currentPage}&site=${currentSiteId}&status=${currentStatus}&position=${encodeURIComponent(currentPosition)}&department=${encodeURIComponent(currentDepartment)}&category=${currentCategory}&employer=${currentEmployer}&search=${query}&per_page=${rowsPerPage}&attendance_filter=${currentAttendanceFilter}`);
             const data = await res.json();
             const results = data.results || [];
             if (results.length === 0) {
@@ -1758,6 +1792,27 @@
         });
     }
 
+    // Position filter (top-bar trade-name dropdown)
+    function filterPosition(position, label) {
+        currentPosition = position;
+        currentPage = 1;
+        document.getElementById('positionFilterBtn').innerHTML = `<i class="ri-briefcase-line me-1"></i> ${label}`;
+        loadStats();
+        loadEmployees();
+        loadAlerts();
+    }
+
+    // Department filter (top-bar department dropdown)
+    function filterDepartment(department, label) {
+        currentDepartment = department;
+        currentPage = 1;
+        document.getElementById('departmentFilterBtn').innerHTML = `<i class="ri-building-2-line me-1"></i> ${label}`;
+        loadStats();
+        loadEmployees();
+        loadAlerts();
+    }
+
+    // Category filter (top-bar Staff / Worker dropdown)
     function filterCategory(category, label) {
         currentCategory = category;
         currentPage = 1;
@@ -1767,7 +1822,7 @@
         loadAlerts();
     }
 
-    // ---- Searchable Category dropdown (top bar) ----
+    // ---- Searchable Position dropdown (top bar) ----
     // We cache the full JobCategory list so the search input filters client-side.
     let _categoryCache = null;
     async function _fetchCategoryList() {
@@ -1786,20 +1841,22 @@
     }
 
     async function populateCategoryDropdown(legacyValues) {
-        const ul = document.getElementById('categoryDropdown');
-        // Find / keep the search header + "All Categories" item, then re-render the rest
+        // Drives the top-bar Position dropdown — sourced from JobCategory.name
+        // (all 354 seeded trades) plus any legacy free-text values surfaced by
+        // the stats endpoint that aren't already covered.
+        const ul = document.getElementById('positionDropdown');
+        if (!ul) return;
         const cats = await _fetchCategoryList();
-        // Merge cats with legacy free-text values surfaced by the stats endpoint
         const have = new Set(cats.map(c => (c.name || '').toLowerCase()));
         const legacyExtra = (legacyValues || []).filter(c => c && !have.has(c.toLowerCase())).map(c => ({ name: c, department: '' }));
         const all = [...cats, ...legacyExtra];
 
         const html = [
             `<li class="px-2 py-2 sticky-top bg-white" style="border-bottom:1px solid #e5e7eb;">
-                <input type="text" id="categorySearchInput" class="form-control form-control-sm"
-                    placeholder="Search categories…" oninput="filterCategoryDropdown()">
+                <input type="text" id="positionSearchInput" class="form-control form-control-sm"
+                    placeholder="Search positions…" oninput="filterPositionDropdown()">
             </li>`,
-            `<li><a class="dropdown-item py-2" href="#" onclick="filterCategory('all', 'All Categories')"><i class="ri-history-line text-secondary"></i> All Categories</a></li>`,
+            `<li><a class="dropdown-item py-2" href="#" onclick="filterPosition('all', 'All Positions')"><i class="ri-history-line text-secondary"></i> All Positions</a></li>`,
         ];
         // Group by department for readability
         const byDept = {};
@@ -1808,15 +1865,38 @@
             (byDept[d] = byDept[d] || []).push(c);
         }
         for (const dept of Object.keys(byDept).sort()) {
-            html.push(`<li class="dropdown-header small text-secondary text-uppercase fw-bold mt-1" data-cat-dept="${dept}">${dept}</li>`);
+            html.push(`<li class="dropdown-header small text-secondary text-uppercase fw-bold mt-1" data-pos-dept="${dept}">${dept}</li>`);
             for (const c of byDept[dept]) {
                 const safe = c.name.replace(/'/g, "\\'");
-                html.push(`<li class="cat-item" data-cat-name="${c.name.toLowerCase()}" data-cat-dept-key="${dept.toLowerCase()}">
-                    <a class="dropdown-item py-2" href="#" onclick="filterCategory('${safe}', '${safe}')">
-                        <i class="ri-user-settings-line text-secondary"></i> ${c.name}
+                html.push(`<li class="pos-item" data-pos-name="${c.name.toLowerCase()}" data-pos-dept-key="${dept.toLowerCase()}">
+                    <a class="dropdown-item py-2" href="#" onclick="filterPosition('${safe}', '${safe}')">
+                        <i class="ri-briefcase-line text-secondary"></i> ${c.name}
                     </a>
                 </li>`);
             }
+        }
+        ul.innerHTML = html.join('');
+    }
+
+    // Top-bar Department dropdown — sourced from /api/attendance/departments/
+    async function populateDepartmentDropdown() {
+        const ul = document.getElementById('departmentFilterDropdown');
+        if (!ul) return;
+        const items = await _fetchDepartmentList();
+        const html = [
+            `<li class="px-2 py-2 sticky-top bg-white" style="border-bottom:1px solid #e5e7eb;">
+                <input type="text" id="departmentSearchInput" class="form-control form-control-sm"
+                    placeholder="Search departments…" oninput="filterDepartmentDropdown()">
+            </li>`,
+            `<li><a class="dropdown-item py-2" href="#" onclick="filterDepartment('all', 'All Departments')"><i class="ri-history-line text-secondary"></i> All Departments</a></li>`,
+        ];
+        for (const d of items) {
+            const safe = (d.name || '').replace(/'/g, "\\'");
+            html.push(`<li class="filter-dept-item" data-fdept-name="${(d.name || '').toLowerCase()}">
+                <a class="dropdown-item py-2" href="#" onclick="filterDepartment('${safe}', '${safe}')">
+                    <i class="ri-building-2-line text-secondary"></i> ${d.name}
+                </a>
+            </li>`);
         }
         ul.innerHTML = html.join('');
     }
@@ -1934,26 +2014,35 @@
         });
     }
 
-    function filterCategoryDropdown() {
-        const q = (document.getElementById('categorySearchInput').value || '').trim().toLowerCase();
-        const items = document.querySelectorAll('#categoryDropdown .cat-item');
-        const headers = document.querySelectorAll('#categoryDropdown [data-cat-dept]');
+    // Search filter for the top-bar Position dropdown
+    function filterPositionDropdown() {
+        const q = (document.getElementById('positionSearchInput').value || '').trim().toLowerCase();
+        const items = document.querySelectorAll('#positionDropdown .pos-item');
+        const headers = document.querySelectorAll('#positionDropdown [data-pos-dept]');
         if (!q) {
             items.forEach(i => i.style.display = '');
             headers.forEach(h => h.style.display = '');
             return;
         }
-        // Hide unmatched items, then hide section headers whose section is empty.
         items.forEach(i => {
-            const match = i.getAttribute('data-cat-name').includes(q) ||
-                          i.getAttribute('data-cat-dept-key').includes(q);
+            const match = i.getAttribute('data-pos-name').includes(q) ||
+                          i.getAttribute('data-pos-dept-key').includes(q);
             i.style.display = match ? '' : 'none';
         });
         headers.forEach(h => {
-            const dept = (h.getAttribute('data-cat-dept') || '').toLowerCase();
-            const anyVisible = Array.from(document.querySelectorAll(`#categoryDropdown .cat-item[data-cat-dept-key="${dept}"]`))
+            const dept = (h.getAttribute('data-pos-dept') || '').toLowerCase();
+            const anyVisible = Array.from(document.querySelectorAll(`#positionDropdown .pos-item[data-pos-dept-key="${dept}"]`))
                 .some(el => el.style.display !== 'none');
             h.style.display = anyVisible ? '' : 'none';
+        });
+    }
+
+    // Search filter for the top-bar Department dropdown
+    function filterDepartmentDropdown() {
+        const q = (document.getElementById('departmentSearchInput').value || '').trim().toLowerCase();
+        document.querySelectorAll('#departmentFilterDropdown .filter-dept-item').forEach(li => {
+            const name = li.getAttribute('data-fdept-name') || '';
+            li.style.display = (!q || name.includes(q)) ? '' : 'none';
         });
     }
 
@@ -1980,7 +2069,7 @@
 
     function exportFilteredEmployees() {
         const query = document.getElementById('tableSearch').value;
-        const url = `/api/attendance/employees/export-filtered/?site=${currentSiteId}&status=${currentStatus}&category=${currentCategory}&employer=${currentEmployer}&search=${query}&attendance_filter=${currentAttendanceFilter}`;
+        const url = `/api/attendance/employees/export-filtered/?site=${currentSiteId}&status=${currentStatus}&position=${encodeURIComponent(currentPosition)}&department=${encodeURIComponent(currentDepartment)}&category=${currentCategory}&employer=${currentEmployer}&search=${query}&attendance_filter=${currentAttendanceFilter}`;
         window.location.href = url;
     }
     function changeRowsPerPage() { rowsPerPage = document.getElementById('rowsPerPage').value; currentPage = 1; loadEmployees(); }

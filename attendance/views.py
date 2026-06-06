@@ -2676,9 +2676,11 @@ class AttendanceStatsView(APIView):
             attendance = Attendance.objects.filter(date=timezone.localdate())
             all_sites = Site.objects.all()
 
-            # Filter by Site/Category (Query Param or Admin Profile)
+            # Filter by Site/Position/Department/Category/Status/Employer (Query Param or Admin Profile)
             site_id = request.GET.get('site')
-            category_filter = request.GET.get('category')
+            position_filter = request.GET.get('position')
+            department_filter = request.GET.get('department')
+            category_filter = request.GET.get('category')  # now strictly Employee.category enum (staff/worker)
             status_filter = request.GET.get('status')
             employer_filter = request.GET.get('employer')
             
@@ -2704,15 +2706,27 @@ class AttendanceStatsView(APIView):
                 employees = employees.filter(site_id=site_id)
                 attendance = attendance.filter(user__site_id=site_id)
 
-            if category_filter and category_filter != 'all':
+            # Position filter (trade name) — matches Employee.position first, with
+            # legacy salary_grade as a fall-back for employees still on the old field.
+            if position_filter and position_filter != 'all':
                 employees = employees.filter(
-                    Q(salary_grade__iexact=category_filter) | 
-                    (Q(salary_grade__in=['', None]) & Q(category__iexact=category_filter))
+                    Q(position__iexact=position_filter) |
+                    (Q(position__in=['', None]) & Q(salary_grade__iexact=position_filter))
                 )
                 attendance = attendance.filter(
-                    Q(user__salary_grade__iexact=category_filter) | 
-                    (Q(user__salary_grade__in=['', None]) & Q(user__category__iexact=category_filter))
+                    Q(user__position__iexact=position_filter) |
+                    (Q(user__position__in=['', None]) & Q(user__salary_grade__iexact=position_filter))
                 )
+
+            # Department filter — strict ilike match on Employee.department
+            if department_filter and department_filter != 'all':
+                employees = employees.filter(department__iexact=department_filter)
+                attendance = attendance.filter(user__department__iexact=department_filter)
+
+            # Category filter — Staff / Worker enum on Employee.category
+            if category_filter and category_filter != 'all':
+                employees = employees.filter(category__iexact=category_filter)
+                attendance = attendance.filter(user__category__iexact=category_filter)
 
             # Snapshot the queryset BEFORE the status filter so the breakdown
             # counts stay accurate even when the admin has clicked a pill — clicking
@@ -2950,14 +2964,20 @@ class EmployeeListView(APIView):
         if site_id and site_id != 'all':
             employees = employees.filter(site_id=site_id)
 
-        # Filter by category
+        # Filter by position / department / category
+        position_filter = request.GET.get('position')
+        department_filter = request.GET.get('department')
         category_filter = request.GET.get('category')
 
-        if category_filter and category_filter != 'all':
+        if position_filter and position_filter != 'all':
             employees = employees.filter(
-                Q(salary_grade__iexact=category_filter) | 
-                (Q(salary_grade__in=['', None]) & Q(category__iexact=category_filter))
+                Q(position__iexact=position_filter) |
+                (Q(position__in=['', None]) & Q(salary_grade__iexact=position_filter))
             )
+        if department_filter and department_filter != 'all':
+            employees = employees.filter(department__iexact=department_filter)
+        if category_filter and category_filter != 'all':
+            employees = employees.filter(category__iexact=category_filter)
 
         # Filter by status
         status_filter = request.GET.get('status')
@@ -4563,13 +4583,19 @@ class ExportEmployeesView(APIView):
         if status_filter and status_filter != 'all':
             employees = employees.filter(status__iexact=status_filter)
 
-        # Category Filter
+        # Position / Department / Category filters
+        position_filter = request.GET.get('position')
+        department_filter = request.GET.get('department')
         category_filter = request.GET.get('category')
-        if category_filter and category_filter != 'all':
+        if position_filter and position_filter != 'all':
             employees = employees.filter(
-                Q(salary_grade__iexact=category_filter) | 
-                (Q(salary_grade__in=['', None]) & Q(category__iexact=category_filter))
+                Q(position__iexact=position_filter) |
+                (Q(position__in=['', None]) & Q(salary_grade__iexact=position_filter))
             )
+        if department_filter and department_filter != 'all':
+            employees = employees.filter(department__iexact=department_filter)
+        if category_filter and category_filter != 'all':
+            employees = employees.filter(category__iexact=category_filter)
 
         # Search
         search = request.GET.get('search')
@@ -4774,7 +4800,8 @@ def export_reports_view(request):
     status_filter = request.GET.get('status')
     site_id = request.GET.get('site')
     position_filter = request.GET.get('position')
-    category_filter = request.GET.get('category')
+    department_filter = request.GET.get('department')
+    category_filter = request.GET.get('category')  # Staff / Worker enum
     employer_filter = request.GET.get('employer')
 
     if date_str:
@@ -4804,13 +4831,14 @@ def export_reports_view(request):
             all_sites_for_summary = permission_sites.order_by('name')
     
     if position_filter and position_filter != 'all':
-        employees = employees.filter(position__iexact=position_filter)
-    
-    if category_filter and category_filter != 'all':
         employees = employees.filter(
-            Q(salary_grade__iexact=category_filter) |
-            (Q(salary_grade__in=['', None]) & Q(category__iexact=category_filter))
+            Q(position__iexact=position_filter) |
+            (Q(position__in=['', None]) & Q(salary_grade__iexact=position_filter))
         )
+    if department_filter and department_filter != 'all':
+        employees = employees.filter(department__iexact=department_filter)
+    if category_filter and category_filter != 'all':
+        employees = employees.filter(category__iexact=category_filter)
 
     if employer_filter and employer_filter != 'all':
         employees = employees.filter(employer__iexact=employer_filter)
@@ -5596,7 +5624,8 @@ class AttendanceReportDataView(APIView):
         site_id = request.GET.get('site')
         status_filter = request.GET.get('status')
         position_filter = request.GET.get('position')
-        category_filter = request.GET.get('category')
+        department_filter = request.GET.get('department')
+        category_filter = request.GET.get('category')  # Staff / Worker enum
         employer_filter = request.GET.get('employer')
         page_num = request.GET.get('page', 1)
         per_page = int(request.GET.get('per_page', 20))
@@ -5634,16 +5663,18 @@ class AttendanceReportDataView(APIView):
             else:
                 employees = employees.filter(site__in=permission_sites)
         
-        # Category Filter
-        if category_filter and category_filter != 'all':
-            employees = employees.filter(
-                Q(salary_grade__iexact=category_filter) | 
-                (Q(salary_grade__in=['', None]) & Q(category__iexact=category_filter))
-            )
-        
-        # Position Filter
+        # Position filter (trade name) — Position first, salary_grade fallback
         if position_filter and position_filter != 'all':
-            employees = employees.filter(position__iexact=position_filter)
+            employees = employees.filter(
+                Q(position__iexact=position_filter) |
+                (Q(position__in=['', None]) & Q(salary_grade__iexact=position_filter))
+            )
+        # Department filter
+        if department_filter and department_filter != 'all':
+            employees = employees.filter(department__iexact=department_filter)
+        # Category filter — Staff / Worker enum
+        if category_filter and category_filter != 'all':
+            employees = employees.filter(category__iexact=category_filter)
 
         # Employer Filter (one of EMPLOYER_CHOICES)
         if employer_filter and employer_filter != 'all':
