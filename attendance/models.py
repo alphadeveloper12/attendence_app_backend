@@ -178,12 +178,30 @@ class EmployeeSiteHistory(models.Model):
         )
 
 
-class JobCategory(models.Model):
-    """A canonical job category / trade name, grouped by department + employee type.
+class Department(models.Model):
+    """A managed department — admins create / edit / delete these from the
+    Department page. All Position rows (JobCategory) link here via department_fk,
+    and the modal/top-bar dropdowns + Distribution List read from this table.
+    """
+    name          = models.CharField(max_length=200, unique=True)
+    manager_name  = models.CharField(max_length=200, null=True, blank=True)
+    is_active     = models.BooleanField(default=True)
+    sheet_order   = models.IntegerField(default=0)
+    created_at    = models.DateTimeField(auto_now_add=True)
 
-    Seeded from the PIC manpower spreadsheets — admins assign these to employees
-    via the Category dropdown, and the Distribution List page groups counts by
-    department and trade to mirror those sheets dynamically.
+    class Meta:
+        ordering = ['sheet_order', 'name']
+
+    def __str__(self):
+        return self.name
+
+
+class JobCategory(models.Model):
+    """A canonical job position / trade name, grouped by department + employee type.
+
+    Originally seeded from the PIC manpower spreadsheets. Admins manage positions
+    via the Department page; the modal Position dropdown + Distribution List read
+    from this table.
     """
     EMP_TYPE_CHOICES = [
         ('staff', 'Staff'),
@@ -191,7 +209,13 @@ class JobCategory(models.Model):
         ('resource', 'Manpower Resource'),
     ]
     name          = models.CharField(max_length=200)
+    # Legacy text-mirror of the department label — kept so old code paths and
+    # imports still work. The authoritative link is `department_fk`.
     department    = models.CharField(max_length=200, null=True, blank=True)
+    department_fk = models.ForeignKey(
+        Department, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='positions',
+    )
     employee_type = models.CharField(max_length=10, choices=EMP_TYPE_CHOICES, default='worker')
     sheet_order   = models.IntegerField(default=0)
     is_active     = models.BooleanField(default=True)

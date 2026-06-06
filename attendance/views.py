@@ -45,7 +45,7 @@ from .utils import (
     THRESH, MARGIN, get_image_bytes
 )
 from .geofence import check_geofence
-from .models import Employee, Attendance, Site, FaceTemplate, AdminProfile, AppBuild, EmployeeStatusHistory, EmployeeSiteHistory, EmployeeAttachment, EmployeeSalaryHistory, JobCategory
+from .models import Employee, Attendance, Site, FaceTemplate, AdminProfile, AppBuild, EmployeeStatusHistory, EmployeeSiteHistory, EmployeeAttachment, EmployeeSalaryHistory, JobCategory, Department
 from .serializers import *
 from .permissions import IsSiteAdmin
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -5964,6 +5964,7 @@ class JobCategoryListView(APIView):
             'id': c.id,
             'name': c.name,
             'department': c.department or '',
+            'department_id': c.department_fk_id,
             'employee_type': c.employee_type,
         } for c in qs]
         return Response({'count': len(items), 'results': items})
@@ -5972,49 +5973,44 @@ class JobCategoryListView(APIView):
 class DepartmentListView(APIView):
     """Distinct department list for the searchable Division/Department dropdown.
 
-    Department is a separate concept from Category:
-      - Department = the section the employee belongs to
-                     (e.g. "CONSTRUCTION DEPT.", "M.E.P. Department")
-      - Category   = the trade / position itself
-                     (e.g. "Foreman A/C", "Chief Operating Officer / Project Director")
-
-    Source = distinct values from JobCategory.department (seeded from the PIC
-    manpower workbooks) + any legacy free-text Employee.department values that
-    aren't already covered. Departments are listed as-is, deduped case-insensitively.
+    Primary source: active rows from the managed `Department` table (the new
+    Department-management page is the source of truth). Legacy fall-back:
+    free-text `Employee.department` values that aren't covered by a managed row.
     """
     permission_classes = [IsAdminUser | IsSiteAdmin]
 
     def get(self, request):
-        from_cats = (
-            JobCategory.objects
+        managed = list(
+            Department.objects
             .filter(is_active=True)
-            .exclude(department__isnull=True).exclude(department='')
-            .values_list('department', flat=True).distinct()
+            .order_by('sheet_order', 'name')
+            .values('id', 'name', 'manager_name')
         )
-        from_emps = (
-            Employee.objects
-            .exclude(department__isnull=True).exclude(department='')
-            .values_list('department', flat=True).distinct()
-        )
+        managed_keys = {(d['name'] or '').strip().lower() for d in managed}
 
-        # Case-insensitive dedupe, preserving first-seen casing.
-        seen = {}
-        for raw in list(from_cats) + list(from_emps):
+        legacy_extras = []
+        for raw in (Employee.objects
+                    .exclude(department__isnull=True).exclude(department='')
+                    .values_list('department', flat=True).distinct()):
             d = (raw or '').strip()
-            if not d:
-                continue
-            key = d.lower()
-            if key not in seen:
-                seen[key] = d
+            if d and d.lower() not in managed_keys:
+                legacy_extras.append({'id': None, 'name': d, 'manager_name': ''})
+                managed_keys.add(d.lower())
+
+        items = managed + sorted(legacy_extras, key=lambda x: x['name'].lower())
 
         q = (request.GET.get('q') or '').strip().lower()
-        items = sorted(seen.values(), key=lambda s: s.lower())
         if q:
-            items = [d for d in items if q in d.lower()]
+            items = [d for d in items if q in (d['name'] or '').lower()]
 
         return Response({
             'count': len(items),
-            'results': [{'name': d} for d in items],
+            'results': [
+                {'id': d.get('id'),
+                 'name': d['name'],
+                 'manager_name': d.get('manager_name') or ''}
+                for d in items
+            ],
         })
 
 
@@ -6374,4 +6370,247 @@ def admin_distribution_list_view(request):
     is_superuser = request.user.is_superuser
     return render(request, 'distribution_list.html', {
         'is_superuser': is_superuser,
+    })
+
+
+# ---------------------------------------------------------------------------
+# Department + Position management (CRUD)
+# ---------------------------------------------------------------------------
+
+def _norm_dept_name(s):
+    """Normalize a department/position name — strip, collapse whitespace."""
+    import re as _re
+    if not s:
+        return ''
+    return _re.sub(r'\s+', ' ', str(s)).strip()
+
+
+class AdminDepartmentsView(APIView):
+    """List + create departments.
+
+    GET  /api/attendance/admin-departments/
+        → { departments: [{id, name, manager_name, is_active, positions_count}] }
+    POST /api/attendance/admin-departments/
+        body: {name, manager_name?}
+        → 201 {id, name, manager_name, is_active}
+    """
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        rows = Department.objects.filter(is_active=True).order_by('sheet_order', 'name')
+        items = []
+        for d in rows:
+            items.append({
+                'id': d.id,
+                'name': d.name,
+                'manager_name': d.manager_name or '',
+                'is_active': d.is_active,
+                'positions_count': d.positions.filter(is_active=True).count(),
+            })
+        return Response({'count': len(items), 'departments': items})
+
+    def post(self, request):
+        name = _norm_dept_name(request.data.get('name'))
+        if not name:
+            return Response({'error': 'Department name is required.'}, status=400)
+        # Case-insensitive dedupe.
+        existing = Department.objects.filter(name__iexact=name).first()
+        if existing:
+            return Response({'error': f'Department "{existing.name}" already exists.'}, status=400)
+        manager = _norm_dept_name(request.data.get('manager_name')) or None
+        order = Department.objects.aggregate(m=models.Max('sheet_order'))['m'] or 0
+        d = Department.objects.create(
+            name=name, manager_name=manager,
+            sheet_order=order + 1, is_active=True,
+        )
+        return Response({
+            'success': True,
+            'id': d.id, 'name': d.name,
+            'manager_name': d.manager_name or '',
+            'is_active': d.is_active,
+        }, status=201)
+
+
+class AdminDepartmentDetailView(APIView):
+    """Update / delete one department.
+
+    PUT    /api/attendance/admin-departments/<id>/    body: {name?, manager_name?}
+    DELETE /api/attendance/admin-departments/<id>/    soft-deletes (is_active=False)
+    """
+    permission_classes = [IsAdminUser]
+
+    def put(self, request, dept_id):
+        try:
+            d = Department.objects.get(id=dept_id)
+        except Department.DoesNotExist:
+            return Response({'error': 'Department not found'}, status=404)
+        data = request.data
+        if 'name' in data:
+            new_name = _norm_dept_name(data.get('name'))
+            if not new_name:
+                return Response({'error': 'Name cannot be blank.'}, status=400)
+            # Case-insensitive dedupe (excluding self).
+            clash = Department.objects.filter(name__iexact=new_name).exclude(id=d.id).first()
+            if clash:
+                return Response({'error': f'Another department already uses "{clash.name}".'}, status=400)
+            old_name = d.name
+            d.name = new_name
+            # Keep the denormalized JobCategory.department string in sync.
+            JobCategory.objects.filter(department_fk=d).update(department=new_name)
+            # Also keep any Employee.department strings in sync (case-insensitive).
+            Employee.objects.filter(department__iexact=old_name).update(department=new_name)
+        if 'manager_name' in data:
+            d.manager_name = _norm_dept_name(data.get('manager_name')) or None
+        d.save()
+        return Response({
+            'success': True,
+            'id': d.id, 'name': d.name,
+            'manager_name': d.manager_name or '',
+            'is_active': d.is_active,
+        })
+
+    def delete(self, request, dept_id):
+        try:
+            d = Department.objects.get(id=dept_id)
+        except Department.DoesNotExist:
+            return Response({'error': 'Department not found'}, status=404)
+        # Soft-delete: hide the department + its positions from dropdowns,
+        # but leave Employee.department text intact (so historic data isn't lost).
+        d.is_active = False
+        d.save(update_fields=['is_active'])
+        JobCategory.objects.filter(department_fk=d).update(is_active=False)
+        return Response({'success': True})
+
+
+class AdminPositionsView(APIView):
+    """List + create positions.
+
+    GET  /api/attendance/admin-positions/?department=<id>&employee_type=<staff|worker|resource>
+        → { positions: [{id, name, employee_type, department_id, department_name}] }
+    POST /api/attendance/admin-positions/
+        body: {name, department_id, employee_type?}
+        → 201 {id, name, ...}
+    """
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        qs = JobCategory.objects.filter(is_active=True).select_related('department_fk')
+        dept_id = request.GET.get('department')
+        if dept_id:
+            try:
+                qs = qs.filter(department_fk_id=int(dept_id))
+            except (ValueError, TypeError):
+                pass
+        emp_type = (request.GET.get('employee_type') or '').strip().lower()
+        if emp_type in ('staff', 'worker', 'resource'):
+            qs = qs.filter(employee_type=emp_type)
+        items = [{
+            'id': p.id,
+            'name': p.name,
+            'employee_type': p.employee_type,
+            'department_id': p.department_fk_id,
+            'department_name': p.department_fk.name if p.department_fk else (p.department or ''),
+        } for p in qs.order_by('sheet_order', 'name')]
+        return Response({'count': len(items), 'positions': items})
+
+    def post(self, request):
+        name = _norm_dept_name(request.data.get('name'))
+        if not name:
+            return Response({'error': 'Position name is required.'}, status=400)
+        dept_id = request.data.get('department_id')
+        try:
+            dept = Department.objects.get(id=dept_id) if dept_id else None
+        except Department.DoesNotExist:
+            return Response({'error': 'Department not found'}, status=400)
+        emp_type = (request.data.get('employee_type') or 'worker').strip().lower()
+        if emp_type not in ('staff', 'worker', 'resource'):
+            emp_type = 'worker'
+        # Case-insensitive dedupe within the same employee_type.
+        clash = JobCategory.objects.filter(name__iexact=name, employee_type=emp_type).first()
+        if clash:
+            return Response({'error': f'Position "{clash.name}" already exists under {clash.get_employee_type_display()}.'}, status=400)
+        order = JobCategory.objects.aggregate(m=models.Max('sheet_order'))['m'] or 0
+        p = JobCategory.objects.create(
+            name=name,
+            department=dept.name if dept else None,
+            department_fk=dept,
+            employee_type=emp_type,
+            sheet_order=order + 1,
+            is_active=True,
+        )
+        return Response({
+            'success': True,
+            'id': p.id, 'name': p.name,
+            'employee_type': p.employee_type,
+            'department_id': dept.id if dept else None,
+            'department_name': dept.name if dept else '',
+        }, status=201)
+
+
+class AdminPositionDetailView(APIView):
+    """Update / delete one position.
+
+    PUT    /api/attendance/admin-positions/<id>/  body: {name?, department_id?, employee_type?}
+    DELETE /api/attendance/admin-positions/<id>/  soft-delete
+    """
+    permission_classes = [IsAdminUser]
+
+    def put(self, request, pos_id):
+        try:
+            p = JobCategory.objects.get(id=pos_id)
+        except JobCategory.DoesNotExist:
+            return Response({'error': 'Position not found'}, status=404)
+        data = request.data
+        old_name = p.name
+        if 'name' in data:
+            new_name = _norm_dept_name(data.get('name'))
+            if not new_name:
+                return Response({'error': 'Name cannot be blank.'}, status=400)
+            clash = JobCategory.objects.filter(name__iexact=new_name, employee_type=p.employee_type).exclude(id=p.id).first()
+            if clash:
+                return Response({'error': f'Another position already uses "{clash.name}".'}, status=400)
+            p.name = new_name
+            # Keep Employee.position in sync (case-insensitive).
+            Employee.objects.filter(position__iexact=old_name).update(position=new_name)
+        if 'department_id' in data:
+            dept_id = data.get('department_id')
+            if dept_id:
+                try:
+                    dept = Department.objects.get(id=dept_id)
+                except Department.DoesNotExist:
+                    return Response({'error': 'Department not found'}, status=400)
+                p.department_fk = dept
+                p.department = dept.name
+            else:
+                p.department_fk = None
+                p.department = None
+        if 'employee_type' in data:
+            t = (data.get('employee_type') or '').strip().lower()
+            if t in ('staff', 'worker', 'resource'):
+                p.employee_type = t
+        p.save()
+        return Response({
+            'success': True,
+            'id': p.id, 'name': p.name,
+            'employee_type': p.employee_type,
+            'department_id': p.department_fk_id,
+            'department_name': p.department_fk.name if p.department_fk else (p.department or ''),
+        })
+
+    def delete(self, request, pos_id):
+        try:
+            p = JobCategory.objects.get(id=pos_id)
+        except JobCategory.DoesNotExist:
+            return Response({'error': 'Position not found'}, status=404)
+        p.is_active = False
+        p.save(update_fields=['is_active'])
+        return Response({'success': True})
+
+
+@login_required(login_url='admin-login')
+def admin_departments_management_view(request):
+    if not request.user.is_staff:
+        return redirect('admin-login')
+    return render(request, 'departments_management.html', {
+        'is_superuser': request.user.is_superuser,
     })
