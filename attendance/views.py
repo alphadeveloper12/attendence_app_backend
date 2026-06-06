@@ -5885,78 +5885,41 @@ def _distribution_employee_qs(request):
 
 
 def _distribution_payload(request, employee_type):
-    """Build the distribution table for a single employee_type ('staff' /
-    'worker' / 'resource').
+    """Build the distribution table for a single tab.
 
-    The Resources sheet in the source workbooks uses a DIFFERENT layout —
-    just Trade → Total count per department, no site breakdown. We honour
-    that here:
+    Fully data-driven — both departments and positions come directly from the
+    Employee table (legacy salary_grade is honoured as a fall-back for the
+    position field). The seeded JobCategory rows only drive the dropdown
+    options in the modal; they do NOT decide the row structure here.
 
-        Staff / Worker payload (full matrix):
+    Tabs:
+        staff    — Employee.category == 'staff',  site × position matrix
+        worker   — Employee.category == 'worker', site × position matrix
+        resource — all employees, no site breakdown (flat total per row)
+
+    Payload shapes:
+
+        Staff / Worker:
           { employee_type, sites: [...], rows: [
               {kind:'dept', name:...},
               {kind:'trade', counts: {site_id: n}, leave, total},
               {kind:'subtotal', counts: {...}, leave, total} ], grand_total }
 
-        Resource payload (flat):
-          { employee_type:'resource', sites: [],   # always empty
-            rows: [
-              {kind:'dept', name:...},
-              {kind:'trade', count: N},
-              {kind:'subtotal', count: N} ], grand_total }
+        Resource:
+          { employee_type:'resource', sites: [],
+            rows: [ {kind:'dept', name:...},
+                    {kind:'trade', count: N},
+                    {kind:'subtotal', count: N} ], grand_total }
     """
-    from collections import OrderedDict, defaultdict
+    from collections import defaultdict
 
-    # --- RESOURCE: simple Trade → Total count layout ---------------------
-    if employee_type == 'resource':
-        emps = _distribution_employee_qs(request).values('position', 'salary_grade', 'status')
-        by_trade = defaultdict(int)
-        for e in emps:
-            # Match by Position first (the new seeded-trade field), then fall
-            # back to legacy salary_grade for employees imported before the swap.
-            key = ((e['position'] or '').strip().lower()
-                   or (e['salary_grade'] or '').strip().lower())
-            if not key:
-                continue
-            by_trade[key] += 1
-        cats = list(JobCategory.objects.filter(
-            is_active=True, employee_type='resource',
-        ).order_by('sheet_order', 'name'))
+    # ---------- Build the employee queryset for this tab ----------
+    emps_qs = _distribution_employee_qs(request)
+    if employee_type in ('staff', 'worker'):
+        emps_qs = emps_qs.filter(category__iexact=employee_type)
+    # 'resource' tab = all employees (regardless of category).
 
-        rows = []
-        grand_total = 0
-        current_dept = None
-        dept_total = 0
-        for cat in cats:
-            if cat.department != current_dept:
-                if current_dept is not None:
-                    rows.append({'kind': 'subtotal', 'department': current_dept, 'count': dept_total})
-                current_dept = cat.department
-                dept_total = 0
-                rows.append({'kind': 'dept', 'name': cat.department or '—'})
-            n = by_trade.get(cat.name.strip().lower(), 0)
-            grand_total += n
-            dept_total += n
-            rows.append({
-                'kind': 'trade',
-                'category_id': cat.id,
-                'department': cat.department or '',
-                'name': cat.name,
-                'count': n,
-            })
-        if current_dept is not None:
-            rows.append({'kind': 'subtotal', 'department': current_dept, 'count': dept_total})
-
-        return {
-            'employee_type': 'resource',
-            'sites': [],
-            'rows': rows,
-            'grand_total': grand_total,
-            'selected_site': 'all',
-        }
-    # --- STAFF / WORKER: full site × trade matrix ------------------------
-
-    # Live site columns — dynamic, NOT hard-coded from the spreadsheet.
+    # ---------- Site columns (only used for staff/worker) ----------
     site_id_filter = request.GET.get('site')
     sites_qs = Site.objects.all().order_by('name')
     if site_id_filter and site_id_filter != 'all':
@@ -5973,83 +5936,116 @@ def _distribution_payload(request, employee_type):
     site_list = list(sites_qs.values('id', 'name'))
     site_ids = [s['id'] for s in site_list]
 
-    # All categories of the requested type, sheet-ordered, grouped by department.
-    cats = list(JobCategory.objects.filter(
-        is_active=True, employee_type=employee_type,
-    ).order_by('sheet_order', 'name'))
+    # ---------- Resolve each employee's (department, position) ----------
+    # Department / Position both come straight from the Employee row.
+    # Legacy fall-back: if Position is blank, use salary_grade (the field that
+    # used to back the old "Category" textbox).
+    def _resolve(e):
+        dept = (e.get('department') or '').strip() or '—'
+        pos = (e.get('position') or '').strip()
+        if not pos:
+            pos = (e.get('salary_grade') or '').strip()
+        return dept, (pos or '—')
 
-    # Pre-aggregate employee counts: (category_name_lower, site_id_or_None, status)
-    emps = _distribution_employee_qs(request).values(
-        'position', 'salary_grade', 'site_id', 'status'
-    )
+    # ---------- RESOURCE: flat (department → position → count) ----------
+    if employee_type == 'resource':
+        counts = defaultdict(int)            # (dept, pos) -> int
+        dept_seen_first = {}                  # dept -> first-insert index, for stable ordering
+        pos_seen_first = {}                   # (dept, pos) -> first-insert index
+        for i, e in enumerate(emps_qs.values('department', 'position', 'salary_grade')):
+            d, p = _resolve(e)
+            counts[(d, p)] += 1
+            dept_seen_first.setdefault(d, i)
+            pos_seen_first.setdefault((d, p), i)
 
-    # Build a lookup keyed by lowercase trade name → site_id → count.
-    # Match by Position first (the new seeded-trade field), with legacy
-    # salary_grade as a fall-back for employees imported before the UI swap.
+        # Order departments alphabetically, positions alphabetically within each.
+        depts = sorted(dept_seen_first.keys(), key=lambda x: x.lower())
+        rows = []
+        grand_total = 0
+        for dept in depts:
+            rows.append({'kind': 'dept', 'name': dept})
+            dept_total = 0
+            positions = sorted(
+                [(d, p) for (d, p) in counts.keys() if d == dept],
+                key=lambda x: x[1].lower(),
+            )
+            for (d, p) in positions:
+                n = counts[(d, p)]
+                dept_total += n
+                grand_total += n
+                rows.append({
+                    'kind': 'trade',
+                    'department': d,
+                    'name': p,
+                    'count': n,
+                })
+            rows.append({'kind': 'subtotal', 'department': dept, 'count': dept_total})
+
+        return {
+            'employee_type': 'resource',
+            'sites': [],
+            'rows': rows,
+            'grand_total': grand_total,
+            'selected_site': site_id_filter or 'all',
+        }
+
+    # ---------- STAFF / WORKER: site × position matrix ----------
+    # By-trade lookup: (dept, pos) -> {site_id -> count}, and leave count.
     by_trade = defaultdict(lambda: defaultdict(int))
     leave_by_trade = defaultdict(int)
-    for e in emps:
-        po = (e['position'] or '').strip().lower()
-        sg = (e['salary_grade'] or '').strip().lower()
-        key = po or sg
-        if not key:
-            continue
+    dept_pos_seen = {}        # ordering: (dept, pos) -> first-insert index
+    dept_seen = {}            # ordering: dept -> first-insert index
+
+    for i, e in enumerate(emps_qs.values(
+        'department', 'position', 'salary_grade', 'site_id', 'status'
+    )):
+        d, p = _resolve(e)
+        key = (d, p)
+        dept_seen.setdefault(d, i)
+        dept_pos_seen.setdefault(key, i)
         if (e['status'] or '').strip() == 'Leave':
             leave_by_trade[key] += 1
             continue
+        # site_id might be None for unassigned employees — those land in 'unassigned',
+        # which we won't column-show but will still count in the row total.
         by_trade[key][e['site_id']] += 1
 
+    depts = sorted(dept_seen.keys(), key=lambda x: x.lower())
     rows = []
     grand_total = 0
-    current_dept = None
-    dept_totals = defaultdict(int)
-    dept_site_counts = defaultdict(lambda: defaultdict(int))
-    dept_leave = defaultdict(int)
-    for cat in cats:
-        if cat.department != current_dept:
-            # flush previous subtotal
-            if current_dept is not None:
-                sub_counts = {sid: dept_site_counts[current_dept].get(sid, 0) for sid in site_ids}
-                sub_total = sum(sub_counts.values()) + dept_leave[current_dept]
-                rows.append({
-                    'kind': 'subtotal',
-                    'department': current_dept,
-                    'counts': sub_counts,
-                    'leave': dept_leave[current_dept],
-                    'total': sub_total,
-                })
-            current_dept = cat.department
-            rows.append({'kind': 'dept', 'name': cat.department or '—'})
-
-        key = cat.name.strip().lower()
-        per_site = by_trade.get(key, {})
-        counts = {sid: per_site.get(sid, 0) for sid in site_ids}
-        leave = leave_by_trade.get(key, 0)
-        total = sum(counts.values()) + leave
-        grand_total += total
-        rows.append({
-            'kind': 'trade',
-            'category_id': cat.id,
-            'department': cat.department or '',
-            'name': cat.name,
-            'counts': counts,
-            'leave': leave,
-            'total': total,
-        })
-        for sid, n in counts.items():
-            dept_site_counts[cat.department][sid] += n
-        dept_leave[cat.department] += leave
-        dept_totals[cat.department] += total
-
-    # flush final subtotal
-    if current_dept is not None:
-        sub_counts = {sid: dept_site_counts[current_dept].get(sid, 0) for sid in site_ids}
-        sub_total = sum(sub_counts.values()) + dept_leave[current_dept]
+    for dept in depts:
+        rows.append({'kind': 'dept', 'name': dept})
+        positions = sorted(
+            [k for k in dept_pos_seen.keys() if k[0] == dept],
+            key=lambda x: x[1].lower(),
+        )
+        sub_counts = {sid: 0 for sid in site_ids}
+        sub_leave = 0
+        sub_total = 0
+        for key in positions:
+            (_, p) = key
+            per_site = by_trade.get(key, {})
+            counts = {sid: per_site.get(sid, 0) for sid in site_ids}
+            leave = leave_by_trade.get(key, 0)
+            total = sum(counts.values()) + leave
+            grand_total += total
+            sub_leave += leave
+            sub_total += total
+            for sid, n in counts.items():
+                sub_counts[sid] += n
+            rows.append({
+                'kind': 'trade',
+                'department': dept,
+                'name': p,
+                'counts': counts,
+                'leave': leave,
+                'total': total,
+            })
         rows.append({
             'kind': 'subtotal',
-            'department': current_dept,
+            'department': dept,
             'counts': sub_counts,
-            'leave': dept_leave[current_dept],
+            'leave': sub_leave,
             'total': sub_total,
         })
 
