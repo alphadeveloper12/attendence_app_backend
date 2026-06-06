@@ -1771,15 +1771,18 @@
     // We cache the full JobCategory list so the search input filters client-side.
     let _categoryCache = null;
     async function _fetchCategoryList() {
-        if (_categoryCache) return _categoryCache;
+        // Cache only AFTER we have at least one row — an empty result means the
+        // JobCategory table wasn't seeded yet, and we want to re-fetch next time.
+        if (Array.isArray(_categoryCache) && _categoryCache.length > 0) return _categoryCache;
         try {
             const res = await fetch('/api/attendance/job-categories/?limit=2000');
             const data = await res.json();
-            _categoryCache = data.results || [];
+            const list = data.results || [];
+            if (list.length > 0) _categoryCache = list;
+            return list;
         } catch (e) {
-            _categoryCache = [];
+            return [];
         }
-        return _categoryCache;
     }
 
     async function populateCategoryDropdown(legacyValues) {
@@ -1872,13 +1875,14 @@
     // ---- Searchable Department dropdown (Bootstrap-style, in the edit/add modal) ----
     let _departmentCache = null;
     async function _fetchDepartmentList() {
-        if (_departmentCache) return _departmentCache;
+        if (Array.isArray(_departmentCache) && _departmentCache.length > 0) return _departmentCache;
         try {
             const res = await fetch('/api/attendance/departments/');
             const data = await res.json();
-            _departmentCache = data.results || [];
-        } catch (e) { _departmentCache = []; }
-        return _departmentCache;
+            const list = data.results || [];
+            if (list.length > 0) _departmentCache = list;
+            return list;
+        } catch (e) { return []; }
     }
 
     async function populateDepartmentDatalist() {

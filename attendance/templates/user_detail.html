@@ -1598,19 +1598,21 @@
     // name for compatibility with the call sites in editEmployee.
     let _categoryDatalistReady = false;
     async function _populateCategoryDatalist() {
-        if (_categoryDatalistReady) return;
         const anchor = document.getElementById('employeePositionListAnchor');
         if (!anchor) return;
         try {
             const res = await fetch('/api/attendance/job-categories/?limit=2000');
             const data = await res.json();
+            const list = data.results || [];
+            // Re-fetch if empty — don't lock the widget on a 0-row response.
+            if (_categoryDatalistReady && list.length === 0) return;
             // Remove any previously rendered items
             let next = anchor.nextElementSibling;
             while (next && next.classList && next.classList.contains('pos-option-item')) {
                 const toRemove = next; next = next.nextElementSibling; toRemove.remove();
             }
             const frag = document.createDocumentFragment();
-            for (const c of (data.results || [])) {
+            for (const c of list) {
                 const li = document.createElement('li');
                 li.className = 'pos-option-item';
                 li.setAttribute('data-pos-name', (c.name || '').toLowerCase());
@@ -1624,7 +1626,7 @@
                 frag.appendChild(li);
             }
             anchor.parentNode.insertBefore(frag, anchor.nextSibling);
-            _categoryDatalistReady = true;
+            if (list.length > 0) _categoryDatalistReady = true;
         } catch (e) { /* leave widget empty */ }
     }
 
@@ -1653,19 +1655,20 @@
 
     let _departmentDatalistReady = false;
     async function _populateDepartmentDatalist() {
-        if (_departmentDatalistReady) return;
         const anchor = document.getElementById('employeeDepartmentListAnchor');
         if (!anchor) return;
         try {
             const res = await fetch('/api/attendance/departments/');
             const data = await res.json();
+            const list = data.results || [];
+            if (_departmentDatalistReady && list.length === 0) return;
             // Remove any previously rendered items
             let next = anchor.nextElementSibling;
             while (next && next.classList && next.classList.contains('dept-option-item')) {
                 const toRemove = next; next = next.nextElementSibling; toRemove.remove();
             }
             const frag = document.createDocumentFragment();
-            for (const d of (data.results || [])) {
+            for (const d of list) {
                 const li = document.createElement('li');
                 li.className = 'dept-option-item';
                 li.setAttribute('data-dept-name', (d.name || '').toLowerCase());
@@ -1677,7 +1680,7 @@
                 frag.appendChild(li);
             }
             anchor.parentNode.insertBefore(frag, anchor.nextSibling);
-            _departmentDatalistReady = true;
+            if (list.length > 0) _departmentDatalistReady = true;
         } catch (e) { /* leave widget empty */ }
     }
 
