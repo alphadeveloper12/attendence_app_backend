@@ -358,7 +358,11 @@
     </div>
 
     <!-- Bulk Actions -->
-    <div id="bulkActions" class="d-none">
+    <div id="bulkActions" class="d-none d-flex gap-2">
+        <button onclick="downloadSelected()" class="btn btn-premium"
+            style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #fff;">
+            <i class="ri-file-excel-2-line"></i> <span>Download Selected (<span id="selectedCountDl">0</span>)</span>
+        </button>
         <button onclick="bulkDelete()" class="btn btn-premium btn-premium-danger"
             style="background: var(--grad-danger);">
             <i class="ri-delete-bin-line"></i> <span>Delete Selected (<span id="selectedCount">0</span>)</span>
@@ -3162,14 +3166,38 @@
         const checked = document.querySelectorAll('.emp-checkbox:checked');
         const bulkDiv = document.getElementById('bulkActions');
         const countSpan = document.getElementById('selectedCount');
+        const dlSpan = document.getElementById('selectedCountDl');
 
         if (checked.length > 0) {
             bulkDiv.classList.remove('d-none');
             countSpan.textContent = checked.length;
+            if (dlSpan) dlSpan.textContent = checked.length;
         } else {
             bulkDiv.classList.add('d-none');
             document.getElementById('selectAll').checked = false;
         }
+    }
+
+    function downloadSelected() {
+        const ids = Array.from(document.querySelectorAll('.emp-checkbox:checked')).map(cb => cb.value);
+        if (!ids.length) { alert('Pick at least one employee first.'); return; }
+        // POST via a hidden form so the browser handles the file download natively
+        // (fetch can't trigger a save-as dialog from a binary response without extra plumbing).
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '/api/attendance/employees/export-selected/';
+        form.style.display = 'none';
+        const csrf = document.createElement('input');
+        csrf.type = 'hidden'; csrf.name = 'csrfmiddlewaretoken';
+        csrf.value = document.querySelector('[name=csrfmiddlewaretoken]').value;
+        form.appendChild(csrf);
+        const idsInput = document.createElement('input');
+        idsInput.type = 'hidden'; idsInput.name = 'ids';
+        idsInput.value = ids.join(',');
+        form.appendChild(idsInput);
+        document.body.appendChild(form);
+        form.submit();
+        document.body.removeChild(form);
     }
 
     async function bulkDelete() {

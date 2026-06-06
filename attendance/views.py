@@ -4665,6 +4665,113 @@ class ExportAttendanceView(APIView):
         wb.save(response)
         return response
 
+
+# ---------- Shared exhaustive-export helper ----------
+
+# Every Employee field that should land in the export, in column order.
+# Header label  →  (callable extracting the value from an Employee instance)
+EMPLOYEE_EXPORT_COLUMNS = [
+    # Identity
+    ('Employee ID',          lambda e: e.id),
+    ('Badge ID',             lambda e: e.badge_number or '-'),
+    ('Full Name',            lambda e: e.name or '-'),
+    ('Email',                lambda e: e.email or '-'),
+    ('Phone',                lambda e: e.phone or '-'),
+    # Org placement
+    ('Site',                 lambda e: e.site.name if e.site else '-'),
+    ('Department',           lambda e: e.department or '-'),
+    ('Position',             lambda e: e.position or '-'),
+    ('Category (Staff/Worker)', lambda e: e.category.capitalize() if e.category else '-'),
+    ('Salary Grade',         lambda e: e.salary_grade or '-'),
+    ('Sponsor',              lambda e: e.sponsor or '-'),
+    ('Employer',             lambda e: e.employer or '-'),
+    ('Job Description',      lambda e: e.job_description or '-'),
+    # Personal
+    ('Date of Birth',        lambda e: str(e.date_of_birth) if e.date_of_birth else '-'),
+    ('Date of Joining',      lambda e: str(e.date_of_joining) if e.date_of_joining else '-'),
+    ('Nationality',          lambda e: e.nationality or '-'),
+    ('Gender',               lambda e: e.gender or '-'),
+    ('Marital Status',       lambda e: e.marital_status or '-'),
+    ('Religion',             lambda e: e.religion or '-'),
+    # Documents
+    ('Passport Number',      lambda e: e.passport_number or '-'),
+    ('Passport Expiry',      lambda e: str(e.passport_expiry) if e.passport_expiry else '-'),
+    ('Visa Details',         lambda e: e.visa_details or '-'),
+    ('Visa Expiry',          lambda e: str(e.visa_expiry_date) if e.visa_expiry_date else '-'),
+    ('Labour Card / CEC Nr', lambda e: e.labor_card_number or '-'),
+    ('MOL ID',               lambda e: e.mol_id or '-'),
+    # Housing
+    ('Housing Camp',         lambda e: e.camp or '-'),
+    ('Transportation',       lambda e: e.transportation or '-'),
+    # Status + termination
+    ('Status',               lambda e: e.status or '-'),
+    ('Resumption Date',      lambda e: str(e.resumption_date) if e.resumption_date else '-'),
+    ('Last Working Date',    lambda e: str(e.last_working_date) if e.last_working_date else '-'),
+    ('Termination Reason',   lambda e: e.termination_reason or '-'),
+    # Leave
+    ('Leave Type',           lambda e: e.leave_type or '-'),
+    ('Leave Start',          lambda e: str(e.leave_start_date) if e.leave_start_date else '-'),
+    ('Leave End',            lambda e: str(e.leave_end_date) if e.leave_end_date else '-'),
+    ('Leave Approval Date',  lambda e: str(e.leave_approval_date) if e.leave_approval_date else '-'),
+    ('Leave Ticket Eligible',lambda e: 'Yes' if e.leave_ticket_eligible is True else ('No' if e.leave_ticket_eligible is False else '-')),
+    ('Leave Ticket Price',   lambda e: str(e.leave_ticket_price) if e.leave_ticket_price is not None else '-'),
+    # Salary breakdown
+    ('Basic Salary',         lambda e: str(e.basic_salary) if e.basic_salary is not None else '-'),
+    ('Accommodation Allowance', lambda e: str(e.accommodation_allowance) if e.accommodation_allowance is not None else '-'),
+    ('Transport Allowance',  lambda e: str(e.transport_allowance) if e.transport_allowance is not None else '-'),
+    ('Food Allowance',       lambda e: str(e.food_allowance) if e.food_allowance is not None else '-'),
+    ('Fixed OT Allowance',   lambda e: str(e.fixed_ot_allowance) if e.fixed_ot_allowance is not None else '-'),
+    ('Other Allowance',      lambda e: str(e.other_allowance) if e.other_allowance is not None else '-'),
+    ('Salary Reduction',     lambda e: str(e.salary_reduction) if e.salary_reduction is not None else '-'),
+    ('Gross Salary',         lambda e: str(e.gross_salary) if e.gross_salary is not None else '-'),
+    ('Salary Remarks',       lambda e: e.salary_remarks or '-'),
+]
+
+
+def _build_employee_workbook(employees, sheet_title='Employees'):
+    """Render an exhaustive .xlsx workbook for the given employee queryset.
+
+    Includes EVERY field on the Employee model — identity, org placement,
+    documents (dates included), housing, status, leave, full salary breakdown,
+    remarks. Used by both the filtered export and the selected-rows export so
+    they stay in lock-step.
+    """
+    import openpyxl
+    from openpyxl.utils import get_column_letter
+    from openpyxl.styles import Font, PatternFill, Alignment
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = sheet_title
+
+    headers = [h for h, _ in EMPLOYEE_EXPORT_COLUMNS]
+    ws.append(headers)
+
+    header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
+    header_font = Font(bold=True, color='FFFFFF')
+    center = Alignment(horizontal='center', vertical='center', wrap_text=True)
+    for col in range(1, len(headers) + 1):
+        cell = ws.cell(row=1, column=col)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = center
+
+    for emp in employees:
+        ws.append([extractor(emp) for _, extractor in EMPLOYEE_EXPORT_COLUMNS])
+
+    # Reasonable default column widths
+    for col in range(1, len(headers) + 1):
+        letter = get_column_letter(col)
+        # Make name / remarks / job description wider
+        name = headers[col - 1].lower()
+        if any(k in name for k in ('name', 'description', 'remarks', 'reason')):
+            ws.column_dimensions[letter].width = 32
+        else:
+            ws.column_dimensions[letter].width = 18
+    ws.freeze_panes = 'A2'
+    return wb
+
+
 class ExportEmployeesView(APIView):
     permission_classes = [IsAdminUser | IsSiteAdmin]
 
@@ -4735,44 +4842,65 @@ class ExportEmployeesView(APIView):
             employee_ids = attendance_qs.values_list('user_id', flat=True)
             employees = employees.filter(id__in=employee_ids)
 
-        # Create Workbook
-        wb = openpyxl.Workbook()
-        ws = wb.active
-        ws.title = "Selected Employees"
-
-        headers = ['Name', 'Badge ID', 'Site', 'Department', 'Position', 'Grade/Category', 'Status', 'Housing Camp', 'Transportation', 'Phone', 'Email']
-        ws.append(headers)
-
-        from openpyxl.styles import Font, PatternFill
-        header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
-        header_font = Font(bold=True, color="FFFFFF")
-        for col in range(1, len(headers) + 1):
-            cell = ws.cell(row=1, column=col)
-            cell.fill = header_fill
-            cell.font = header_font
-
-        for emp in employees:
-            ws.append([
-                emp.name,
-                emp.badge_number or '-',
-                emp.site.name if emp.site else '-',
-                emp.department or '-',
-                emp.position or '-',
-                emp.salary_grade or (emp.category.capitalize() if emp.category else '-'),
-                emp.status or '-',
-                emp.camp or '-',
-                emp.transportation or '-',
-                emp.phone or '-',
-                emp.email or '-'
-            ])
-
-        for col in range(1, len(headers) + 1):
-            ws.column_dimensions[get_column_letter(col)].width = 20
-
+        # Render every field on each Employee (shared with the selected-rows export)
+        wb = _build_employee_workbook(employees, sheet_title='Filtered Employees')
         response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-        response['Content-Disposition'] = 'attachment; filename=employees_list.xlsx'
+        response['Content-Disposition'] = f'attachment; filename=employees_filtered_{timezone.localdate()}.xlsx'
         wb.save(response)
         return response
+
+
+class ExportSelectedEmployeesView(APIView):
+    """POST /api/attendance/employees/export-selected/
+
+    Body: form-encoded `ids=1,2,3` (or JSON {"ids": [1,2,3]} / {"ids": "1,2,3"}).
+    Returns an .xlsx with the same column layout as the filtered export, but
+    limited to the explicitly-selected rows the admin checked on the dashboard.
+    """
+    permission_classes = [IsAdminUser | IsSiteAdmin]
+
+    def post(self, request):
+        import openpyxl
+        from openpyxl.utils import get_column_letter
+        from openpyxl.styles import Font, PatternFill
+        from django.http import HttpResponse
+
+        # Parse the id list (form OR json, comma-separated string OR list)
+        raw = request.data.get('ids')
+        if isinstance(raw, str):
+            id_list = [s for s in raw.split(',') if s.strip()]
+        elif isinstance(raw, (list, tuple)):
+            id_list = list(raw)
+        else:
+            id_list = []
+        ids = []
+        for v in id_list:
+            try:
+                ids.append(int(v))
+            except (TypeError, ValueError):
+                continue
+        if not ids:
+            return HttpResponse('Pick at least one employee.', status=400)
+
+        employees = (Employee.objects
+                     .select_related('site')
+                     .filter(id__in=ids)
+                     .order_by('name'))
+        # Scope site admins to their own sites.
+        if not request.user.is_superuser:
+            try:
+                profile = AdminProfile.objects.get(user=request.user)
+                employees = employees.filter(site__in=profile.sites.all())
+            except AdminProfile.DoesNotExist:
+                employees = employees.none()
+
+        # Same exhaustive every-field layout as the filtered export.
+        wb = _build_employee_workbook(employees, sheet_title='Selected Employees')
+        response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        response['Content-Disposition'] = f'attachment; filename=employees_selected_{timezone.localdate()}.xlsx'
+        wb.save(response)
+        return response
+
 
 class ExportFaceEnrollmentView(APIView):
     permission_classes = [IsAdminUser | IsSiteAdmin]
@@ -6418,7 +6546,8 @@ class AdminDepartmentsView(APIView):
         if existing:
             return Response({'error': f'Department "{existing.name}" already exists.'}, status=400)
         manager = _norm_dept_name(request.data.get('manager_name')) or None
-        order = Department.objects.aggregate(m=models.Max('sheet_order'))['m'] or 0
+        from django.db.models import Max as _Max
+        order = Department.objects.aggregate(m=_Max('sheet_order'))['m'] or 0
         d = Department.objects.create(
             name=name, manager_name=manager,
             sheet_order=order + 1, is_active=True,
@@ -6529,7 +6658,8 @@ class AdminPositionsView(APIView):
         clash = JobCategory.objects.filter(name__iexact=name, employee_type=emp_type).first()
         if clash:
             return Response({'error': f'Position "{clash.name}" already exists under {clash.get_employee_type_display()}.'}, status=400)
-        order = JobCategory.objects.aggregate(m=models.Max('sheet_order'))['m'] or 0
+        from django.db.models import Max as _Max
+        order = JobCategory.objects.aggregate(m=_Max('sheet_order'))['m'] or 0
         p = JobCategory.objects.create(
             name=name,
             department=dept.name if dept else None,

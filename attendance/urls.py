@@ -38,6 +38,7 @@ urlpatterns = [
     path('employees/delete/bulk/', AdminBulkDeleteEmployeeView.as_view(), name='admin-bulk-delete-employees'),
     path('employees/export/', ExportAttendanceView.as_view(), name='export-attendance'),
     path('employees/export-filtered/', ExportEmployeesView.as_view(), name='export-filtered-employees'),
+    path('employees/export-selected/', ExportSelectedEmployeesView.as_view(), name='export-selected-employees'),
     path('sites/', SiteListView.as_view(), name='site-list'),
     
     # Admin Dashboard Template Views
