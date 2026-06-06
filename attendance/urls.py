@@ -8,6 +8,7 @@ urlpatterns = [
     path('admin/login/', AdminLoginView.as_view(), name='admin-login'),
     path('stats/', AttendanceStatsView.as_view(), name='attendance-stats'),
     path('alerts/', AttendanceAlertsView.as_view(), name='attendance-alerts'),
+    path('alerts/export/', AttendanceAlertsExportView.as_view(), name='attendance-alerts-export'),
     path('employees/', EmployeeListView.as_view(), name='employee-list'),
     path('employees/import/', ImportEmployeesView.as_view(), name='import-employees'),
     path('employees/template/', DownloadEmployeeTemplateView.as_view(), name='download-employee-template'),

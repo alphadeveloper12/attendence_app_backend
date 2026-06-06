@@ -498,6 +498,9 @@
                     <input type="date" id="alertsDateInput"
                         class="form-control form-control-sm border" style="width:160px;"
                         onchange="loadAlerts()">
+                    <button type="button" class="btn btn-sm btn-success" onclick="downloadAlerts()" title="Download alert employees as Excel">
+                        <i class="ri-file-excel-2-line"></i> Download
+                    </button>
                     <span class="small text-secondary ms-2">Click any alert for details</span>
                 </div>
             </div>
@@ -1505,6 +1508,24 @@
             inp.value = which;
         }
         loadAlerts();
+    }
+
+    // Download every alert employee from the currently-selected date as Excel.
+    // Honours the same site / status / position / department / category / employer
+    // filters that are applied to the alerts grid above.
+    function downloadAlerts() {
+        const dateInput = document.getElementById('alertsDateInput');
+        const date = dateInput && dateInput.value ? dateInput.value : '';
+        const qs = new URLSearchParams({
+            date,
+            site: currentSiteId,
+            status: currentStatus,
+            position: currentPosition,
+            department: currentDepartment,
+            category: currentCategory,
+            employer: currentEmployer,
+        }).toString();
+        window.location.href = `/api/attendance/alerts/export/?${qs}`;
     }
 
     async function loadAlerts() {

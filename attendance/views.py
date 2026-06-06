@@ -3044,6 +3044,159 @@ class AttendanceAlertsView(APIView):
         })
 
 
+class AttendanceAlertsExportView(APIView):
+    """Excel export of every employee that triggered an alert on the chosen
+    date (geofence-out-of-bounds OR marked-while-on-leave). Honours all the
+    same filters as the alerts grid: site / position / department / category /
+    employer + the date picker.
+
+    Format = the full exhaustive employee export (same column set as
+    "Export Filtered" / "Download Selected"), plus three alert-context columns
+    in front: Alert Type, Alert Date, Alert Time.
+
+    GET /api/attendance/alerts/export/?date=YYYY-MM-DD&site=…&status=…&position=…&department=…&category=…&employer=…
+    """
+    permission_classes = [IsAdminUser | IsSiteAdmin]
+
+    def get(self, request):
+        from datetime import datetime as _dt
+        from django.http import HttpResponse
+        from openpyxl.utils import get_column_letter
+        from openpyxl.styles import Font, PatternFill, Alignment
+
+        date_str = (request.GET.get('date') or '').strip()
+        target_date = timezone.localdate()
+        if date_str:
+            try:
+                parsed = _dt.strptime(date_str, '%Y-%m-%d').date()
+                if parsed <= timezone.localdate():
+                    target_date = parsed
+            except ValueError:
+                pass
+
+        site_id           = request.GET.get('site')
+        status_filter     = request.GET.get('status')
+        position_filter   = request.GET.get('position')
+        department_filter = request.GET.get('department')
+        category_filter   = request.GET.get('category')  # Staff / Worker enum
+        employer_filter   = request.GET.get('employer')
+
+        # ── Same two pools as AttendanceAlertsView ─────────────────────────
+        geofence_qs = (Attendance.objects
+                       .filter(date=target_date, is_within_geofence=False)
+                       .select_related('user', 'user__site'))
+        on_leave_qs = (Attendance.objects
+                       .filter(date=target_date, user__status='Leave')
+                       .filter(Q(check_in_time__isnull=False) | Q(check_out_time__isnull=False))
+                       .filter(Q(user__leave_start_date__isnull=True)
+                               | Q(user__leave_start_date__lte=target_date))
+                       .filter(Q(user__leave_end_date__isnull=True)
+                               | Q(user__leave_end_date__gte=target_date))
+                       .select_related('user', 'user__site'))
+
+        # ── Site-admin scope ───────────────────────────────────────────────
+        if not request.user.is_superuser:
+            try:
+                profile = AdminProfile.objects.get(user=request.user)
+                assigned_sites = profile.sites.all()
+                if site_id and site_id != 'all':
+                    if not assigned_sites.filter(id=site_id).exists():
+                        geofence_qs = geofence_qs.none()
+                        on_leave_qs = on_leave_qs.none()
+                    else:
+                        geofence_qs = geofence_qs.filter(user__site_id=site_id)
+                        on_leave_qs = on_leave_qs.filter(user__site_id=site_id)
+                else:
+                    geofence_qs = geofence_qs.filter(user__site__in=assigned_sites)
+                    on_leave_qs = on_leave_qs.filter(user__site__in=assigned_sites)
+            except AdminProfile.DoesNotExist:
+                geofence_qs = geofence_qs.none()
+                on_leave_qs = on_leave_qs.none()
+        elif site_id and site_id != 'all':
+            geofence_qs = geofence_qs.filter(user__site_id=site_id)
+            on_leave_qs = on_leave_qs.filter(user__site_id=site_id)
+
+        # ── Mirror the dashboard's other top-bar filters ───────────────────
+        if status_filter and status_filter != 'all':
+            geofence_qs = geofence_qs.filter(user__status__iexact=status_filter)
+            on_leave_qs = on_leave_qs.filter(user__status__iexact=status_filter)
+        if position_filter and position_filter != 'all':
+            geofence_qs = geofence_qs.filter(
+                Q(user__position__iexact=position_filter) |
+                (Q(user__position__in=['', None]) & Q(user__salary_grade__iexact=position_filter))
+            )
+            on_leave_qs = on_leave_qs.filter(
+                Q(user__position__iexact=position_filter) |
+                (Q(user__position__in=['', None]) & Q(user__salary_grade__iexact=position_filter))
+            )
+        if department_filter and department_filter != 'all':
+            geofence_qs = geofence_qs.filter(user__department__iexact=department_filter)
+            on_leave_qs = on_leave_qs.filter(user__department__iexact=department_filter)
+        if category_filter and category_filter != 'all':
+            geofence_qs = geofence_qs.filter(user__category__iexact=category_filter)
+            on_leave_qs = on_leave_qs.filter(user__category__iexact=category_filter)
+        if employer_filter and employer_filter != 'all':
+            geofence_qs = geofence_qs.filter(user__employer__iexact=employer_filter)
+            on_leave_qs = on_leave_qs.filter(user__employer__iexact=employer_filter)
+
+        # ── Build one row per alerted attendance, dedup geofence ∩ leave ──
+        seen_ids = set()
+        rows = []  # list of (alert_type, alert_time_str, employee)
+        for a in geofence_qs:
+            seen_ids.add(a.id)
+            t = a.check_in_time or a.check_out_time
+            rows.append(('Out of Bounds',
+                         t.strftime('%H:%M:%S') if t else '-',
+                         a.user))
+        for a in on_leave_qs:
+            if a.id in seen_ids:
+                continue
+            t = a.check_in_time or a.check_out_time
+            rows.append(('Marked attendance while on Leave',
+                         t.strftime('%H:%M:%S') if t else '-',
+                         a.user))
+
+        # ── Workbook: 3 alert columns + every Employee column ──────────────
+        import openpyxl
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = f'Alerts {target_date}'
+
+        alert_headers = ['Alert Type', 'Alert Date', 'Alert Time']
+        emp_headers = [h for h, _ in EMPLOYEE_EXPORT_COLUMNS]
+        headers = alert_headers + emp_headers
+        ws.append(headers)
+
+        header_fill = PatternFill(start_color='B91C1C', end_color='B91C1C', fill_type='solid')
+        header_font = Font(bold=True, color='FFFFFF')
+        center = Alignment(horizontal='center', vertical='center', wrap_text=True)
+        for col in range(1, len(headers) + 1):
+            cell = ws.cell(row=1, column=col)
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = center
+
+        for alert_type, alert_time, emp in rows:
+            row_values = [alert_type, str(target_date), alert_time]
+            row_values += [extractor(emp) for _, extractor in EMPLOYEE_EXPORT_COLUMNS]
+            ws.append(row_values)
+
+        # Column widths
+        for col in range(1, len(headers) + 1):
+            letter = get_column_letter(col)
+            name = headers[col - 1].lower()
+            if any(k in name for k in ('name', 'description', 'remarks', 'reason', 'type')):
+                ws.column_dimensions[letter].width = 32
+            else:
+                ws.column_dimensions[letter].width = 18
+        ws.freeze_panes = 'A2'
+
+        response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        response['Content-Disposition'] = f'attachment; filename=geofence_alerts_{target_date}.xlsx'
+        wb.save(response)
+        return response
+
+
 @permission_classes([IsAdminUser | IsSiteAdmin])
 class EmployeeListView(APIView):
     permission_classes = [IsAdminUser | IsSiteAdmin]
