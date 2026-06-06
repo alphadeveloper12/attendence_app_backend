@@ -2526,30 +2526,42 @@ class AttendanceAlertsView(APIView):
     permission_classes = [IsAdminUser | IsSiteAdmin]
 
     def get(self, request):
-        today = timezone.localdate()
+        # Accept ?date=YYYY-MM-DD (defaults to today). Future dates are clamped
+        # back to today since attendance can't be in the future.
+        date_str = (request.GET.get('date') or '').strip()
+        target_date = timezone.localdate()
+        if date_str:
+            try:
+                from datetime import datetime as _dt
+                parsed = _dt.strptime(date_str, '%Y-%m-%d').date()
+                if parsed <= timezone.localdate():
+                    target_date = parsed
+            except ValueError:
+                pass
+
         site_id = request.GET.get('site')
 
         # ── Pool 1: Out-of-bounds (geofence failure) ─────────────────────────
         geofence_alerts = Attendance.objects.filter(
-            date=today, is_within_geofence=False,
+            date=target_date, is_within_geofence=False,
         ).select_related('user', 'user__site')
 
-        # ── Pool 2: Employee currently on Leave but face-scanned today ───────
+        # ── Pool 2: Employee on Leave but face-scanned on the target date ───
         # An employee marked an attendance while the system has them on Leave —
         # admin needs to know either to revoke leave or correct the attendance.
         on_leave_alerts = (
             Attendance.objects
-            .filter(date=today, user__status='Leave')
+            .filter(date=target_date, user__status='Leave')
             .filter(
                 Q(check_in_time__isnull=False) | Q(check_out_time__isnull=False)
             )
             .filter(
                 Q(user__leave_start_date__isnull=True)
-                | Q(user__leave_start_date__lte=today)
+                | Q(user__leave_start_date__lte=target_date)
             )
             .filter(
                 Q(user__leave_end_date__isnull=True)
-                | Q(user__leave_end_date__gte=today)
+                | Q(user__leave_end_date__gte=target_date)
             )
             .select_related('user', 'user__site')
         )
@@ -2616,7 +2628,11 @@ class AttendanceAlertsView(APIView):
                 "status": "Marked attendance while on Leave",
                 "kind": "on_leave",
             })
-        return Response(data)
+        # Wrap in an object so the date used can be echoed back to the UI.
+        return Response({
+            'date': str(target_date),
+            'alerts': data,
+        })
 
 
 @permission_classes([IsAdminUser | IsSiteAdmin])

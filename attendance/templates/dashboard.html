@@ -428,12 +428,25 @@
 <!-- Alerts Section -->
 <div id="alertsWrapper" class="d-none">
     <div class="card modern-table-container border-0 mb-5">
-        <div class="card-header bg-white py-3 px-4 border-bottom d-flex justify-content-between align-items-center">
-            <h5 class="fw-bold mb-0 text-danger d-flex align-items-center gap-2">
-                <i class="ri-error-warning-fill"></i> Geofence Alerts
-                <span class="badge rounded-pill bg-danger bg-opacity-10 text-danger ms-1" id="alertsCount">0</span>
-            </h5>
-            <div class="small text-secondary">Click any alert for details</div>
+        <div class="card-header bg-white py-3 px-4 border-bottom">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <h5 class="fw-bold mb-0 text-danger d-flex align-items-center gap-2">
+                    <i class="ri-error-warning-fill"></i> Geofence Alerts
+                    <span class="badge rounded-pill bg-danger bg-opacity-10 text-danger ms-1" id="alertsCount">0</span>
+                </h5>
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <button type="button" class="btn btn-sm btn-light border" onclick="setAlertsDate('today')">
+                        Today
+                    </button>
+                    <button type="button" class="btn btn-sm btn-light border" onclick="setAlertsDate('yesterday')">
+                        Yesterday
+                    </button>
+                    <input type="date" id="alertsDateInput"
+                        class="form-control form-control-sm border" style="width:160px;"
+                        onchange="loadAlerts()">
+                    <span class="small text-secondary ms-2">Click any alert for details</span>
+                </div>
+            </div>
         </div>
         <div id="alertsContainer" class="p-3 row g-3" style="max-height: 360px; overflow-y: auto;">
             <div class="col-12 text-center text-muted py-3">Loading alerts…</div>
@@ -1296,21 +1309,52 @@
         } catch (e) { console.error(e); }
     }
 
+    // Default to today on first load
+    function _todayIso() { return new Date().toISOString().split('T')[0]; }
+
+    // "today" / "yesterday" / 'YYYY-MM-DD'
+    function setAlertsDate(which) {
+        const inp = document.getElementById('alertsDateInput');
+        if (!inp) return;
+        if (which === 'today') {
+            inp.value = _todayIso();
+        } else if (which === 'yesterday') {
+            const d = new Date(); d.setDate(d.getDate() - 1);
+            inp.value = d.toISOString().split('T')[0];
+        } else if (typeof which === 'string') {
+            inp.value = which;
+        }
+        loadAlerts();
+    }
+
     async function loadAlerts() {
         try {
-            const res = await fetch(`/api/attendance/alerts/?site=${currentSiteId}&status=${currentStatus}&category=${currentCategory}&employer=${currentEmployer}`);
-            const data = await res.json();
+            const dateInput = document.getElementById('alertsDateInput');
+            if (dateInput && !dateInput.value) dateInput.value = _todayIso();
+            const dateParam = dateInput ? dateInput.value : '';
+
+            const res = await fetch(`/api/attendance/alerts/?site=${currentSiteId}&status=${currentStatus}&category=${currentCategory}&employer=${currentEmployer}&date=${encodeURIComponent(dateParam)}`);
+            const payload = await res.json();
+            // Backend now wraps alerts in { date, alerts: [...] }; tolerate the old
+            // shape (a bare array) in case the client is loaded against an older API.
+            const data = Array.isArray(payload) ? payload : (payload.alerts || []);
             const container = document.getElementById('alertsContainer');
             const wrapper = document.getElementById('alertsWrapper');
 
-            if (!data || data.length === 0) {
-                wrapper.classList.add('d-none');
-                return;
-            }
-
+            // Always keep the panel visible on this page so the date picker stays
+            // reachable; show an empty-state message inside instead of hiding.
             wrapper.classList.remove('d-none');
             const countEl = document.getElementById('alertsCount');
             if (countEl) countEl.textContent = data.length;
+
+            if (data.length === 0) {
+                container.innerHTML = `<div class="col-12 text-center text-secondary py-5">
+                    <i class="ri-check-double-line fs-3 text-success d-block mb-2"></i>
+                    <div class="fw-semibold">No alerts for the selected date.</div>
+                    <div class="small text-muted mt-1">All recorded attendances were inside the geofence.</div>
+                </div>`;
+                return;
+            }
 
             // Cache the alerts so the modal can look up the full record by id
             window._alertsById = {};
