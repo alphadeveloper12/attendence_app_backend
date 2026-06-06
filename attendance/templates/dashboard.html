@@ -379,6 +379,52 @@
     </div>
 </div>
 
+<!-- Employment status breakdown -->
+<div class="d-flex flex-wrap gap-2 mb-4 mt-2" id="statusBreakdown" style="display:none;">
+    <button type="button" onclick="filterStatus('Active', 'Active')"
+        class="btn btn-sm rounded-pill px-3 py-2 fw-semibold border-0"
+        style="background:rgba(34,197,94,0.12);color:#15803d;">
+        <i class="ri-checkbox-circle-line me-1"></i> Active:
+        <span class="ms-1 fw-bold" id="status-count-Active">0</span>
+    </button>
+    <button type="button" onclick="filterStatus('Leave', 'Leave')"
+        class="btn btn-sm rounded-pill px-3 py-2 fw-semibold border-0"
+        style="background:rgba(217,119,6,0.12);color:#b45309;">
+        <i class="ri-flight-takeoff-line me-1"></i> Leave:
+        <span class="ms-1 fw-bold" id="status-count-Leave">0</span>
+    </button>
+    <button type="button" onclick="filterStatus('Resigned', 'Resigned')"
+        class="btn btn-sm rounded-pill px-3 py-2 fw-semibold border-0"
+        style="background:rgba(220,38,38,0.12);color:#b91c1c;">
+        <i class="ri-logout-box-r-line me-1"></i> Resigned:
+        <span class="ms-1 fw-bold" id="status-count-Resigned">0</span>
+    </button>
+    <button type="button" onclick="filterStatus('Terminated', 'Terminated')"
+        class="btn btn-sm rounded-pill px-3 py-2 fw-semibold border-0"
+        style="background:rgba(220,38,38,0.12);color:#b91c1c;">
+        <i class="ri-close-circle-line me-1"></i> Terminated:
+        <span class="ms-1 fw-bold" id="status-count-Terminated">0</span>
+    </button>
+    <button type="button" onclick="filterStatus('No Renewal', 'No Renewal')"
+        class="btn btn-sm rounded-pill px-3 py-2 fw-semibold border-0"
+        style="background:rgba(107,114,128,0.12);color:#374151;">
+        <i class="ri-file-history-line me-1"></i> No Renewal:
+        <span class="ms-1 fw-bold" id="status-count-No-Renewal">0</span>
+    </button>
+    <button type="button" onclick="filterStatus('Absconding', 'Absconding')"
+        class="btn btn-sm rounded-pill px-3 py-2 fw-semibold border-0"
+        style="background:rgba(31,41,55,0.12);color:#111827;">
+        <i class="ri-user-unfollow-line me-1"></i> Absconding:
+        <span class="ms-1 fw-bold" id="status-count-Absconding">0</span>
+    </button>
+    <button type="button" onclick="filterStatus('Other', 'Other')"
+        class="btn btn-sm rounded-pill px-3 py-2 fw-semibold border-0"
+        style="background:rgba(99,102,241,0.12);color:#4338ca;">
+        <i class="ri-more-line me-1"></i> Other:
+        <span class="ms-1 fw-bold" id="status-count-Other">0</span>
+    </button>
+</div>
+
 <!-- Alerts Section -->
 <div id="alertsWrapper" class="d-none">
     <div class="card modern-table-container border-0 mb-5">
@@ -1140,6 +1186,19 @@
             document.getElementById('stat-today-attendance').textContent = data.today_attendance_count;
             document.getElementById('stat-late').textContent = data.late_count !== undefined ? data.late_count : '0';
             document.getElementById('stat-total-sites').textContent = data.total_sites || '-';
+
+            // Status breakdown — populate pills, hide the row entirely if backend
+            // didn't return counts (older deployments).
+            const breakdown = document.getElementById('statusBreakdown');
+            if (breakdown && data.status_counts) {
+                const sc = data.status_counts;
+                const set = (key, val) => {
+                    const el = document.getElementById('status-count-' + key.replace(/ /g, '-'));
+                    if (el) el.textContent = val ?? 0;
+                };
+                ['Active', 'Leave', 'Resigned', 'Terminated', 'No Renewal', 'Absconding', 'Other'].forEach(s => set(s, sc[s] || 0));
+                breakdown.style.display = 'flex';
+            }
 
             const list = document.getElementById('siteDropdown');
             const siteSelect = document.getElementById('employeeSiteSelect');

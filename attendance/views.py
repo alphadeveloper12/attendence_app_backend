@@ -2488,6 +2488,17 @@ class AttendanceStatsView(APIView):
                 count = base_qs.filter(date=d).count()
                 chart_data.append(count)
 
+            # Breakdown by employment status — one bucket per master status, plus
+            # a catch-all 'Other' for anything outside the standard list (legacy
+            # imports etc.). Counts honour all the filters already applied above.
+            _MASTER = ['Active', 'Leave', 'Resigned', 'Terminated', 'No Renewal', 'Absconding', 'Other']
+            status_counts = {s: 0 for s in _MASTER}
+            for raw_status in employees.values_list('status', flat=True):
+                key = (raw_status or '').strip() or 'Other'
+                if key not in status_counts:
+                    key = 'Other'
+                status_counts[key] += 1
+
             return Response(
                 {
                     "total_employees": employees.count(),
@@ -2497,6 +2508,7 @@ class AttendanceStatsView(APIView):
                     "sites": [{"id": s.id, "name": s.name} for s in all_sites],
                     "categories": unique_categories,
                     "statuses": unique_statuses,
+                    "status_counts": status_counts,
                     "employers": list(EMPLOYER_CHOICES),
                     "sponsors": list(SPONSOR_CHOICES),
                     "chart": {
@@ -2974,7 +2986,17 @@ def admin_user_face_view(request):
                 'face_enrolled': bool(emp.face_embedding),
                 'detail_url': reverse('admin-user-detail', args=[emp.id])
             })
-        
+
+        # Breakdown by employment status across the full filtered set
+        # (not just the current page).
+        _MASTER = ['Active', 'Leave', 'Resigned', 'Terminated', 'No Renewal', 'Absconding', 'Other']
+        status_counts = {s: 0 for s in _MASTER}
+        for raw_status in employees.values_list('status', flat=True):
+            key = (raw_status or '').strip() or 'Other'
+            if key not in status_counts:
+                key = 'Other'
+            status_counts[key] += 1
+
         return JsonResponse({
             'employees': employee_data,
             'pagination': {
@@ -2996,7 +3018,8 @@ def admin_user_face_view(request):
             'permissions': {
                 'is_superuser': is_superuser
             },
-            'total_count': paginator.count
+            'total_count': paginator.count,
+            'status_counts': status_counts,
         })
 
     # Initial Page Load (Skeleton)
