@@ -428,13 +428,61 @@
 <!-- Alerts Section -->
 <div id="alertsWrapper" class="d-none">
     <div class="card modern-table-container border-0 mb-5">
-        <div class="card-header bg-white py-4 px-4 border-bottom">
+        <div class="card-header bg-white py-3 px-4 border-bottom d-flex justify-content-between align-items-center">
             <h5 class="fw-bold mb-0 text-danger d-flex align-items-center gap-2">
                 <i class="ri-error-warning-fill"></i> Geofence Alerts
+                <span class="badge rounded-pill bg-danger bg-opacity-10 text-danger ms-1" id="alertsCount">0</span>
             </h5>
+            <div class="small text-secondary">Click any alert for details</div>
         </div>
-        <div id="alertsContainer" class="p-4" style="max-height: 280px; overflow-y: auto;">
-            <div class="text-center text-muted py-3">Loading alerts...</div>
+        <div id="alertsContainer" class="p-3 row g-3" style="max-height: 360px; overflow-y: auto;">
+            <div class="col-12 text-center text-muted py-3">Loading alerts…</div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .alert-card {
+        cursor: pointer;
+        transition: transform 120ms ease, box-shadow 120ms ease;
+        border: 1px solid #e5e7eb;
+    }
+    .alert-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 24px rgba(0,0,0,0.08);
+    }
+    .alert-card .alert-avatar {
+        width: 40px; height: 40px; border-radius: 50%; object-fit: cover; flex-shrink: 0;
+        background: #f3f4f6; display: flex; align-items: center; justify-content: center;
+        font-weight: 700; color: #6b7280; font-size: 0.95rem;
+    }
+    #alertDetailsMap { width: 100%; height: 360px; border-radius: 0.75rem; }
+</style>
+
+<!-- Alert Details Modal -->
+<div class="modal fade" id="alertDetailsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-xl">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 1.5rem;">
+            <div class="modal-header border-0 p-4 pb-2">
+                <div class="d-flex align-items-center gap-3">
+                    <div id="alertDetailAvatar" class="alert-avatar" style="width:56px;height:56px;font-size:1.2rem;">—</div>
+                    <div>
+                        <h5 class="modal-title fw-bold mb-0" id="alertDetailName">Employee</h5>
+                        <div class="small text-secondary" id="alertDetailMeta">—</div>
+                    </div>
+                </div>
+                <button type="button" class="btn-close ms-auto" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4 pt-2">
+                <div class="d-flex flex-wrap gap-2 mb-3" id="alertDetailBadges"></div>
+                <div id="alertDetailsMap"></div>
+            </div>
+            <div class="modal-footer border-0 p-4 pt-2">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Close</button>
+                <a href="#" id="alertDetailFullLink" class="btn btn-primary">
+                    <i class="ri-external-link-line"></i> Open Full Profile
+                </a>
+            </div>
         </div>
     </div>
 </div>
@@ -1258,29 +1306,164 @@
             }
 
             wrapper.classList.remove('d-none');
-            container.innerHTML = data.map(a => {
+            const countEl = document.getElementById('alertsCount');
+            if (countEl) countEl.textContent = data.length;
+
+            // Cache the alerts so the modal can look up the full record by id
+            window._alertsById = {};
+            container.innerHTML = data.map((a, idx) => {
+                window._alertsById[a.id] = a;
                 const isOnLeave = a.kind === 'on_leave';
-                const iconWrap = isOnLeave
-                    ? 'bg-warning bg-opacity-10 text-warning'
-                    : 'bg-danger bg-opacity-10 text-danger';
+                const accent = isOnLeave ? 'warning' : 'danger';
                 const icon = isOnLeave ? 'ri-flight-takeoff-line' : 'ri-error-warning-line';
-                const statusLabel = a.status || (isOnLeave ? 'Marked attendance while on Leave' : 'Out of Bounds');
-                const statusBadge = isOnLeave
-                    ? 'bg-warning bg-opacity-10 text-warning'
-                    : 'bg-danger bg-opacity-10 text-danger';
+                const statusLabel = a.status || (isOnLeave ? 'On Leave' : 'Out of Bounds');
+                const initial = (a.user_name || '?').trim().charAt(0).toUpperCase();
+                const avatar = a.user_pic
+                    ? `<img src="${a.user_pic}" alt="${a.user_name}" class="alert-avatar">`
+                    : `<div class="alert-avatar">${initial}</div>`;
                 return `
-                <div class="d-flex align-items-center gap-3 mb-3 p-3 rounded-4 bg-light border border-white">
-                    <div class="${iconWrap} p-2 rounded-circle"><i class="${icon}"></i></div>
-                    <div class="flex-grow-1">
-                        <div class="fw-bold text-dark">${a.user_name}
-                            <span class="badge rounded-pill ${statusBadge} ms-2" style="font-size:0.65rem;">${statusLabel}</span>
+                <div class="col-12 col-md-6 col-xl-4">
+                    <div class="alert-card rounded-4 p-3 bg-white h-100"
+                         onclick="openAlertDetailsModal(${a.id})">
+                        <div class="d-flex align-items-center gap-3">
+                            ${avatar}
+                            <div class="flex-grow-1 overflow-hidden">
+                                <div class="d-flex align-items-center justify-content-between gap-2">
+                                    <div class="fw-bold text-dark text-truncate" title="${a.user_name}">${a.user_name}</div>
+                                    <i class="ri-${icon.replace('ri-', '')} text-${accent}"></i>
+                                </div>
+                                <div class="small text-secondary text-truncate">
+                                    <i class="ri-building-line me-1"></i>${a.site} • ${a.time}
+                                </div>
+                                <div class="mt-1">
+                                    <span class="badge rounded-pill bg-${accent} bg-opacity-10 text-${accent}" style="font-size:0.65rem;">
+                                        ${statusLabel}
+                                    </span>
+                                </div>
+                            </div>
                         </div>
-                        <div class="small text-secondary">${a.site} • ${a.time}</div>
                     </div>
-                    <a href="/api/attendance/dashboard/user/${a.user_id}/" class="btn btn-sm btn-white border rounded-3">Details</a>
                 </div>`;
             }).join('');
         } catch (e) { console.error(e); }
+    }
+
+    // -------- Alert Details Modal --------
+    let alertDetailsModalInstance = null;
+    let alertDetailsMap = null;
+    let alertDetailsUserMarker = null;
+    let alertDetailsSiteMarker = null;
+    let alertDetailsPolygon = null;
+
+    async function openAlertDetailsModal(alertId) {
+        const a = (window._alertsById || {})[alertId];
+        if (!a) return;
+
+        // Header
+        const av = document.getElementById('alertDetailAvatar');
+        if (a.user_pic) {
+            av.outerHTML = `<img id="alertDetailAvatar" src="${a.user_pic}" alt="${a.user_name}"
+                class="alert-avatar" style="width:56px;height:56px;font-size:1.2rem;">`;
+        } else {
+            av.outerHTML = `<div id="alertDetailAvatar" class="alert-avatar"
+                style="width:56px;height:56px;font-size:1.2rem;">${(a.user_name||'?').trim().charAt(0).toUpperCase()}</div>`;
+        }
+        document.getElementById('alertDetailName').textContent = a.user_name || 'Employee';
+        document.getElementById('alertDetailMeta').textContent =
+            `Badge ${a.badge_number || '—'} · ${a.position || '—'} · ${a.department || '—'}`;
+
+        const isOnLeave = a.kind === 'on_leave';
+        const accent = isOnLeave ? 'warning' : 'danger';
+        const icon   = isOnLeave ? 'ri-flight-takeoff-line' : 'ri-map-pin-off-line';
+        document.getElementById('alertDetailBadges').innerHTML = `
+            <span class="badge rounded-pill bg-${accent} bg-opacity-10 text-${accent} px-3 py-2 fw-semibold">
+                <i class="${icon} me-1"></i> ${a.status || (isOnLeave ? 'On Leave' : 'Out of Bounds')}
+            </span>
+            <span class="badge rounded-pill bg-light text-dark border px-3 py-2 fw-semibold">
+                <i class="ri-building-line me-1"></i> ${a.site}
+            </span>
+            <span class="badge rounded-pill bg-light text-dark border px-3 py-2 fw-semibold">
+                <i class="ri-time-line me-1"></i> ${a.time}
+            </span>
+            ${(a.lat && a.long) ? `
+                <span class="badge rounded-pill bg-light text-secondary border px-3 py-2 font-monospace small">
+                    ${Number(a.lat).toFixed(4)}, ${Number(a.long).toFixed(4)}
+                </span>` : ''}
+        `;
+
+        document.getElementById('alertDetailFullLink').href =
+            `/api/attendance/dashboard/user/${a.user_id}/`;
+
+        if (!alertDetailsModalInstance) {
+            alertDetailsModalInstance = new bootstrap.Modal(document.getElementById('alertDetailsModal'));
+        }
+        alertDetailsModalInstance.show();
+
+        // Render map after the modal layout settles
+        setTimeout(() => renderAlertDetailsMap(a), 250);
+    }
+
+    async function renderAlertDetailsMap(a) {
+        const el = document.getElementById('alertDetailsMap');
+        if (!el || typeof google === 'undefined') return;
+        const center = { lat: Number(a.lat) || 25.0058, lng: Number(a.long) || 55.4364 };
+
+        if (!alertDetailsMap) {
+            alertDetailsMap = new google.maps.Map(el, {
+                center, zoom: 17,
+                mapTypeId: google.maps.MapTypeId.HYBRID,
+                mapTypeControl: true, fullscreenControl: true,
+                zoomControl: true, streetViewControl: false,
+            });
+        } else {
+            alertDetailsMap.setCenter(center);
+            alertDetailsMap.setZoom(17);
+            google.maps.event.trigger(alertDetailsMap, 'resize');
+        }
+
+        if (alertDetailsUserMarker) alertDetailsUserMarker.setMap(null);
+        if (alertDetailsSiteMarker) alertDetailsSiteMarker.setMap(null);
+        if (alertDetailsPolygon) alertDetailsPolygon.setMap(null);
+
+        if (a.lat && a.long) {
+            alertDetailsUserMarker = new google.maps.Marker({
+                position: center,
+                map: alertDetailsMap,
+                title: 'Employee check-in location',
+                icon: { url: 'http://maps.google.com/mapfiles/ms/icons/red-dot.png' },
+            });
+        }
+
+        if (!a.site_id) return;
+        try {
+            const res = await fetch(`/api/attendance/api/sites/${a.site_id}/coordinates/`);
+            const data = await res.json();
+            if (!data.success || !data.has_coordinates) return;
+
+            const path = data.coordinates.slice();
+            if (path[0].lat !== path[path.length - 1].lat) path.push(path[0]);
+
+            alertDetailsPolygon = new google.maps.Polygon({
+                paths: path,
+                strokeColor: '#2563eb', strokeOpacity: 1.0, strokeWeight: 3,
+                fillColor: '#3b82f6', fillOpacity: 0.18, clickable: false,
+            });
+            alertDetailsPolygon.setMap(alertDetailsMap);
+
+            if (data.center && data.center.lat) {
+                alertDetailsSiteMarker = new google.maps.Marker({
+                    position: { lat: data.center.lat, lng: data.center.lng },
+                    map: alertDetailsMap,
+                    title: 'Site geofence center',
+                    icon: { url: 'http://maps.google.com/mapfiles/ms/icons/blue-dot.png' },
+                });
+            }
+
+            const bounds = new google.maps.LatLngBounds();
+            path.forEach(p => bounds.extend(p));
+            if (a.lat && a.long) bounds.extend(center);
+            alertDetailsMap.fitBounds(bounds, 40);
+        } catch (e) { console.error('alert map polygon', e); }
     }
 
     async function loadEmployees() {
