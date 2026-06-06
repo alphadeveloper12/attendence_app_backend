@@ -621,6 +621,8 @@
                             data-bs-target="#sickLeave">7. Sick Leave</button></li>
                     <li class="nav-item flex-fill"><button class="nav-link w-100 py-2" data-bs-toggle="pill"
                             data-bs-target="#siteHistory">8. Site History</button></li>
+                    <li class="nav-item flex-fill"><button class="nav-link w-100 py-2" data-bs-toggle="pill"
+                            data-bs-target="#attachments">9. Attachments</button></li>
                 </ul>
 
                 <form id="addEmployeeForm">
@@ -881,6 +883,10 @@
                                         class="form-label small fw-bold text-secondary text-uppercase"
                                         style="font-size: 0.65rem;">Transportation</label><input type="text"
                                         name="transportation" class="form-control form-control-modern"></div>
+                                <div class="col-md-6"><label
+                                        class="form-label small fw-bold text-secondary text-uppercase"
+                                        style="font-size: 0.65rem;">Joining Date (D.O.J.)</label><input type="date"
+                                        name="date_of_joining" class="form-control form-control-modern"></div>
                             </div>
                         </div>
                         <div class="tab-pane fade" id="docs">
@@ -897,40 +903,17 @@
                                         style="font-size: 0.65rem;">Passport Expiry Date</label><input type="date"
                                         name="passport_expiry" class="form-control form-control-modern"></div>
 
-                                <!-- Passport document upload + view -->
-                                <div class="col-md-12">
-                                    <label class="form-label small fw-bold text-secondary text-uppercase"
-                                        style="font-size: 0.65rem;">Passport (PDF / Image)</label>
-                                    <div class="d-flex gap-2 align-items-center">
-                                        <input type="file" name="passport_document" id="passportDocInput"
-                                            class="form-control form-control-modern"
-                                            accept=".pdf,.png,.jpg,.jpeg">
-                                        <a href="#" target="_blank" id="passportDocLink"
-                                            class="btn btn-outline-info btn-sm d-none">
-                                            <i class="ri-eye-line"></i> View
-                                        </a>
-                                    </div>
+                                <div class="col-md-12 mt-4">
+                                    <h6 class="fw-bold small text-primary text-uppercase">Visa Details</h6>
                                 </div>
-
-                                <div class="col-md-12"><label
+                                <div class="col-md-6"><label
                                         class="form-label small fw-bold text-secondary text-uppercase"
-                                        style="font-size: 0.65rem;">Visa Details</label><textarea name="visa_details"
-                                        class="form-control form-control-modern" rows="2"></textarea></div>
-
-                                <!-- Visa document upload + view -->
-                                <div class="col-md-12">
-                                    <label class="form-label small fw-bold text-secondary text-uppercase"
-                                        style="font-size: 0.65rem;">Visa (PDF / Image)</label>
-                                    <div class="d-flex gap-2 align-items-center">
-                                        <input type="file" name="visa_document" id="visaDocInput"
-                                            class="form-control form-control-modern"
-                                            accept=".pdf,.png,.jpg,.jpeg">
-                                        <a href="#" target="_blank" id="visaDocLink"
-                                            class="btn btn-outline-info btn-sm d-none">
-                                            <i class="ri-eye-line"></i> View
-                                        </a>
-                                    </div>
-                                </div>
+                                        style="font-size: 0.65rem;">Visa Details</label><input type="text"
+                                        name="visa_details" class="form-control form-control-modern"></div>
+                                <div class="col-md-6"><label
+                                        class="form-label small fw-bold text-secondary text-uppercase"
+                                        style="font-size: 0.65rem;">Visa Expiry Date</label><input type="date"
+                                        name="visa_expiry_date" class="form-control form-control-modern"></div>
 
                                 <div class="col-md-12 mt-4">
                                     <h6 class="fw-bold small text-primary text-uppercase">Labour Card Details</h6>
@@ -943,19 +926,11 @@
                                         class="form-label small fw-bold text-secondary text-uppercase"
                                         style="font-size: 0.65rem;">Personal Nr. (MOL ID)</label><input type="text"
                                         name="mol_id" class="form-control form-control-modern"></div>
-
-                                <!-- Labour card document upload + view -->
-                                <div class="col-md-12">
-                                    <label class="form-label small fw-bold text-secondary text-uppercase"
-                                        style="font-size: 0.65rem;">Labour Card (PDF / Image)</label>
-                                    <div class="d-flex gap-2 align-items-center">
-                                        <input type="file" name="labour_card_document" id="labourDocInput"
-                                            class="form-control form-control-modern"
-                                            accept=".pdf,.png,.jpg,.jpeg">
-                                        <a href="#" target="_blank" id="labourDocLink"
-                                            class="btn btn-outline-info btn-sm d-none">
-                                            <i class="ri-eye-line"></i> View
-                                        </a>
+                                <div class="col-12 mt-3">
+                                    <div class="alert alert-info py-2 px-3 small mb-0">
+                                        <i class="ri-information-line me-1"></i>
+                                        Files (passport / visa / labour card scans) are now stored under the
+                                        <strong>9. Attachments</strong> tab — give each one a name and upload it there.
                                     </div>
                                 </div>
                             </div>
@@ -963,10 +938,6 @@
                         {% if is_superuser %}
                         <div class="tab-pane fade" id="salary">
                             <div class="row g-3">
-                                <div class="col-md-6"><label
-                                        class="form-label small fw-bold text-secondary text-uppercase"
-                                        style="font-size: 0.65rem;">Joining Date (D.O.J.)</label><input type="date"
-                                        name="date_of_joining" class="form-control form-control-modern"></div>
                                 <div class="col-md-6"><label
                                         class="form-label small fw-bold text-secondary text-uppercase"
                                         style="font-size: 0.65rem;">Gross Salary</label><input type="number" step="0.01"
@@ -1049,6 +1020,46 @@
                                 <div class="text-center py-4">
                                     <div class="spinner-border spinner-border-sm text-secondary"></div>
                                     <p class="text-muted small mt-2 mb-0">Loading site history…</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 9. Attachments — free-form file uploads -->
+                        <div class="tab-pane fade" id="attachments">
+                            <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom">
+                                <div>
+                                    <span class="text-secondary small">Total attachments:</span>
+                                    <span class="badge rounded-pill bg-info bg-opacity-10 text-info fw-bold ms-1"
+                                          id="attachmentsCount">—</span>
+                                </div>
+                                <button type="button" class="btn btn-sm btn-outline-primary"
+                                        onclick="openAddAttachmentForm()">
+                                    <i class="ri-add-line"></i> Add Attachment
+                                </button>
+                            </div>
+
+                            <div id="addAttachmentForm" class="border rounded-3 p-3 mb-3" style="display:none; background:#f0f8ff;">
+                                <div class="row g-2">
+                                    <div class="col-md-5">
+                                        <label class="form-label small fw-bold text-secondary text-uppercase" style="font-size:0.65rem;">Name *</label>
+                                        <input type="text" id="attachmentNameInput" class="form-control form-control-sm"
+                                               placeholder="e.g. Passport scan, Contract, Emirates ID">
+                                    </div>
+                                    <div class="col-md-7">
+                                        <label class="form-label small fw-bold text-secondary text-uppercase" style="font-size:0.65rem;">File *</label>
+                                        <input type="file" id="attachmentFileInput" class="form-control form-control-sm">
+                                    </div>
+                                </div>
+                                <div class="text-end mt-2">
+                                    <button type="button" class="btn btn-sm btn-light" onclick="closeAddAttachmentForm()">Cancel</button>
+                                    <button type="button" class="btn btn-sm btn-primary" onclick="submitAttachment()" id="attachmentSubmitBtn">Upload</button>
+                                </div>
+                            </div>
+
+                            <div id="attachmentsContainer">
+                                <div class="text-center py-4">
+                                    <div class="spinner-border spinner-border-sm text-secondary"></div>
+                                    <p class="text-muted small mt-2 mb-0">Loading attachments…</p>
                                 </div>
                             </div>
                         </div>
@@ -1231,6 +1242,12 @@
     document.addEventListener('DOMContentLoaded', () => {
         const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
         document.getElementById('currentDate').textContent = new Date().toLocaleDateString('en-US', options);
+
+        // Default the alerts date picker to today before the first load
+        const alertsDateInput = document.getElementById('alertsDateInput');
+        if (alertsDateInput && !alertsDateInput.value) {
+            alertsDateInput.value = new Date().toISOString().split('T')[0];
+        }
 
         loadStats();
         loadEmployees();
@@ -1821,18 +1838,8 @@
                 const el = f.querySelector(`[name="${key}"]`);
                 if (el && el.type !== 'file') el.value = data[key] || '';
             });
-            // Show document view-buttons when URLs are present
-            const docs = [
-                ['passportDocLink', data.passport_document_url],
-                ['visaDocLink', data.visa_document_url],
-                ['labourDocLink', data.labour_card_document_url],
-            ];
-            docs.forEach(([id, url]) => {
-                const a = document.getElementById(id);
-                if (!a) return;
-                if (url) { a.href = url; a.classList.remove('d-none'); }
-                else { a.href = '#'; a.classList.add('d-none'); }
-            });
+            // (Legacy passport/visa/labour file inputs were removed — file uploads
+            // now live in the Attachments tab and are managed by loadAttachments().)
             // Remember original status — needed to detect Leave → Active transition
             originalEmployeeStatus = data.status || null;
             // Remember original site for the Effective-From toggle
@@ -1855,7 +1862,113 @@
             loadSickLeaves(empId);
             // Load site assignment timeline
             loadSiteHistory(empId);
+            // Load free-form attachments
+            loadAttachments(empId);
         } catch (e) { alert("Failed to load employee data."); }
+    }
+
+    // ---- Attachments ----
+    async function loadAttachments(empId) {
+        const container = document.getElementById('attachmentsContainer');
+        const countBadge = document.getElementById('attachmentsCount');
+        if (!container) return;
+        container.innerHTML = `<div class="text-center py-4"><div class="spinner-border spinner-border-sm text-secondary"></div><p class="text-muted small mt-2 mb-0">Loading attachments…</p></div>`;
+        try {
+            const res = await fetch(`/api/attendance/employees/${empId}/attachments/`);
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Failed');
+            const items = data.attachments || [];
+            if (countBadge) countBadge.textContent = data.count || 0;
+            if (items.length === 0) {
+                container.innerHTML = `<div class="text-center py-5">
+                    <div style="font-size:2.5rem;opacity:0.3;">📎</div>
+                    <h6 class="fw-bold text-secondary mt-3">No attachments yet</h6>
+                    <p class="text-muted small mb-0">Click "Add Attachment" to upload passport scans, contracts, IDs, etc.</p>
+                </div>`;
+                return;
+            }
+            container.innerHTML = `<div class="d-flex flex-column gap-2">
+                ${items.map(a => `
+                    <div class="border rounded-3 p-3 d-flex justify-content-between align-items-center" style="background:#fafafa;">
+                        <div class="flex-grow-1 me-2 overflow-hidden">
+                            <div class="fw-bold text-truncate" title="${a.name}">
+                                <i class="ri-file-line text-primary me-1"></i>${a.name}
+                            </div>
+                            <div class="text-secondary small mt-1">
+                                ${a.uploaded_at ? new Date(a.uploaded_at).toLocaleString() : ''}
+                                ${a.uploaded_by ? ' · by ' + a.uploaded_by : ''}
+                            </div>
+                        </div>
+                        <div class="d-flex gap-2 flex-shrink-0">
+                            ${a.file_url
+                                ? `<a href="${a.file_url}" target="_blank" class="btn btn-sm btn-outline-info"><i class="ri-eye-line"></i> View</a>`
+                                : ''}
+                            <button type="button" class="btn btn-sm btn-outline-danger" onclick="deleteAttachment(${a.id})" title="Delete">
+                                <i class="ri-delete-bin-line"></i>
+                            </button>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>`;
+        } catch (e) {
+            container.innerHTML = `<div class="text-danger small text-center py-4">Failed to load attachments.</div>`;
+        }
+    }
+
+    function openAddAttachmentForm() {
+        const form = document.getElementById('addAttachmentForm');
+        if (!form) return;
+        document.getElementById('attachmentNameInput').value = '';
+        document.getElementById('attachmentFileInput').value = '';
+        form.style.display = '';
+    }
+    function closeAddAttachmentForm() {
+        const form = document.getElementById('addAttachmentForm');
+        if (form) form.style.display = 'none';
+    }
+
+    async function submitAttachment() {
+        const empId = document.getElementById('editEmployeeId').value;
+        if (!empId) { alert('Save the employee first, then add attachments.'); return; }
+        const name = (document.getElementById('attachmentNameInput').value || '').trim();
+        const file = document.getElementById('attachmentFileInput').files[0];
+        if (!name) { alert('Please give the attachment a name.'); return; }
+        if (!file) { alert('Please choose a file to upload.'); return; }
+
+        const csrf = document.querySelector('[name=csrfmiddlewaretoken]').value;
+        const fd = new FormData();
+        fd.append('name', name);
+        fd.append('file', file);
+
+        const btn = document.getElementById('attachmentSubmitBtn');
+        btn.disabled = true;
+        try {
+            const res = await fetch(`/api/attendance/employees/${empId}/attachments/`, {
+                method: 'POST',
+                headers: { 'X-CSRFToken': csrf },
+                body: fd,
+            });
+            const result = await res.json();
+            if (!res.ok) { alert(result.error || 'Upload failed'); return; }
+            closeAddAttachmentForm();
+            loadAttachments(empId);
+        } catch (e) { alert('Network error'); }
+        finally { btn.disabled = false; }
+    }
+
+    async function deleteAttachment(attachmentId) {
+        if (!confirm('Delete this attachment?')) return;
+        const empId = document.getElementById('editEmployeeId').value;
+        const csrf = document.querySelector('[name=csrfmiddlewaretoken]').value;
+        try {
+            const res = await fetch(`/api/attendance/employees/${empId}/attachments/?id=${attachmentId}`, {
+                method: 'DELETE',
+                headers: { 'X-CSRFToken': csrf },
+            });
+            const result = await res.json();
+            if (!res.ok) { alert(result.error || 'Delete failed'); return; }
+            loadAttachments(empId);
+        } catch (e) { alert('Network error'); }
     }
 
     // ---- Site History ----
@@ -2240,37 +2353,17 @@
         const csrf = formData.get('csrfmiddlewaretoken');
         const btn = document.getElementById('saveEmployeeBtn');
 
-        // Detect whether the user attached any document — if so, use multipart.
-        const docFieldNames = ['passport_document', 'visa_document', 'labour_card_document'];
-        const hasFile = docFieldNames.some(n => {
-            const v = formData.get(n);
-            return v && v instanceof File && v.size > 0;
-        });
+        // No file fields on the main form anymore — uploads happen in the
+        // Attachments tab via its own multipart endpoint.
+        const data = Object.fromEntries(formData.entries());
 
         btn.disabled = true;
         try {
-            let res;
-            if (hasFile) {
-                // Strip empty file fields so the backend doesn't overwrite with blanks
-                docFieldNames.forEach(n => {
-                    const v = formData.get(n);
-                    if (!(v && v instanceof File && v.size > 0)) formData.delete(n);
-                });
-                res = await fetch(empId ? `/api/attendance/employees/edit/${empId}/` : '/api/attendance/employees/add/', {
-                    method: empId ? 'PUT' : 'POST',
-                    headers: { 'X-CSRFToken': csrf },
-                    body: formData,
-                });
-            } else {
-                const data = Object.fromEntries(formData.entries());
-                // Drop empty file entries from the JSON payload
-                docFieldNames.forEach(n => { delete data[n]; });
-                res = await fetch(empId ? `/api/attendance/employees/edit/${empId}/` : '/api/attendance/employees/add/', {
-                    method: empId ? 'PUT' : 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
-                    body: JSON.stringify(data),
-                });
-            }
+            const res = await fetch(empId ? `/api/attendance/employees/edit/${empId}/` : '/api/attendance/employees/add/', {
+                method: empId ? 'PUT' : 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+                body: JSON.stringify(data),
+            });
             const result = await res.json();
             if (res.ok) { addModal.hide(); loadEmployees(); loadStats(); }
             else { alert(result.error || 'Operation failed'); }

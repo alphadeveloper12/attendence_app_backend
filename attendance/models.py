@@ -93,6 +93,7 @@ class Employee(models.Model):
     passport_number = models.CharField(max_length=50, null=True, blank=True)
     passport_expiry = models.DateField(null=True, blank=True)
     visa_details = models.CharField(max_length=100, null=True, blank=True)
+    visa_expiry_date = models.DateField(null=True, blank=True)
     status = models.CharField(max_length=50, null=True, blank=True)  # Active, Leave, Resigned, Terminated, No Renewal, Absconding, Other
     resumption_date = models.DateField(null=True, blank=True)    # Set when employee returns from Leave → Active
     last_working_date = models.DateField(null=True, blank=True)  # Set when employee leaves: Resigned/Terminated/No Renewal/Absconding
@@ -166,6 +167,26 @@ class EmployeeSiteHistory(models.Model):
             f"{self.old_site.name if self.old_site else '—'} → "
             f"{self.new_site.name if self.new_site else '—'} @ {self.effective_from}"
         )
+
+
+class EmployeeAttachment(models.Model):
+    """Free-form file attachments admins upload against an employee.
+
+    Each entry has an admin-supplied name (e.g. "Driving Licence", "Contract",
+    "Emirates ID") plus the file itself. There is no schema beyond that — admins
+    can attach as many files as needed.
+    """
+    employee   = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name='attachments')
+    name       = models.CharField(max_length=200)
+    file       = models.FileField(upload_to='employee_attachments/')
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+    uploaded_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+
+    class Meta:
+        ordering = ['-uploaded_at']
+
+    def __str__(self):
+        return f"{self.employee.name} — {self.name}"
 
 
 class Attendance(models.Model):

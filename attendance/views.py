@@ -45,7 +45,7 @@ from .utils import (
     THRESH, MARGIN, get_image_bytes
 )
 from .geofence import check_geofence
-from .models import Employee, Attendance, Site, FaceTemplate, AdminProfile, AppBuild, EmployeeStatusHistory, EmployeeSiteHistory
+from .models import Employee, Attendance, Site, FaceTemplate, AdminProfile, AppBuild, EmployeeStatusHistory, EmployeeSiteHistory, EmployeeAttachment
 from .serializers import *
 from .permissions import IsSiteAdmin
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -1099,6 +1099,7 @@ class AdminAddEmployeeView(APIView):
                 passport_number=data.get('passport_number'),
                 passport_expiry=parse_date(data.get('passport_expiry')),
                 visa_details=data.get('visa_details'),
+                visa_expiry_date=parse_date(data.get('visa_expiry_date')),
                 labor_card_number=data.get('labor_card_number'),
                 mol_id=data.get('mol_id'),
                 job_description=data.get('job_description'),
@@ -1185,6 +1186,7 @@ class AdminEditEmployeeView(APIView):
                 'passport_number': emp.passport_number,
                 'passport_expiry': str(emp.passport_expiry) if emp.passport_expiry else '',
                 'visa_details': emp.visa_details,
+                'visa_expiry_date': str(emp.visa_expiry_date) if emp.visa_expiry_date else '',
                 'labor_card_number': emp.labor_card_number,
                 'mol_id': emp.mol_id,
                 'job_description': emp.job_description,
@@ -1391,6 +1393,7 @@ class AdminEditEmployeeView(APIView):
             emp.date_of_birth = parse_date(data.get('date_of_birth'))
             emp.date_of_joining = parse_date(data.get('date_of_joining'))
             emp.passport_expiry = parse_date(data.get('passport_expiry'))
+            emp.visa_expiry_date = parse_date(data.get('visa_expiry_date'))
 
             if request.user.is_superuser:
                 emp.gross_salary = parse_decimal(data.get('gross_salary'))
@@ -1520,6 +1523,82 @@ class EmployeeSiteHistoryView(APIView):
             'current_site_id': emp.site.id if emp.site else None,
             'segments': segments,
         })
+
+
+class EmployeeAttachmentsView(APIView):
+    """List, add, or remove free-form attachments for an employee.
+
+    GET    /api/attendance/employees/<id>/attachments/                 → list
+    POST   /api/attendance/employees/<id>/attachments/  (multipart)    → add: name, file
+    DELETE /api/attendance/employees/<id>/attachments/?id=<attachment> → remove one
+    """
+    permission_classes = [IsAdminUser | IsSiteAdmin]
+
+    def get(self, request, employee_id):
+        try:
+            emp = Employee.objects.get(id=employee_id)
+        except Employee.DoesNotExist:
+            return Response({'error': 'Employee not found'}, status=404)
+
+        rows = (
+            emp.attachments
+               .select_related('uploaded_by')
+               .order_by('-uploaded_at')
+        )
+        items = [{
+            'id': a.id,
+            'name': a.name,
+            'file_url': a.file.url if a.file else None,
+            'uploaded_at': a.uploaded_at.isoformat() if a.uploaded_at else None,
+            'uploaded_by': a.uploaded_by.username if a.uploaded_by else None,
+        } for a in rows]
+        return Response({
+            'employee_id': emp.id,
+            'count': len(items),
+            'attachments': items,
+        })
+
+    def post(self, request, employee_id):
+        try:
+            emp = Employee.objects.get(id=employee_id)
+        except Employee.DoesNotExist:
+            return Response({'error': 'Employee not found'}, status=404)
+
+        name = (request.data.get('name') or '').strip()
+        file_obj = request.FILES.get('file')
+
+        if not name:
+            return Response({'error': 'Attachment name is required.'}, status=400)
+        if not file_obj:
+            return Response({'error': 'Please choose a file to upload.'}, status=400)
+
+        a = EmployeeAttachment.objects.create(
+            employee=emp,
+            name=name[:200],
+            file=file_obj,
+            uploaded_by=request.user if request.user.is_authenticated else None,
+        )
+        return Response({
+            'success': True,
+            'id': a.id,
+            'name': a.name,
+            'file_url': a.file.url if a.file else None,
+            'uploaded_at': a.uploaded_at.isoformat(),
+            'uploaded_by': a.uploaded_by.username if a.uploaded_by else None,
+        }, status=201)
+
+    def delete(self, request, employee_id):
+        att_id = request.query_params.get('id') or request.data.get('id')
+        if not att_id:
+            return Response({'error': 'Attachment id is required.'}, status=400)
+        try:
+            a = EmployeeAttachment.objects.get(id=att_id, employee_id=employee_id)
+        except EmployeeAttachment.DoesNotExist:
+            return Response({'error': 'Attachment not found'}, status=404)
+        if a.file:
+            a.file.delete(save=False)
+        a.delete()
+        return Response({'success': True})
 
 
 class EmployeeSickLeaveView(APIView):
@@ -3226,6 +3305,7 @@ def admin_user_detail_view(request, user_id):
                     'passport_number': employee.passport_number,
                     'passport_expiry': str(employee.passport_expiry) if employee.passport_expiry else None,
                     'visa_details': employee.visa_details,
+                    'visa_expiry_date': str(employee.visa_expiry_date) if employee.visa_expiry_date else None,
                     'camp': employee.camp,
                     'transportation': employee.transportation,
                 },
