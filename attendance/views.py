@@ -295,140 +295,256 @@ class ImportEmployeesView(APIView):
                 return None
 
             success_count = 0
+            created_count = 0
+            updated_count = 0
             errors = []
-            
-            # --- OPTIMIZATION: BATCH LOOKUPS ---
-            # 1. Collect all potential identifiers from the sheet
+
+            # --- BATCH LOOKUPS + CASE-INSENSITIVE CANONICAL CACHES ---
+            # Badge ID is the unique identifier. We normalize each badge to a
+            # canonical form (stripped, no inner whitespace, lowercased) so that
+            # "8033", " 8033", "8033 " all collapse to one record.
             data_df = df.iloc[start_data_index:]
-            all_badges = set()
-            all_mol_ids = set()
-            all_passports = set()
-            all_site_names = set()
 
+            def _norm_badge(b):
+                if not b:
+                    return ''
+                # Excel often loads integers as "8033.0" — strip the .0
+                s = str(b).strip()
+                if s.endswith('.0') and s[:-2].isdigit():
+                    s = s[:-2]
+                return s.replace(' ', '').lower()
+
+            all_badge_keys = set()
             for _, row in data_df.iterrows():
-                b = get_val_from_row(row, 'badge_number')
-                if b: all_badges.add(b)
-                m = get_val_from_row(row, 'mol_id')
-                if m: all_mol_ids.add(m)
-                p = get_val_from_row(row, 'passport_number')
-                if p: all_passports.add(p)
-                s = get_val_from_row(row, 'site')
-                if s: all_site_names.add(s.strip().lower())
+                k = _norm_badge(get_val_from_row(row, 'badge_number'))
+                if k:
+                    all_badge_keys.add(k)
 
-            # 2. Bulk fetch existing employees and sites
-            existing_emps_by_badge = {e.badge_number: e for e in Employee.objects.filter(badge_number__in=list(all_badges)).exclude(badge_number='') if e.badge_number}
-            existing_emps_by_mol = {e.mol_id: e for e in Employee.objects.filter(mol_id__in=list(all_mol_ids)).exclude(mol_id='') if e.mol_id}
-            existing_emps_by_passport = {e.passport_number: e for e in Employee.objects.filter(passport_number__in=list(all_passports)).exclude(passport_number='') if e.passport_number}
-            
+            # Build a badge lookup that's case/space-insensitive against the DB.
+            existing_emps_by_badge = {}
+            for e in Employee.objects.exclude(badge_number__isnull=True).exclude(badge_number=''):
+                k = _norm_badge(e.badge_number)
+                if k in all_badge_keys:
+                    existing_emps_by_badge[k] = e
+
+            # --- Case-insensitive canonical caches for free-text fields ---
+            # Key = value.lower(), Value = the FIRST-SEEN original spelling.
+            # When the sheet contains "vida" but the DB already has "Vida",
+            # we re-use "Vida" instead of creating a new variant.
             site_cache = {s.name.lower(): s for s in Site.objects.all()}
-            # -----------------------------------
+
+            def _build_cache(qs_values):
+                cache = {}
+                for v in qs_values:
+                    if not v: continue
+                    v = str(v).strip()
+                    if not v: continue
+                    k = v.lower()
+                    cache.setdefault(k, v)
+                return cache
+
+            import re as _re
+            _SPACE_RE = _re.compile(r'\s+')
+
+            def _norm_str(value):
+                """Strip leading/trailing whitespace AND collapse internal runs
+                of whitespace so "Head  Office" and "Head Office " collapse."""
+                if value is None:
+                    return None
+                v = _SPACE_RE.sub(' ', str(value)).strip()
+                return v or None
+
+            def _build_cache_from_field(model, field):
+                cache = {}
+                qs = (model.objects
+                      .exclude(**{f'{field}__isnull': True})
+                      .exclude(**{field: ''})
+                      .values_list(field, flat=True).distinct())
+                for v in qs:
+                    n = _norm_str(v)
+                    if n:
+                        cache.setdefault(n.lower(), n)
+                return cache
+
+            department_cache = _build_cache_from_field(Employee, 'department')
+            for v in JobCategory.objects.exclude(department__isnull=True).exclude(department='').values_list('department', flat=True).distinct():
+                n = _norm_str(v)
+                if n: department_cache.setdefault(n.lower(), n)
+
+            position_cache = _build_cache_from_field(Employee, 'position')
+            for v in JobCategory.objects.values_list('name', flat=True).distinct():
+                n = _norm_str(v)
+                if n: position_cache.setdefault(n.lower(), n)
+
+            sponsor_cache       = _build_cache_from_field(Employee, 'sponsor')
+            employer_cache      = _build_cache_from_field(Employee, 'employer')
+            nationality_cache   = _build_cache_from_field(Employee, 'nationality')
+            gender_cache        = _build_cache_from_field(Employee, 'gender')
+            marital_cache       = _build_cache_from_field(Employee, 'marital_status')
+            religion_cache      = _build_cache_from_field(Employee, 'religion')
+            status_cache        = _build_cache_from_field(Employee, 'status')
+            # Seed status_cache with the canonical master list so a freshly
+            # imported sheet still maps "active"/"ACTIVE" → "Active".
+            for canonical in ('Active', 'Leave', 'Resigned', 'Terminated',
+                              'No Renewal', 'Absconding'):
+                status_cache.setdefault(canonical.lower(), canonical)
+            # Same idea for categories
+            category_cache = {'staff': 'staff', 'worker': 'worker'}
+
+            def _canon(value, cache):
+                """Return the canonical (first-seen) spelling for `value`. If new,
+                remember it in the cache so subsequent rows of the same import
+                match. Case/whitespace insensitive."""
+                v = _norm_str(value)
+                if v is None:
+                    return None
+                k = v.lower()
+                if k in cache:
+                    return cache[k]
+                cache[k] = v
+                return v
+
+            def parse_float(val):
+                if not val: return None
+                try:
+                    return float(str(val).replace(',', ''))
+                except Exception:  # noqa: BLE001
+                    return None
+
+            def parse_date(date_str):
+                if not date_str: return None
+                try:
+                    return pd.to_datetime(date_str).date()
+                except Exception:  # noqa: BLE001
+                    return None
 
             for index, row in data_df.iterrows():
                 try:
                     name = get_val_from_row(row, 'name')
-                    if not name: continue 
+                    if not name: continue
 
-                    status = get_val_from_row(row, 'status')
                     badge = get_val_from_row(row, 'badge_number')
-                    nationality = get_val_from_row(row, 'nationality')
-                    
-                    # Optimized lookup using memory cache
-                    emp = existing_emps_by_badge.get(badge)
-                    if not emp:
-                        mol_id = get_val_from_row(row, 'mol_id')
-                        emp = existing_emps_by_mol.get(mol_id)
-                    if not emp:
-                        passport_number = get_val_from_row(row, 'passport_number')
-                        emp = existing_emps_by_passport.get(passport_number)
-                    
-                    if not emp and name and employer_name and nationality:
-                        # Fallback for name-based lookup (rarer, keep as query for now or expand cache)
-                        # NOTE: the spreadsheet "Employer" column now lives on the renamed `sponsor` field.
-                        emp = Employee.objects.filter(name=name, sponsor=employer_name, nationality=nationality).first()
-                    
-                    is_new = not emp
-                    if not emp:
-                        emp = Employee()
+                    badge_key = _norm_badge(badge)
+                    if not badge_key:
+                        errors.append(f"Row {index}: skipped — Badge ID is required (it's the unique identifier).")
+                        continue
 
+                    emp = existing_emps_by_badge.get(badge_key)
+                    is_new = emp is None
                     if is_new:
-                        emp.name = name
-                        emp.department = get_val_from_row(row, 'department')
-                        emp.position = get_val_from_row(row, 'position')
-                        emp.badge_number = badge
-                        emp.salary_grade = get_val_from_row(row, 'salary_grade')
-                        emp.job_description = get_val_from_row(row, 'job_description')
-                        emp.nationality = nationality
-                        emp.gender = get_val_from_row(row, 'gender')
-                        emp.marital_status = get_val_from_row(row, 'marital_status')
-                        emp.religion = get_val_from_row(row, 'religion')
-                        emp.labor_card_number = get_val_from_row(row, 'labor_card_number')
-                        emp.mol_id = get_val_from_row(row, 'mol_id')
-                        emp.passport_number = get_val_from_row(row, 'passport_number')
-                        emp.status = status
+                        emp = Employee()
+                        # Keep the badge in the form the sheet provided (stripped).
+                        emp.badge_number = str(badge).strip()
+                        existing_emps_by_badge[badge_key] = emp
 
-                        # Salaries
-                        def parse_float(val):
-                            if not val: return None
-                            try:
-                                return float(str(val).replace(',', ''))
-                            except:
-                                return None
+                    # --- Always assign every field that has a value in this row.
+                    # Empty cells leave the existing value alone for updates, but
+                    # default to None for newly-created rows.
+                    def _set(field, value):
+                        if value is not None and value != '':
+                            setattr(emp, field, value)
+                        elif is_new:
+                            setattr(emp, field, value if value != '' else None)
 
-                        emp.gross_salary = parse_float(get_val_from_row(row, 'gross_salary'))
-                        emp.basic_salary = parse_float(get_val_from_row(row, 'basic_salary'))
-                        if not emp.basic_salary and emp.gross_salary:
-                            emp.basic_salary = emp.gross_salary
+                    _set('name', _norm_str(name))
+                    _set('department',     _canon(get_val_from_row(row, 'department'),     department_cache))
+                    _set('position',       _canon(get_val_from_row(row, 'position'),       position_cache))
+                    _set('salary_grade',   _canon(get_val_from_row(row, 'salary_grade'),   position_cache))
+                    _set('job_description', _norm_str(get_val_from_row(row, 'job_description')))
+                    _set('nationality',    _canon(get_val_from_row(row, 'nationality'),    nationality_cache))
+                    _set('gender',         _canon(get_val_from_row(row, 'gender'),         gender_cache))
+                    _set('marital_status', _canon(get_val_from_row(row, 'marital_status'), marital_cache))
+                    _set('religion',       _canon(get_val_from_row(row, 'religion'),       religion_cache))
+                    _set('labor_card_number', _norm_str(get_val_from_row(row, 'labor_card_number')))
+                    _set('mol_id',         _norm_str(get_val_from_row(row, 'mol_id')))
+                    _set('passport_number', _norm_str(get_val_from_row(row, 'passport_number')))
+                    _set('visa_details',   _norm_str(get_val_from_row(row, 'visa_details')))
 
-                        # Category
-                        div = (emp.department or "").lower()
-                        cat = (emp.salary_grade or "").lower()
+                    raw_status = _canon(get_val_from_row(row, 'status'), status_cache)
+                    if raw_status:
+                        emp.status = raw_status
+
+                    # Salary components
+                    gross = parse_float(get_val_from_row(row, 'gross_salary'))
+                    basic = parse_float(get_val_from_row(row, 'basic_salary'))
+                    if gross is not None:
+                        emp.gross_salary = gross
+                    if basic is not None:
+                        emp.basic_salary = basic
+                    elif is_new and gross is not None:
+                        emp.basic_salary = gross
+
+                    # Category — auto-derive only on first create. Subsequent
+                    # imports leave the admin's manual Worker/Staff choice alone.
+                    if is_new:
+                        div = (emp.department or '').lower()
+                        cat = (emp.salary_grade or '').lower()
                         emp.category = 'staff' if 'staff' in div or 'staff' in cat or 'office' in div else 'worker'
 
-                        # Handle Site using cache
-                        site_name = get_val_from_row(row, 'site')
-                        if site_name:
-                            site_name = site_name.strip()
-                            if site_name.upper() in ['HO', 'HEAD OFFICE']: site_name = 'Head Office'
+                    # Site — canonical match against existing Sites (case+space-insensitive).
+                    # If the sheet says "alana" but the system already has "Alana",
+                    # assign the existing "Alana" — do NOT create a new Site.
+                    site_name = _norm_str(get_val_from_row(row, 'site'))
+                    if site_name:
+                        if site_name.upper() in ('HO', 'HEAD OFFICE'):
+                            site_name = 'Head Office'
+                        site_key = site_name.lower()
+                        if site_key in site_cache:
+                            emp.site = site_cache[site_key]
+                        else:
+                            site_obj = Site.objects.create(name=site_name)
+                            site_cache[site_key] = site_obj
+                            emp.site = site_obj
 
-                            site_key = site_name.lower()
-                            if site_key in site_cache:
-                                emp.site = site_cache[site_key]
-                            else:
-                                site_obj = Site.objects.create(name=site_name)
-                                site_cache[site_key] = site_obj
-                                emp.site = site_obj
+                    # Dates
+                    dob = parse_date(get_val_from_row(row, 'dob'))
+                    doj = parse_date(get_val_from_row(row, 'doj'))
+                    pex = parse_date(get_val_from_row(row, 'passport_expiry'))
+                    if dob: emp.date_of_birth = dob
+                    if doj: emp.date_of_joining = doj
+                    if pex: emp.passport_expiry = pex
 
-                        # Handle Dates
-                        def parse_date(date_str):
-                            if not date_str: return None
-                            try:
-                                return pd.to_datetime(date_str).date()
-                            except: return None
+                    if is_new and not emp.phone:
+                        emp.phone = "0000000000"
 
-                        emp.date_of_birth = parse_date(get_val_from_row(row, 'dob'))
-                        emp.date_of_joining = parse_date(get_val_from_row(row, 'doj'))
-                        emp.passport_expiry = parse_date(get_val_from_row(row, 'passport_expiry'))
+                    # Sponsor — legacy "Employer" column from old sheets. Honour the
+                    # constrained SPONSOR_CHOICES list if it matches, otherwise
+                    # canonicalize free-text via the cache.
+                    raw_sponsor = get_val_from_row(row, 'sponsor') or employer_name
+                    if raw_sponsor:
+                        s = str(raw_sponsor).strip()
+                        # Case-insensitive match against the constrained choices
+                        match = next((c for c in SPONSOR_CHOICES if c.lower() == s.lower()), None)
+                        emp.sponsor = match or _canon(s, sponsor_cache)
 
-                        if not emp.phone: emp.phone = "0000000000"
-
-                    # Always update sponsor (legacy "Employer" column) and visa_details
-                    emp.sponsor = get_val_from_row(row, 'sponsor') or employer_name
-                    # Optional new parent-company column ("Employer Company" / "Parent Company" / "Company")
-                    raw_employer_choice = (get_val_from_row(row, 'employer') or '').strip()
-                    if raw_employer_choice in EMPLOYER_CHOICES:
-                        emp.employer = raw_employer_choice
-                    raw_sponsor_choice = (get_val_from_row(row, 'sponsor') or '').strip()
-                    if raw_sponsor_choice in SPONSOR_CHOICES:
-                        emp.sponsor = raw_sponsor_choice
-                    emp.visa_details = get_val_from_row(row, 'visa_details')
+                    # Employer — the new parent-company choice (PIC / KFD / Kami / PRMC).
+                    raw_employer = get_val_from_row(row, 'employer')
+                    if raw_employer:
+                        s = str(raw_employer).strip()
+                        match = next((c for c in EMPLOYER_CHOICES if c.lower() == s.lower()), None)
+                        if match:
+                            emp.employer = match
+                        else:
+                            # Fall back to whatever the sheet had, canonicalized
+                            emp.employer = _canon(s, employer_cache)
 
                     emp.save()
                     success_count += 1
-                    
+                    if is_new:
+                        created_count += 1
+                    else:
+                        updated_count += 1
+
                 except Exception as e:
                     errors.append(f"Row {index}: {str(e)}")
             
-            return Response({'success': True, 'imported_count': success_count, 'errors': errors[:10]})
+            return Response({
+                'success': True,
+                'imported_count': success_count,
+                'created_count': created_count,
+                'updated_count': updated_count,
+                'errors': errors[:10],
+            })
 
         except Exception as e:
             return Response({'error': str(e)}, status=500)

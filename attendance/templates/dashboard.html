@@ -3063,6 +3063,8 @@
 
         xhr.addEventListener('load', () => {
             if (xhr.status >= 200 && xhr.status < 300) {
+                // Stash the parsed body so the caller can surface created/updated counts
+                try { successCallback._lastBody = JSON.parse(xhr.responseText); } catch (e) {}
                 successCallback();
             } else if (xhr.status === 502 || xhr.status === 504) {
                 alert('The server is still processing the file in the background (Gateway Timeout). Please wait a minute and then REFRESH the page to see the updated employee list.');
@@ -3105,6 +3107,17 @@
             return;
         }
         const formData = new FormData(form);
+        const onImportDone = () => {
+            importModal.hide();
+            loadEmployees();
+            const body = onImportDone._lastBody || {};
+            const created = body.created_count ?? 0;
+            const updated = body.updated_count ?? 0;
+            const errs = (body.errors || []).length;
+            let msg = `Import complete — ${created} created, ${updated} updated`;
+            if (errs) msg += `, ${errs} row${errs > 1 ? 's' : ''} skipped`;
+            alert(msg + '.');
+        };
         uploadWithProgress(
             '{% url "import-employees" %}',
             formData,
@@ -3112,11 +3125,7 @@
             'importProgressContainer',
             'importProgressBar',
             'importProgressText',
-            () => {
-                importModal.hide();
-                loadEmployees();
-                alert('Import successful!');
-            },
+            onImportDone,
             'Import Failed'
         );
     }
