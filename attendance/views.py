@@ -5825,30 +5825,19 @@ class JobCategoryListView(APIView):
 class DepartmentListView(APIView):
     """Distinct department list for the searchable Division/Department dropdown.
 
-    Pulls departments out of JobCategory and out of existing Employee rows, then
-    splits any label that joins two departments with " and " or " & " into
-    separate options (e.g. "Drivers and Operators" → "Drivers" + "Operators").
+    Department is a separate concept from Category:
+      - Department = the section the employee belongs to
+                     (e.g. "CONSTRUCTION DEPT.", "M.E.P. Department")
+      - Category   = the trade / position itself
+                     (e.g. "Foreman A/C", "Chief Operating Officer / Project Director")
+
+    Source = distinct values from JobCategory.department (seeded from the PIC
+    manpower workbooks) + any legacy free-text Employee.department values that
+    aren't already covered. Departments are listed as-is, deduped case-insensitively.
     """
     permission_classes = [IsAdminUser | IsSiteAdmin]
 
-    _SPLIT_RE = None  # lazily compiled
-
-    @classmethod
-    def _split_label(cls, raw):
-        """Yield one or more cleaned department names from a single raw label."""
-        import re
-        if cls._SPLIT_RE is None:
-            # split on " and " (case-insensitive, whole word) or " & "
-            cls._SPLIT_RE = re.compile(r'\s+(?:and|&)\s+', re.IGNORECASE)
-        if not raw:
-            return
-        for part in cls._SPLIT_RE.split(raw):
-            p = (part or '').strip(' -–—,;')
-            if p:
-                yield p
-
     def get(self, request):
-        # Distinct values from both tables
         from_cats = (
             JobCategory.objects
             .filter(is_active=True)
@@ -5861,15 +5850,16 @@ class DepartmentListView(APIView):
             .values_list('department', flat=True).distinct()
         )
 
-        # Dedupe case-insensitively while preserving the first-seen casing
+        # Case-insensitive dedupe, preserving first-seen casing.
         seen = {}
         for raw in list(from_cats) + list(from_emps):
-            for part in self._split_label(raw):
-                key = part.lower()
-                if key not in seen:
-                    seen[key] = part
+            d = (raw or '').strip()
+            if not d:
+                continue
+            key = d.lower()
+            if key not in seen:
+                seen[key] = d
 
-        # Optional ?q= substring filter
         q = (request.GET.get('q') or '').strip().lower()
         items = sorted(seen.values(), key=lambda s: s.lower())
         if q:

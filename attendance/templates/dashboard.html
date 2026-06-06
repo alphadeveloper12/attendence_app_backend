@@ -794,11 +794,28 @@
                                 <div class="col-md-6"><label
                                         class="form-label small fw-bold text-secondary text-uppercase"
                                         style="font-size: 0.65rem;">Division (Department)</label>
-                                    <input type="text" name="department" id="employeeDepartmentInput"
-                                        list="departmentDatalist" autocomplete="off"
-                                        class="form-control form-control-modern"
-                                        placeholder="Start typing to search…">
-                                    <datalist id="departmentDatalist"></datalist>
+                                    <div class="dropdown w-100">
+                                        <button type="button" id="employeeDepartmentBtn"
+                                            class="btn form-control form-control-modern text-start dropdown-toggle d-flex justify-content-between align-items-center"
+                                            data-bs-toggle="dropdown" data-bs-auto-close="outside">
+                                            <span id="employeeDepartmentLabel" class="text-secondary">Select department…</span>
+                                        </button>
+                                        <input type="hidden" name="department" id="employeeDepartmentValue">
+                                        <ul class="dropdown-menu w-100 shadow-lg border-0 rounded-3"
+                                            style="max-height: 360px; overflow-y: auto;">
+                                            <li class="px-2 py-2 sticky-top bg-white" style="border-bottom:1px solid #e5e7eb;">
+                                                <input type="text" id="employeeDepartmentSearch"
+                                                    class="form-control form-control-sm"
+                                                    placeholder="Search departments…"
+                                                    oninput="filterEmployeeDepartmentList()">
+                                            </li>
+                                            <li><a class="dropdown-item py-2 text-secondary"
+                                                   href="#" onclick="selectEmployeeDepartment('', '— Clear —'); return false;">
+                                                <i class="ri-close-line"></i> Clear selection
+                                            </a></li>
+                                            <li id="employeeDepartmentListAnchor"></li>
+                                        </ul>
+                                    </div>
                                 </div>
                                 <div class="col-md-6"><label
                                         class="form-label small fw-bold text-secondary text-uppercase"
@@ -1792,7 +1809,7 @@
         }).join('');
     }
 
-    // ---- Searchable Department datalist ----
+    // ---- Searchable Department dropdown (Bootstrap-style, in the edit/add modal) ----
     let _departmentCache = null;
     async function _fetchDepartmentList() {
         if (_departmentCache) return _departmentCache;
@@ -1803,14 +1820,54 @@
         } catch (e) { _departmentCache = []; }
         return _departmentCache;
     }
+
     async function populateDepartmentDatalist() {
-        const dl = document.getElementById('departmentDatalist');
-        if (!dl) return;
+        // (Renamed but kept for compatibility — populates the Bootstrap dropdown
+        //  list that replaced the old datalist.)
+        const anchor = document.getElementById('employeeDepartmentListAnchor');
+        if (!anchor) return;
         const items = await _fetchDepartmentList();
-        dl.innerHTML = items.map(d => {
-            const safe = (d.name || '').replace(/"/g, '&quot;');
-            return `<option value="${safe}">${safe}</option>`;
-        }).join('');
+        // Remove any previously rendered items, then insert the fresh set
+        // after the anchor.
+        let next = anchor.nextElementSibling;
+        while (next && next.classList && next.classList.contains('dept-option-item')) {
+            const toRemove = next; next = next.nextElementSibling; toRemove.remove();
+        }
+        const frag = document.createDocumentFragment();
+        for (const d of items) {
+            const li = document.createElement('li');
+            li.className = 'dept-option-item';
+            li.setAttribute('data-dept-name', (d.name || '').toLowerCase());
+            const safe = (d.name || '').replace(/'/g, "\\'");
+            li.innerHTML = `<a class="dropdown-item py-2" href="#"
+                onclick="selectEmployeeDepartment('${safe}', '${safe}'); return false;">
+                <i class="ri-building-2-line text-secondary me-1"></i>${d.name}
+            </a>`;
+            frag.appendChild(li);
+        }
+        anchor.parentNode.insertBefore(frag, anchor.nextSibling);
+    }
+
+    function selectEmployeeDepartment(value, label) {
+        const valEl  = document.getElementById('employeeDepartmentValue');
+        const lblEl  = document.getElementById('employeeDepartmentLabel');
+        if (valEl) valEl.value = value || '';
+        if (lblEl) {
+            lblEl.textContent = label || 'Select department…';
+            lblEl.className = value ? 'fw-semibold text-dark' : 'text-secondary';
+        }
+        // Close the dropdown
+        const btn = document.getElementById('employeeDepartmentBtn');
+        const inst = btn && bootstrap.Dropdown.getInstance(btn);
+        if (inst) inst.hide();
+    }
+
+    function filterEmployeeDepartmentList() {
+        const q = (document.getElementById('employeeDepartmentSearch').value || '').trim().toLowerCase();
+        document.querySelectorAll('.dept-option-item').forEach(li => {
+            const name = li.getAttribute('data-dept-name') || '';
+            li.style.display = (!q || name.includes(q)) ? '' : 'none';
+        });
     }
 
     function filterCategoryDropdown() {
@@ -2052,6 +2109,10 @@
                 const el = f.querySelector(`[name="${key}"]`);
                 if (el && el.type !== 'file') el.value = data[key] || '';
             });
+            // Department is a Bootstrap-dropdown widget, not a normal input —
+            // restore its label/value pair explicitly.
+            await populateDepartmentDatalist();
+            selectEmployeeDepartment(data.department || '', data.department || 'Select department…');
             // (Legacy passport/visa/labour file inputs were removed — file uploads
             // now live in the Attachments tab and are managed by loadAttachments().)
             // Remember original status — needed to detect Leave → Active transition
@@ -2703,6 +2764,9 @@
         document.getElementById('saveEmployeeBtn').textContent = 'Save Employee';
         document.getElementById('addEmployeeForm').reset();
         document.getElementById('editEmployeeId').value = '';
+        // Reset the Bootstrap-dropdown Department widget (form.reset() doesn't touch it)
+        selectEmployeeDepartment('', 'Select department…');
+        populateDepartmentDatalist();
         originalEmployeeStatus = null; // No original — adding new employee
         toggleResumptionDate('Active'); // Always hidden when adding new
         addModal.show();
