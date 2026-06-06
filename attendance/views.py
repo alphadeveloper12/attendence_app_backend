@@ -2522,6 +2522,11 @@ class AttendanceStatsView(APIView):
                     (Q(user__salary_grade__in=['', None]) & Q(user__category__iexact=category_filter))
                 )
 
+            # Snapshot the queryset BEFORE the status filter so the breakdown
+            # counts stay accurate even when the admin has clicked a pill — clicking
+            # "Active" shouldn't zero out the Leave / Resigned / etc. counters.
+            employees_pre_status = employees
+
             if status_filter and status_filter != 'all':
                 employees = employees.filter(status__iexact=status_filter)
                 attendance = attendance.filter(user__status__iexact=status_filter)
@@ -2529,6 +2534,7 @@ class AttendanceStatsView(APIView):
             if employer_filter and employer_filter != 'all':
                 employees = employees.filter(employer__iexact=employer_filter)
                 attendance = attendance.filter(user__employer__iexact=employer_filter)
+                employees_pre_status = employees_pre_status.filter(employer__iexact=employer_filter)
 
             # Unique categories from both category and salary_grade
             # Get union of both fields, strip, and unify case-insensitively
@@ -2569,10 +2575,12 @@ class AttendanceStatsView(APIView):
 
             # Breakdown by employment status — one bucket per master status, plus
             # a catch-all 'Other' for anything outside the standard list (legacy
-            # imports etc.). Counts honour all the filters already applied above.
+            # imports etc.). Counts honour site/category/employer filters but
+            # NOT the status filter — otherwise clicking the Active pill would
+            # zero out every other pill and trap the admin on one bucket.
             _MASTER = ['Active', 'Leave', 'Resigned', 'Terminated', 'No Renewal', 'Absconding', 'Other']
             status_counts = {s: 0 for s in _MASTER}
-            for raw_status in employees.values_list('status', flat=True):
+            for raw_status in employees_pre_status.values_list('status', flat=True):
                 key = (raw_status or '').strip() or 'Other'
                 if key not in status_counts:
                     key = 'Other'
