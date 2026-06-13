@@ -3,420 +3,468 @@
 {% block title %}Employee Details - Admin Dashboard{% endblock %}
 
 {% block content %}
-<!-- Remix Icons & Google Fonts -->
-<link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
-<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-
 <style>
-    :root {
-        --font-family: 'Outfit', sans-serif;
-        --card-bg: #ffffff;
-        --text-primary: #1e293b;
-        --text-secondary: #64748b;
+    /* ────────────────────────────────────────────────────────────────────
+       USER DETAIL — redesigned against base.html design tokens.
+       Drops the heavy black borders + "Outfit" font for the project Inter
+       + brand-tint surfaces. All element IDs preserved so existing JS works.
+       ──────────────────────────────────────────────────────────────────── */
 
-        --grad-primary: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
-        --grad-success: linear-gradient(135deg, #10b981 0%, #059669 100%);
-        --grad-warning: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-        --grad-danger: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);
-        --grad-info: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+    /* Page top-bar */
+    .ud-topbar {
+        display: flex; justify-content: space-between; align-items: center;
+        gap: 1rem; flex-wrap: wrap; margin-bottom: 1.5rem;
     }
-
-    body {
-        font-family: var(--font-family) !important;
-        background-color: #f8fafc;
+    .ud-topbar h1 {
+        font-size: 1.5rem; font-weight: 700; margin: 0; color: var(--text-strong);
+        letter-spacing: -0.018em;
     }
+    .ud-topbar .ud-time {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.75rem; color: var(--text-muted);
+        margin-top: 0.25rem;
+    }
+    .ud-topbar .ud-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
 
-    /* Premium Profile Header - Monochrome Professional */
+    /* Hero profile card */
     .profile-hero {
-        background: white !important;
-        border: 1px solid black !important;
-        border-radius: 1.5rem;
-        padding: 2.5rem;
-        box-shadow: none !important;
-        margin-bottom: 2rem;
-        position: relative;
-        overflow: hidden;
-    }
-
-    /* Header decorative element removed */
-
-    .profile-avatar-wrapper {
-        width: 120px;
-        height: 120px;
-        border-radius: 2rem;
-        background: white;
-        padding: 6px;
-        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-        position: relative;
-        z-index: 1;
-    }
-
-    .profile-avatar {
-        width: 100%;
-        height: 100%;
-        border-radius: 1.7rem;
-        object-fit: cover;
-        background: white;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 3rem;
-        font-weight: 700;
-        color: black;
-        border: 1px solid black;
-    }
-
-    /* Stats Cards */
-    /* Stats Cards - Professional Monochrome */
-    .stat-card {
-        background: white !important;
-        border: 1px solid black !important;
-        border-radius: 1.25rem;
-        transition: all 0.2s ease;
-        overflow: hidden;
-        height: 100%;
-        color: black !important;
+        background: var(--surface-card);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-lg);
+        box-shadow: var(--shadow-card);
         padding: 1.5rem;
-        position: relative;
-        box-shadow: none !important;
-    }
-
-    .stat-card:hover {
-        transform: translateY(-4px);
-        background: #fbfbfb !important;
-    }
-
-    .stat-icon-bg {
-        width: 44px;
-        height: 44px;
-        border-radius: 12px;
-        background: #f1f5f9;
-        display: flex;
+        margin-bottom: 1.5rem;
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        gap: 1.5rem;
         align-items: center;
-        justify-content: center;
-        font-size: 1.5rem;
-        margin-bottom: 1rem;
-        color: black;
-        border: 1px solid #e2e8f0;
+    }
+    .profile-avatar-wrapper {
+        width: 96px; height: 96px;
+        border-radius: var(--radius-lg);
+        background: linear-gradient(135deg, var(--brand-soft), #faf5ff);
+        padding: 4px;
+        display: grid; place-items: center;
+        box-shadow: var(--shadow-card);
+    }
+    .profile-avatar {
+        width: 100%; height: 100%;
+        border-radius: calc(var(--radius-lg) - 4px);
+        object-fit: cover;
+        background: var(--surface-card);
+        display: grid; place-items: center;
+        font-size: 2.25rem; font-weight: 700;
+        color: var(--brand);
+        border: 1px solid var(--border-default);
+    }
+    .profile-avatar img { width: 100%; height: 100%; object-fit: cover; border-radius: inherit; }
+    .profile-info h2 {
+        font-size: 1.5rem; font-weight: 700; margin: 0 0 0.5rem;
+        color: var(--text-strong); letter-spacing: -0.015em;
+    }
+    .profile-info .meta-row {
+        display: flex; flex-wrap: wrap; gap: 0.5rem 1rem;
+        font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.75rem;
+    }
+    .profile-info .meta-row > span {
+        display: inline-flex; align-items: center; gap: 0.25rem;
+        white-space: nowrap;
+    }
+    .profile-info .meta-row i { color: var(--text-faint); }
+    .profile-info .status-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
+    .contact-block {
+        background: var(--surface-sunken);
+        border-radius: var(--radius-md);
+        padding: 0.875rem 1rem;
+        min-width: 220px;
+        display: grid; gap: 0.5rem;
+    }
+    .contact-block .label {
+        font-size: 0.65rem; font-weight: 600; text-transform: uppercase;
+        letter-spacing: 0.04em; color: var(--text-muted);
+    }
+    .contact-block .value {
+        font-size: 0.85rem; font-weight: 600; color: var(--text-strong);
+        word-break: break-all;
+    }
+    @media (max-width: 768px) {
+        .profile-hero { grid-template-columns: auto 1fr; }
+        .contact-block { grid-column: 1 / -1; }
     }
 
-    /* Controls & Toggles */
+    /* Section panel — replaces the old "card border-0 rounded-4 shadow-sm" */
+    .panel {
+        background: var(--surface-card);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-lg);
+        margin-bottom: 1.5rem;
+        overflow: hidden;
+    }
+    .panel-head {
+        padding: 0.875rem 1.25rem;
+        border-bottom: 1px solid var(--border-default);
+        display: flex; justify-content: space-between; align-items: center;
+        gap: 0.75rem; flex-wrap: wrap;
+    }
+    .panel-title {
+        font-size: 1rem; font-weight: 600; color: var(--text-strong); margin: 0;
+        display: flex; align-items: center; gap: 0.5rem;
+    }
+    .panel-body { padding: 1.25rem; }
+
+    /* Profile details grid (sub-sections + fields) */
+    .profile-details-grid { display: grid; gap: 1.5rem; }
+    .pd-section { display: grid; gap: 0.75rem; }
+    .pd-section-title {
+        font-size: 0.7rem; font-weight: 700; color: var(--brand);
+        text-transform: uppercase; letter-spacing: 0.06em;
+        padding-bottom: 0.4rem; border-bottom: 1px solid var(--border-default);
+    }
+    .pd-fields {
+        display: grid; gap: 0.5rem;
+        grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+    }
+    .pd-field {
+        background: var(--surface-sunken);
+        border-radius: var(--radius-sm);
+        padding: 0.65rem 0.875rem;
+        min-width: 0;
+    }
+    .pd-field .label {
+        font-size: 0.6rem; font-weight: 600; text-transform: uppercase;
+        letter-spacing: 0.05em; color: var(--text-muted); margin-bottom: 0.15rem;
+    }
+    .pd-field .value {
+        font-size: 0.875rem; font-weight: 600; color: var(--text-strong);
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .pd-field .value.empty { color: var(--text-faint); font-weight: 500; font-style: italic; }
+
+    /* Filter pill bar (Daily/Weekly/Monthly/Custom) */
     .filter-btn-group {
-        background: #f1f5f9;
-        padding: 0.4rem;
-        border-radius: 1rem;
-        display: inline-flex;
-        gap: 0.25rem;
+        background: var(--surface-sunken);
+        padding: 0.25rem; border-radius: var(--radius-md);
+        display: inline-flex; gap: 0.15rem;
     }
-
     .filter-btn {
-        border: none;
-        background: transparent;
-        padding: 0.6rem 1.5rem;
-        border-radius: 0.75rem;
-        font-weight: 600;
-        color: #64748b;
-        transition: all 0.2s;
+        border: 0; background: transparent;
+        padding: 0.4rem 0.875rem; border-radius: var(--radius-sm);
+        font-size: 0.825rem; font-weight: 600;
+        color: var(--text-muted); cursor: pointer;
+        transition: all 150ms ease;
     }
-
+    .filter-btn:hover { color: var(--text-strong); }
     .filter-btn.active {
-        background: black !important;
-        color: white !important;
-        box-shadow: none !important;
+        background: var(--surface-card);
+        color: var(--brand);
+        box-shadow: var(--shadow-card);
+    }
+    .form-control-modern {
+        padding: 0.4rem 0.6rem;
+        font-size: 0.825rem;
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-sm);
+        background: var(--surface-card);
+        color: var(--text-default);
+    }
+    .form-control-modern:focus {
+        outline: 0; border-color: var(--border-focus);
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
     }
 
-    /* Slot Cards */
+    /* Activity log header */
+    .view-title-row {
+        display: flex; align-items: center; gap: 0.5rem;
+        font-size: 1rem; font-weight: 600;
+        color: var(--text-strong); margin: 0 0 1rem;
+    }
+    .view-title-row i { color: var(--brand); }
+
+    /* Slot cards (Office In / Office Out) */
     .slot-card {
-        background: white;
-        border-radius: 1.25rem;
-        border: 1px solid black !important;
-        transition: all 0.2s;
+        background: var(--surface-card);
+        border-radius: var(--radius-md);
+        border: 1px solid var(--border-default);
+        transition: all 150ms ease;
         height: 100%;
     }
-
-    .slot-card:hover {
-        border-color: #6366f1;
-        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05);
-    }
-
+    .slot-card:hover { border-color: var(--border-strong); box-shadow: var(--shadow-card); }
     .map-box {
         height: 140px;
-        border-radius: 1rem;
+        border-radius: var(--radius-sm);
         overflow: hidden;
-        background: #f8fafc;
-        border: 1px solid #f1f5f9;
+        background: var(--surface-sunken);
+        border: 1px solid var(--border-default);
     }
 
-    /* Calendar Grid */
-    .calendar-grid {
-        display: grid;
-        grid-template-columns: repeat(7, 1fr);
-        gap: 1rem;
-    }
-
+    /* Calendar grid */
+    .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 0.5rem; }
     .calendar-day-header {
-        text-align: center;
-        font-weight: 700;
-        font-size: 0.8rem;
-        text-transform: uppercase;
-        color: #94a3b8;
-        padding-bottom: 0.5rem;
+        text-align: center; font-weight: 700; font-size: 0.65rem; text-transform: uppercase;
+        color: var(--text-muted); padding-bottom: 0.4rem; letter-spacing: 0.05em;
     }
-
     .calendar-cell {
-        background: white;
-        border-radius: 1rem;
-        padding: 1rem;
-        min-height: 110px;
-        border: 1px solid black !important;
-        transition: all 0.2s;
+        background: var(--surface-card);
+        border-radius: var(--radius-sm);
+        padding: 0.625rem;
+        min-height: 92px;
+        border: 1px solid var(--border-default);
+        transition: all 150ms ease;
         cursor: pointer;
     }
-
     .calendar-cell:hover {
-        border-color: #6366f1;
-        transform: scale(1.02);
+        border-color: var(--brand);
+        transform: translateY(-1px);
+        box-shadow: var(--shadow-card);
     }
-
     .calendar-cell.today {
-        background: #f0f7ff;
-        border-color: #3b82f6;
+        background: var(--brand-soft);
+        border-color: var(--brand);
     }
-
     .calendar-badge {
-        font-size: 0.7rem;
-        padding: 0.3rem 0.5rem;
-        border-radius: 0.5rem;
+        font-size: 0.65rem;
+        padding: 0.15rem 0.4rem;
+        border-radius: 6px;
         font-weight: 600;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
     }
 
-    /* Skeleton Loading */
+    /* Skeleton loading */
     .skeleton {
-        background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+        background: linear-gradient(90deg, var(--surface-sunken) 25%, var(--border-default) 50%, var(--surface-sunken) 75%);
         background-size: 200% 100%;
         animation: pulse 1.5s infinite;
         border-radius: 8px;
     }
-
     @keyframes pulse {
-        0% {
-            background-position: 200% 0;
-        }
-
-        100% {
-            background-position: -200% 0;
-        }
+        0% { background-position: 200% 0; }
+        100% { background-position: -200% 0; }
     }
 
     @media (max-width: 991px) {
-        .calendar-grid {
-            grid-template-columns: repeat(3, 1fr);
-        }
+        .calendar-grid { grid-template-columns: repeat(3, 1fr); }
     }
+
+    /* Full-screen image viewer (lightbox) */
+    .img-viewer {
+        position: fixed; inset: 0;
+        background: rgba(15, 23, 42, 0.92);
+        z-index: 9999;
+        display: none;
+        opacity: 0;
+        transition: opacity 200ms ease;
+        backdrop-filter: blur(4px);
+    }
+    .img-viewer.is-open { display: flex; opacity: 1; align-items: center; justify-content: center; }
+    .img-viewer img {
+        max-width: 92vw; max-height: 90vh;
+        border-radius: var(--radius-md);
+        box-shadow: 0 24px 60px rgba(0,0,0,0.5);
+        cursor: zoom-out;
+    }
+    .img-viewer .iv-close {
+        position: absolute; top: 24px; right: 24px;
+        width: 44px; height: 44px;
+        border-radius: 50%;
+        background: rgba(255,255,255,0.12);
+        border: 1px solid rgba(255,255,255,0.18);
+        color: #fff;
+        display: grid; place-items: center;
+        font-size: 1.25rem;
+        cursor: pointer;
+        transition: background 150ms ease;
+    }
+    .img-viewer .iv-close:hover { background: rgba(255,255,255,0.22); }
+    .img-viewer .iv-caption {
+        position: absolute; bottom: 28px; left: 50%; transform: translateX(-50%);
+        color: rgba(255,255,255,0.85);
+        font-size: 0.85rem;
+        font-family: 'JetBrains Mono', monospace;
+        padding: 0.4rem 0.875rem;
+        background: rgba(15,23,42,0.6);
+        border-radius: 999px;
+    }
+    .profile-avatar-wrapper.is-clickable { cursor: zoom-in; transition: transform 150ms ease; }
+    .profile-avatar-wrapper.is-clickable:hover { transform: scale(1.03); }
 </style>
 
-<!-- Top Bar -->
-<div class="d-flex justify-content-between align-items-center mb-5 pt-2">
+<!-- ─── Page top bar ─────────────────────────────────────────────────── -->
+<div class="ud-topbar">
     <div>
-        <h1 class="h3 fw-bold text-dark mb-1">Attendance Details</h1>
-        <p class="text-secondary small font-monospace mb-0" id="top-time">loading...</p>
+        <h1>Attendance Details</h1>
+        <div class="ud-time" id="top-time">loading…</div>
     </div>
-    <div class="d-flex gap-3">
-        <button onclick="editEmployee(USER_ID)" class="btn btn-pro shadow-sm">
-            <i class="ri-edit-line me-2"></i>Edit Profile
+    <div class="ud-actions">
+        <button onclick="editEmployee(USER_ID)" class="btn-modern btn-modern--ghost">
+            <i class="ri-edit-line"></i> Edit Profile
         </button>
-        <a href="{% url 'admin-dashboard' %}" class="btn btn-pro shadow-sm">
-            <i class="ri-arrow-left-line me-2"></i>Dashboard
+        <a href="{% url 'admin-dashboard' %}" class="btn-modern btn-modern--ghost">
+            <i class="ri-arrow-left-line"></i> Dashboard
         </a>
-        <button onclick="downloadReport()" class="btn btn-pro shadow-sm"
-            style="background: black !important; color: white !important;">
-            <i class="ri-file-excel-2-line me-2"></i>Export Excel
+        <button onclick="downloadReport()" class="btn-modern btn-modern--primary">
+            <i class="ri-file-excel-2-line"></i> Export Excel
         </button>
     </div>
 </div>
 
-<!-- Employee Identity Section -->
-<div class="profile-hero shadow-sm">
-    <div class="row align-items-center g-4 position-relative z-index-1">
-        <div class="col-auto">
-            <div class="profile-avatar-wrapper" id="profile-picture-container">
-                <div class="profile-avatar" id="profile-initial">...</div>
+<!-- ─── Hero profile card ────────────────────────────────────────────── -->
+<div class="profile-hero">
+    <div class="profile-avatar-wrapper" id="profile-picture-container">
+        <div class="profile-avatar" id="profile-initial">…</div>
+    </div>
+    <div class="profile-info">
+        <h2 id="emp-name">…</h2>
+        <div class="meta-row">
+            <span><i class="ri-id-card-line"></i> <span id="emp-badge">—</span></span>
+            <span><i class="ri-team-line"></i>    <span id="emp-dept">—</span></span>
+            <span><i class="ri-briefcase-line"></i><span id="emp-pos">—</span></span>
+            <span><i class="ri-map-pin-line"></i> <span id="emp-site">—</span></span>
+        </div>
+        <div class="status-chips">
+            <span class="pill pill--success" id="emp-status-badge">Active</span>
+
+            <span class="pill pill--info" id="resumption-date-wrapper" style="display:none;">
+                <i class="ri-calendar-check-line"></i> Resumed: <span id="emp-resumption-date">—</span>
+            </span>
+
+            <span class="pill pill--danger" id="last-working-date-wrapper" style="display:none;">
+                <i class="ri-calendar-close-line"></i> Last Working: <span id="emp-last-working-date">—</span>
+            </span>
+
+            <span class="pill" id="sick-leave-wrapper" style="display:none; background: var(--info-soft); color: var(--info); cursor:pointer;"
+                  onclick="editEmployee(USER_ID).then(() => { const t = document.querySelector('[data-bs-target=\'#sickLeave\']'); if (t) bootstrap.Tab.getOrCreateInstance(t).show(); })"
+                  title="Click to view sick leave history">
+                <i class="ri-capsule-line"></i> Sick Leaves: <span id="emp-sick-count">0</span>
+            </span>
+        </div>
+
+        <!-- Leave dates row -->
+        <div id="leave-dates-wrapper" style="display:none; margin-top: 0.5rem;">
+            <div style="display: flex; flex-wrap: wrap; gap: 0.4rem;">
+                <span class="pill pill--warning"><i class="ri-calendar-close-line"></i> Last Working: <span id="emp-leave-approval">—</span></span>
+                <span class="pill pill--warning"><i class="ri-flight-takeoff-line"></i> From: <span id="emp-leave-start">—</span></span>
+                <span class="pill pill--warning"><i class="ri-flight-land-line"></i> Until: <span id="emp-leave-end">—</span></span>
             </div>
         </div>
-        <div class="col">
-            <h2 class="h3 fw-bold mb-1" id="emp-name">...</h2>
-            <div class="d-flex flex-wrap gap-x-4 gap-y-2 text-secondary mb-3">
-                <span id="emp-badge"><i class="ri-id-card-line me-1"></i> -</span>
-                <span id="emp-dept"><i class="ri-team-line me-1"></i> -</span>
-                <span id="emp-pos"><i class="ri-briefcase-line me-1"></i> -</span>
-                <span id="emp-site"><i class="ri-building-line me-1"></i> -</span>
-            </div>
-            <div class="row g-3">
-                <div class="col-auto">
-                    <span class="badge bg-success bg-opacity-10 text-success rounded-pill px-3 py-2 fw-semibold"
-                        id="emp-status-badge">Active</span>
-                </div>
-                <div class="col-auto" id="resumption-date-wrapper" style="display:none;">
-                    <span class="badge rounded-pill px-3 py-2 fw-semibold"
-                        style="background:rgba(37,99,235,0.1);color:#2563eb;border:1px solid rgba(37,99,235,0.3);">
-                        <i class="ri-calendar-check-line me-1"></i>
-                        Resumed on: <span id="emp-resumption-date">—</span>
-                    </span>
-                </div>
-                <div class="col-auto" id="last-working-date-wrapper" style="display:none;">
-                    <span class="badge rounded-pill px-3 py-2 fw-semibold"
-                        style="background:rgba(220,38,38,0.1);color:#dc2626;border:1px solid rgba(220,38,38,0.3);">
-                        <i class="ri-calendar-close-line me-1"></i>
-                        Last Working: <span id="emp-last-working-date">—</span>
-                    </span>
-                </div>
-                <div class="col-12" id="termination-reason-wrapper" style="display:none;">
-                    <div class="mt-2 p-3 rounded-3 border"
-                        style="background:rgba(220,38,38,0.06);border-color:rgba(220,38,38,0.3) !important;">
-                        <div class="small fw-bold text-uppercase mb-1" style="color:#dc2626;font-size:0.7rem;">
-                            <i class="ri-error-warning-line me-1"></i> Reason
-                        </div>
-                        <div id="emp-termination-reason" style="color:#7f1d1d;white-space:pre-wrap;">—</div>
-                    </div>
-                </div>
-                <div class="col-auto" id="sick-leave-wrapper" style="display:none;">
-                    <span class="badge rounded-pill px-3 py-2 fw-semibold"
-                        style="background:rgba(13,202,240,0.1);color:#0dcaf0;border:1px solid rgba(13,202,240,0.3); cursor:pointer;"
-                        onclick="editEmployee(USER_ID).then(() => { const t = document.querySelector('[data-bs-target=\'#sickLeave\']'); if (t) bootstrap.Tab.getOrCreateInstance(t).show(); })"
-                        title="Click to view sick leave history">
-                        <i class="ri-capsule-line me-1"></i>
-                        Sick Leaves: <span id="emp-sick-count">0</span>
-                    </span>
-                </div>
-                <div class="col-12" id="leave-dates-wrapper" style="display:none;">
-                    <div class="d-flex flex-wrap gap-2 mt-2">
-                        <span class="badge rounded-pill px-3 py-2 fw-semibold"
-                            style="background:rgba(217,119,6,0.1);color:#d97706;border:1px solid rgba(217,119,6,0.3);">
-                            <i class="ri-calendar-close-line me-1"></i>
-                            Last Working: <span id="emp-leave-approval">—</span>
-                        </span>
-                        <span class="badge rounded-pill px-3 py-2 fw-semibold"
-                            style="background:rgba(217,119,6,0.1);color:#d97706;border:1px solid rgba(217,119,6,0.3);">
-                            <i class="ri-flight-takeoff-line me-1"></i>
-                            From: <span id="emp-leave-start">—</span>
-                        </span>
-                        <span class="badge rounded-pill px-3 py-2 fw-semibold"
-                            style="background:rgba(217,119,6,0.1);color:#d97706;border:1px solid rgba(217,119,6,0.3);">
-                            <i class="ri-flight-land-line me-1"></i>
-                            Until: <span id="emp-leave-end">—</span>
-                        </span>
-                    </div>
-                </div>
-                <!-- Shown when status='Leave' but no leave dates were ever recorded -->
-                <div class="col-12" id="leave-dates-missing-wrapper" style="display:none;">
-                    <div class="mt-2 p-2 rounded-2 small d-inline-flex align-items-center gap-2"
-                        style="background:rgba(217,119,6,0.08);color:#92400e;border:1px solid rgba(217,119,6,0.3);">
-                        <i class="ri-error-warning-line"></i>
-                        <span>Leave dates are not recorded for this employee. Edit the employee to add Start / End / Last Working Date.</span>
-                    </div>
-                </div>
+        <div id="leave-dates-missing-wrapper" style="display:none; margin-top: 0.5rem;">
+            <div style="display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.4rem 0.65rem;
+                        background: var(--warning-soft); color: #b45309; border-radius: var(--radius-sm);
+                        font-size: 0.75rem; font-weight: 500;">
+                <i class="ri-error-warning-line"></i>
+                Leave dates not recorded. Edit employee to add Start / End / Last Working Date.
             </div>
         </div>
-        <div class="col-lg-4">
-            <div class="bg-light p-3 rounded-4 border border-white">
-                <div class="row g-3">
-                    <div class="col-6">
-                        <div class="small text-secondary mb-1">Email</div>
-                        <div class="fw-semibold text-truncate" id="emp-email">-</div>
-                    </div>
-                    <div class="col-6">
-                        <div class="small text-secondary mb-1">Phone</div>
-                        <div class="fw-semibold" id="emp-phone">-</div>
-                    </div>
+
+        <!-- Termination reason callout -->
+        <div id="termination-reason-wrapper" style="display:none; margin-top: 0.75rem;">
+            <div style="padding: 0.75rem 1rem; border-radius: var(--radius-md);
+                        background: var(--danger-soft); border: 1px solid #fecaca;">
+                <div style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase;
+                            letter-spacing: 0.06em; color: var(--danger); margin-bottom: 0.25rem;">
+                    <i class="ri-error-warning-line"></i> Reason
                 </div>
+                <div id="emp-termination-reason" style="color: #7f1d1d; white-space: pre-wrap; font-size: 0.875rem;">—</div>
             </div>
+        </div>
+    </div>
+    <div class="contact-block">
+        <div>
+            <div class="label">Email</div>
+            <div class="value" id="emp-email">—</div>
+        </div>
+        <div>
+            <div class="label">Phone</div>
+            <div class="value" id="emp-phone">—</div>
         </div>
     </div>
 </div>
 
-<!-- Stats Row -->
-<div class="row g-4 mb-5" id="stats-container">
-    <div class="col-md-3">
-        <div class="stat-card">
-            <div class="stat-icon-bg"><i class="ri-calendar-check-line"></i></div>
-            <div class="stat-label mb-1">Total Records</div>
-            <div class="stat-value h2 fw-bold mb-0" id="stat-total">0</div>
+<!-- ─── KPI tiles ────────────────────────────────────────────────────── -->
+<div class="kpi-grid" id="stats-container" style="display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-bottom: 1.5rem;">
+    <div class="kpi-tile">
+        <div class="kpi-icon" style="background: var(--brand-soft); color: var(--brand);">
+            <i class="ri-calendar-check-line"></i>
         </div>
+        <div class="kpi-label">Total Records</div>
+        <div class="kpi-value" id="stat-total">0</div>
     </div>
-    <div class="col-md-3">
-        <div class="stat-card">
-            <div class="stat-icon-bg"><i class="ri-user-follow-line"></i></div>
-            <div class="stat-label mb-1">Present Count</div>
-            <div class="stat-value h2 fw-bold mb-0" id="stat-present">0</div>
+    <div class="kpi-tile">
+        <div class="kpi-icon" style="background: var(--success-soft); color: var(--success);">
+            <i class="ri-user-follow-line"></i>
         </div>
+        <div class="kpi-label">Present Count</div>
+        <div class="kpi-value" id="stat-present">0</div>
     </div>
-    <div class="col-md-3">
-        <div class="stat-card">
-            <div class="stat-icon-bg"><i class="ri-timer-flash-line"></i></div>
-            <div class="stat-label mb-1">Total Late</div>
-            <div class="stat-value h2 fw-bold mb-0" id="stat-late">0 <small style="font-size: 0.9rem;">min</small></div>
+    <div class="kpi-tile">
+        <div class="kpi-icon" style="background: var(--warning-soft); color: var(--warning);">
+            <i class="ri-timer-flash-line"></i>
         </div>
+        <div class="kpi-label">Total Late</div>
+        <div class="kpi-value" id="stat-late">0<span style="font-size: 0.95rem; color: var(--text-muted); font-weight: 500; margin-left: 4px;">min</span></div>
     </div>
-    <div class="col-md-3">
-        <div class="stat-card">
-            <div class="stat-icon-bg"><i class="ri-logout-box-r-line"></i></div>
-            <div class="stat-label mb-1">Early Leaving</div>
-            <div class="stat-value h2 fw-bold mb-0" id="stat-early">0 <small style="font-size: 0.9rem;">min</small>
-            </div>
+    <div class="kpi-tile">
+        <div class="kpi-icon" style="background: var(--danger-soft); color: var(--danger);">
+            <i class="ri-logout-box-r-line"></i>
+        </div>
+        <div class="kpi-label">Early Leaving</div>
+        <div class="kpi-value" id="stat-early">0<span style="font-size: 0.95rem; color: var(--text-muted); font-weight: 500; margin-left: 4px;">min</span></div>
+    </div>
+</div>
+
+<!-- ─── Employee Profile Details ─────────────────────────────────────── -->
+<div class="panel">
+    <div class="panel-head">
+        <h3 class="panel-title"><i class="ri-user-line" style="color: var(--brand);"></i> Employee Profile Details</h3>
+    </div>
+    <div class="panel-body">
+        <div class="profile-details-grid" id="profile-details-grid">
+            <div class="text-center" style="padding: 2rem; color: var(--text-muted);">Loading profile details…</div>
         </div>
     </div>
 </div>
 
-<!-- Employee Profile Section -->
-<div class="card border-0 rounded-4 shadow-sm mb-5">
-    <div class="card-header bg-white p-4 border-bottom">
-        <h5 class="fw-bold mb-0">Employee Profile Details</h5>
-    </div>
-    <div class="card-body p-4">
-        <div class="row g-4" id="profile-details-grid">
-            <!-- Populated via JS -->
-            <div class="text-center py-4 text-muted">Loading profile details...</div>
-        </div>
-    </div>
-</div>
-
-<!-- Attendance Explorer -->
-<div class="card border-0 rounded-4 shadow-sm mb-5">
-    <div
-        class="card-header bg-white p-4 border-bottom d-flex flex-wrap justify-content-between align-items-center gap-4">
+<!-- ─── Attendance Explorer ──────────────────────────────────────────── -->
+<div class="panel">
+    <div class="panel-head">
         <div class="filter-btn-group">
-            <button onclick="setFilter('daily')" id="btn-daily" class="filter-btn active">Daily</button>
-            <button onclick="setFilter('weekly')" id="btn-weekly" class="filter-btn">Weekly</button>
+            <button onclick="setFilter('daily')"   id="btn-daily"   class="filter-btn active">Daily</button>
+            <button onclick="setFilter('weekly')"  id="btn-weekly"  class="filter-btn">Weekly</button>
             <button onclick="setFilter('monthly')" id="btn-monthly" class="filter-btn">Monthly</button>
-            <button onclick="setFilter('custom')" id="btn-custom" class="filter-btn">Custom</button>
+            <button onclick="setFilter('custom')"  id="btn-custom"  class="filter-btn">Custom</button>
         </div>
-
-        <div class="d-flex align-items-center gap-3">
-            <div id="standard-date-picker" class="d-flex align-items-center gap-2">
-                <input type="date" id="main-date" class="form-control form-control-modern" onchange="loadAllData()">
+        <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+            <div id="standard-date-picker" style="display: flex; align-items: center; gap: 0.5rem;">
+                <input type="date" id="main-date" class="form-control-modern" onchange="loadAllData()">
             </div>
-            <div id="custom-date-picker" class="d-none d-flex align-items-center gap-2">
-                <input type="date" id="start-date" class="form-control form-control-modern" placeholder="Start">
-                <span class="text-secondary">-</span>
-                <input type="date" id="end-date" class="form-control form-control-modern" placeholder="End">
-                <button onclick="loadAllData()" class="btn btn-primary rounded-3 px-3"><i
-                        class="ri-search-line"></i></button>
+            <div id="custom-date-picker" class="d-none" style="align-items: center; gap: 0.5rem;">
+                <input type="date" id="start-date" class="form-control-modern" placeholder="Start">
+                <span style="color: var(--text-muted);">—</span>
+                <input type="date" id="end-date" class="form-control-modern" placeholder="End">
+                <button onclick="loadAllData()" class="btn-modern btn-modern--primary btn-modern--icon" title="Search">
+                    <i class="ri-search-line"></i>
+                </button>
             </div>
         </div>
     </div>
-
-    <div class="card-body p-4 bg-light bg-opacity-50">
-        <h4 class="fw-bold mb-4 d-flex align-items-center gap-2">
-            <i class="ri-history-line text-primary"></i> <span id="view-title">Loading logs...</span>
+    <div class="panel-body" style="background: var(--surface-canvas);">
+        <h4 class="view-title-row">
+            <i class="ri-history-line"></i> <span id="view-title">Loading logs…</span>
         </h4>
-
-        <div id="view-content" class="min-vh-50">
-            <!-- Dynamic Content -->
+        <div id="view-content" style="min-height: 280px;">
+            <!-- Dynamic content -->
         </div>
     </div>
+</div>
+
+<!-- Full-screen image viewer -->
+<div class="img-viewer" id="imgViewer" onclick="closeImageViewer(event)" role="dialog" aria-label="Image preview">
+    <button type="button" class="iv-close" onclick="closeImageViewer()" aria-label="Close" title="Close (Esc)">
+        <i class="ri-close-line"></i>
+    </button>
+    <img id="imgViewerImg" src="" alt="">
+    <div class="iv-caption" id="imgViewerCaption">Click anywhere or press Esc to close</div>
 </div>
 
 <!-- Unified Add/Edit Form Modal -->
@@ -1012,6 +1060,36 @@
     let originalEmployeeStatus = null;
     let originalEmployeeSiteId = '';
 
+    // ────────────────────────────────────────────────────────────────────
+    // Full-screen image viewer (lightbox) — opens on click of the profile
+    // photo, closes on Esc / backdrop click / × button.
+    // ────────────────────────────────────────────────────────────────────
+    function openImageViewer(src, caption) {
+        if (!src) return;
+        const viewer = document.getElementById('imgViewer');
+        const img    = document.getElementById('imgViewerImg');
+        const cap    = document.getElementById('imgViewerCaption');
+        img.src = src;
+        img.alt = caption || 'Employee photo';
+        if (cap) cap.textContent = caption || 'Click anywhere or press Esc to close';
+        viewer.classList.add('is-open');
+        document.body.style.overflow = 'hidden';   // freeze page scroll behind the modal
+    }
+    function closeImageViewer(event) {
+        // Only close on backdrop / close-button clicks, not when clicking the image itself.
+        if (event && event.target && event.target.tagName === 'IMG') return;
+        const viewer = document.getElementById('imgViewer');
+        viewer.classList.remove('is-open');
+        document.body.style.overflow = '';
+    }
+    // ESC anywhere closes the viewer
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            const v = document.getElementById('imgViewer');
+            if (v && v.classList.contains('is-open')) closeImageViewer();
+        }
+    });
+
     function onSiteChanged() {
         const sel = document.getElementById('employeeSiteSelect');
         const wrap = document.getElementById('siteEffectiveFromWrapper');
@@ -1149,9 +1227,15 @@
 
         const avatarCont = document.getElementById('profile-picture-container');
         if (emp.profile_picture) {
-            avatarCont.innerHTML = `<img src="${emp.profile_picture}" class="profile-avatar shadow-sm">`;
+            avatarCont.innerHTML = `<img src="${emp.profile_picture}" class="profile-avatar shadow-sm" alt="${emp.name || 'Employee'}">`;
+            avatarCont.classList.add('is-clickable');
+            avatarCont.setAttribute('title', 'Click to view full image');
+            avatarCont.onclick = () => openImageViewer(emp.profile_picture, emp.name || 'Employee');
         } else {
             document.getElementById('profile-initial').textContent = emp.name.charAt(0);
+            avatarCont.classList.remove('is-clickable');
+            avatarCont.removeAttribute('title');
+            avatarCont.onclick = null;
         }
 
         // Render detailed grid
@@ -1210,20 +1294,18 @@
     ];
 
     detailGrid.innerHTML = sections.map(s => `
-            <div class="col-12">
-                <h6 class="fw-bold text-primary text-uppercase mb-3" style="font-size: 0.75rem; letter-spacing: 0.05em;">${s.title}</h6>
-                <div class="row g-2 mb-2">
-                    ${s.fields.map(f => `
-                        <div class="col-md-3 col-6">
-                            <div class="p-3 rounded-4 bg-light border border-white h-100">
-                                <div class="text-secondary mb-1" style="font-size: 0.65rem; font-weight: 700; text-transform: uppercase;">${f.label}</div>
-                                <div class="text-dark fw-bold small">${f.value || '-'}</div>
-                            </div>
-                        </div>
-                    `).join('')}
-                </div>
+        <div class="pd-section">
+            <div class="pd-section-title">${s.title}</div>
+            <div class="pd-fields">
+                ${s.fields.map(f => `
+                    <div class="pd-field" title="${(f.value == null || f.value === '') ? '' : String(f.value)}">
+                        <div class="label">${f.label}</div>
+                        <div class="value ${(f.value == null || f.value === '') ? 'empty' : ''}">${(f.value == null || f.value === '') ? '—' : f.value}</div>
+                    </div>
+                `).join('')}
             </div>
-        `).join('');
+        </div>
+    `).join('');
     }
 
     function renderStats(stats) {
