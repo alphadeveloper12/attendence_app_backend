@@ -1,0 +1,739 @@
+{% load static %}
+{# RocketAttendance — static one-page landing template v3 (Django Template Language) #}
+{# Drop into templates/ and route with: path('', TemplateView.as_view(template_name='index.html')) #}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RocketAttendance — Workforce attendance built for the worksite</title>
+<meta name="description" content="Tamper-proof face attendance, geofencing, visa-expiry alerts and AI manpower insights for GCC construction, contracting and labour operations. Works offline. Live in 3 weeks.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@600;700;800&family=Archivo:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --night:#0E1B2E;
+    --night-2:#16273E;
+    --sheet:#F4F6F3;
+    --ink:#16253B;
+    --ink-soft:#4A5A70;
+    --cloud:#EAF0F6;
+    --cloud-soft:#93A4BA;
+    --amber:#F5A300;
+    --amber-glow:#FFC44D;
+    --amber-deep:#B97E00;
+    --fence:#2FBF7F;
+    --fence-ink:#1F8A5B;
+    --alert:#E25555;
+    --line-d:#2C3F58;
+    --line-l:#D3DAD2;
+    --display:'Saira Condensed',sans-serif;
+    --body:'Archivo',sans-serif;
+    --mono:'IBM Plex Mono',monospace;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{font-family:var(--body);color:var(--ink);background:var(--sheet);line-height:1.6;font-size:16px}
+  a{color:inherit}
+  img,svg,canvas{display:block;max-width:100%}
+  .wrap{max-width:1180px;margin:0 auto;padding:0 28px}
+  h1,h2,h3{font-family:var(--display);text-transform:uppercase;line-height:1.02}
+  h2{font-size:clamp(36px,4.6vw,56px);font-weight:800;margin:10px 0 14px}
+  .lede{color:var(--ink-soft);max-width:62ch;font-size:17px}
+  section{padding:96px 0}
+
+  .shift{display:flex;align-items:center;gap:12px;font-family:var(--mono);font-size:12.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--amber-deep)}
+  .shift::before{content:"";width:34px;border-top:2px solid var(--amber);flex:none}
+  .shift b{font-weight:500;color:var(--ink)}
+
+  .btn{display:inline-flex;align-items:center;gap:8px;font-family:var(--display);font-weight:700;text-transform:uppercase;letter-spacing:.05em;text-decoration:none;border-radius:9px;padding:13px 28px;font-size:17px;transition:transform .15s ease,box-shadow .15s ease}
+  .btn:focus-visible,a:focus-visible{outline:3px solid var(--amber);outline-offset:2px}
+  .btn-amber{background:linear-gradient(180deg,var(--amber-glow),var(--amber));color:#241A02;box-shadow:0 6px 18px -6px rgba(245,163,0,.55),0 2px 0 var(--amber-deep)}
+  .btn-amber:hover{transform:translateY(-2px)}
+  .btn-line{border:1.5px solid currentColor}
+  .btn-line:hover{transform:translateY(-2px)}
+  .btn-sm{padding:9px 18px;font-size:15px}
+
+  /* ============ header ============ */
+  header{position:fixed;inset:0 0 auto 0;z-index:60;background:rgba(14,27,46,.55);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:1px solid rgba(234,240,246,.12);color:var(--cloud)}
+  .nav{display:flex;align-items:center;justify-content:space-between;height:66px}
+  .logo{font-family:var(--display);font-weight:800;font-size:22px;text-transform:uppercase;text-decoration:none;display:flex;align-items:center;gap:10px}
+  .logo .dot{width:11px;height:11px;border-radius:50%;background:var(--fence);box-shadow:0 0 12px var(--fence)}
+  .nav-links{display:flex;gap:28px;list-style:none}
+  .nav-links a{text-decoration:none;font-size:14px;font-weight:500;color:var(--cloud-soft)}
+  .nav-links a:hover{color:var(--cloud)}
+  .nav-actions{display:flex;gap:10px;align-items:center}
+  .nav-actions .btn-line{color:var(--cloud);border-color:rgba(234,240,246,.4)}
+  .nav-actions .btn-line:hover{border-color:var(--cloud)}
+
+  /* ============ hero ============ */
+  .hero{position:relative;color:var(--cloud);overflow:hidden;padding:150px 0 130px;
+    background:radial-gradient(900px 480px at 78% 30%,rgba(47,191,127,.10),transparent 60%),
+               radial-gradient(800px 500px at 15% 85%,rgba(245,163,0,.10),transparent 60%),
+               linear-gradient(180deg,var(--night) 0%,var(--night-2) 100%)}
+  .hero .wrap{display:grid;grid-template-columns:1.02fr .98fr;gap:40px;align-items:center}
+  .hero .shift{color:var(--amber-glow)} .hero .shift b{color:var(--cloud)}
+  .hero h1{font-size:clamp(48px,6vw,86px);font-weight:800;margin-top:14px}
+  .hero h1 .amber{color:var(--amber-glow)}
+  .hero .lede{color:var(--cloud-soft);margin:20px 0 30px;font-size:18px;max-width:50ch}
+  .hero-cta{display:flex;gap:14px;flex-wrap:wrap}
+  .hero .btn-line{color:var(--cloud);border-color:rgba(234,240,246,.45)}
+  .trust{margin-top:24px;font-family:var(--mono);font-size:12.5px;color:var(--cloud-soft)}
+  .trust b{color:var(--fence);font-weight:500}
+  .hero-3d{position:relative;height:560px}
+  .hero-3d canvas{position:absolute;inset:0}
+  .hero-3d .cap3d{position:absolute;left:50%;transform:translateX(-50%);bottom:-6px;font-family:var(--mono);font-size:11.5px;letter-spacing:.08em;color:var(--cloud-soft);white-space:nowrap}
+
+  /* live ticker */
+  .ticker{position:absolute;left:0;right:0;bottom:0;z-index:4;border-top:1px solid rgba(234,240,246,.14);background:rgba(14,27,46,.5);backdrop-filter:blur(8px);overflow:hidden}
+  .ticker .track{display:flex;width:max-content;animation:ticker 36s linear infinite}
+  .ticker span{font-family:var(--mono);font-size:12.5px;padding:11px 26px;white-space:nowrap;color:var(--cloud-soft);border-right:1px dashed rgba(234,240,246,.16)}
+  .ticker .ok{color:#9FE2C2}
+  .ticker .bad{color:#F2A3A3}
+  @keyframes ticker{to{transform:translateX(-50%)}}
+
+  /* ============ stat cards ============ */
+  .stats{position:relative;z-index:5;margin-top:-58px;padding:0 0 8px}
+  .stats .wrap{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+  .stat{background:#fff;border:1px solid var(--line-l);border-radius:14px;padding:24px 22px;box-shadow:0 18px 40px -22px rgba(22,37,59,.35);transform-style:preserve-3d;will-change:transform}
+  .stat .num{font-family:var(--display);font-weight:800;font-size:40px;line-height:1}
+  .stat .num span{color:var(--amber-deep)}
+  .stat .lbl{font-family:var(--mono);font-size:12px;color:var(--ink-soft);margin-top:8px;letter-spacing:.04em}
+
+  /* ============ how it works — 3 live 3D steps ============ */
+  .steps-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:42px}
+  .step{background:#fff;border:1px solid var(--line-l);border-radius:14px;overflow:hidden;box-shadow:0 14px 34px -24px rgba(22,37,59,.3)}
+  .step .scene{position:relative;height:230px;background:linear-gradient(180deg,var(--night),var(--night-2))}
+  .step .scene canvas{position:absolute;inset:0}
+  .step .scene .badge{position:absolute;top:12px;left:14px;font-family:var(--mono);font-size:11px;letter-spacing:.1em;color:var(--cloud-soft);text-transform:uppercase}
+  .step .body{padding:20px 22px 24px}
+  .step .n{font-family:var(--mono);font-size:12px;color:var(--amber-deep);letter-spacing:.12em}
+  .step h3{font-size:21px;font-weight:700;margin:6px 0 6px}
+  .step p{font-size:14.5px;color:var(--ink-soft)}
+  .step .verdict{display:inline-block;margin-top:10px;font-family:var(--mono);font-size:12px;color:var(--fence-ink)}
+
+  /* ============ problems ============ */
+  .prob-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:40px}
+  .prob{background:#fff;padding:26px;border-radius:14px;border:1px solid var(--line-l);box-shadow:0 14px 34px -24px rgba(22,37,59,.3);transform-style:preserve-3d;will-change:transform}
+  .prob .was{font-family:var(--mono);font-size:12.5px;color:var(--alert);text-decoration:line-through;text-decoration-thickness:1px}
+  .prob h3{font-size:21px;margin:8px 0 6px;font-weight:700}
+  .prob p{font-size:14.5px;color:var(--ink-soft)}
+
+  /* ============ capabilities ============ */
+  .cap-section{background:
+      radial-gradient(900px 420px at 85% -10%,rgba(245,163,0,.13),transparent 60%),
+      radial-gradient(700px 420px at 0% 110%,rgba(47,191,127,.10),transparent 60%),
+      linear-gradient(180deg,var(--night-2),var(--night));
+    color:var(--cloud)}
+  .cap-section .shift{color:var(--amber-glow)} .cap-section .shift b{color:var(--cloud)}
+  .cap-section .lede{color:var(--cloud-soft)}
+  .cap-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:42px}
+  .cap{background:rgba(234,240,246,.045);border:1px solid rgba(234,240,246,.12);border-radius:14px;padding:26px;backdrop-filter:blur(6px);transform-style:preserve-3d;will-change:transform;transition:border-color .2s ease,background .2s ease}
+  .cap:hover{border-color:rgba(245,163,0,.55);background:rgba(234,240,246,.07)}
+  .cap .glyph{font-family:var(--mono);font-size:12px;color:var(--amber-glow);letter-spacing:.1em;text-transform:uppercase}
+  .cap h3{font-size:22px;margin:10px 0 8px;font-weight:700;color:#fff}
+  .cap p{font-size:14.5px;color:var(--cloud-soft)}
+  .cap ul{margin:12px 0 0;padding-left:18px;font-size:14px;color:#BCC9D9}
+  .cap ul li{margin-bottom:6px}
+  .cap ul li::marker{color:var(--fence)}
+
+  /* ============ AI ============ */
+  .ai-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:18px;margin-top:40px}
+  .ai-card{background:#fff;border:1px solid var(--line-l);border-left:5px solid var(--amber);border-radius:8px 14px 14px 8px;padding:24px 26px;box-shadow:0 14px 34px -24px rgba(22,37,59,.3);transform-style:preserve-3d;will-change:transform}
+  .ai-card h3{font-size:20px;font-weight:700}
+  .ai-card p{font-size:14.5px;color:var(--ink-soft);margin-top:6px}
+  .ai-foot{margin-top:28px;font-family:var(--mono);font-size:13px;color:var(--fence-ink)}
+
+  /* ============ site log ============ */
+  .log{margin-top:40px;position:relative;display:grid}
+  .log::before{content:"";position:absolute;left:170px;top:10px;bottom:10px;border-left:2px dashed var(--line-l)}
+  .log-entry{display:grid;grid-template-columns:140px 60px 1fr;align-items:start;padding:22px 0}
+  .log-entry + .log-entry{border-top:1px solid var(--line-l)}
+  .log-entry .when{font-family:var(--mono);font-size:13px;color:var(--ink-soft);line-height:1.5;text-align:right}
+  .log-entry .when b{display:block;color:var(--ink);font-weight:500}
+  .log-entry .node{justify-self:center;width:14px;height:14px;border-radius:50%;background:var(--sheet);border:3px solid var(--amber);margin-top:4px;position:relative;z-index:1}
+  .log-entry h3{font-size:20px;font-weight:700}
+  .log-entry p{font-size:14.5px;color:var(--ink-soft);margin-top:5px;max-width:64ch}
+  .log-entry .result{display:inline-block;margin-top:9px;font-family:var(--mono);font-size:12.5px;color:var(--fence-ink)}
+
+  /* ============ rollout ============ */
+  .roll{background:#fff;border-top:1px solid var(--line-l);border-bottom:1px solid var(--line-l)}
+  .timeline{display:grid;grid-template-columns:repeat(5,1fr);margin-top:48px;position:relative}
+  .timeline::before{content:"";position:absolute;top:8px;left:4%;right:4%;border-top:2px dashed var(--line-l)}
+  .tl{position:relative;padding:0 16px 0 0}
+  .tl .pin{width:18px;height:18px;border-radius:50%;background:#fff;border:3px solid var(--amber);position:relative;z-index:1}
+  .tl.live .pin{background:var(--fence-ink);border-color:var(--fence-ink);box-shadow:0 0 0 6px rgba(31,138,91,.14)}
+  .tl .wk{font-family:var(--mono);font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-soft);margin-top:14px}
+  .tl h3{font-size:18px;margin-top:4px;font-weight:700}
+  .tl p{font-size:13px;color:var(--ink-soft);margin-top:4px}
+
+  /* ============ CTA ============ */
+  .cta{position:relative;overflow:hidden;color:var(--cloud);padding:110px 0;
+    background:radial-gradient(1100px 480px at 50% 120%,rgba(245,163,0,.4),transparent 62%),linear-gradient(180deg,var(--night),var(--night-2))}
+  #dust{position:absolute;inset:0;pointer-events:none}
+  .cta .wrap{position:relative;z-index:2}
+  .cta .shift{color:var(--amber-glow)} .cta .shift b{color:var(--cloud)}
+  .cta h2{font-size:clamp(40px,5.4vw,68px)}
+  .cta p{color:var(--cloud-soft);max-width:56ch;margin:10px 0 32px;font-size:17px}
+  .cta .btn-line{color:var(--cloud);border-color:rgba(234,240,246,.45)}
+
+  footer{padding:34px 0;background:var(--night);color:var(--cloud-soft);border-top:1px solid var(--line-d)}
+  footer .wrap{display:flex;justify-content:space-between;align-items:center;gap:18px;flex-wrap:wrap}
+  footer p{font-family:var(--mono);font-size:12.5px}
+
+  .reveal{opacity:0;transform:translateY(18px);transition:opacity .6s ease,transform .6s ease}
+  .reveal.in{opacity:1;transform:none}
+  @media (prefers-reduced-motion:reduce){
+    .reveal{opacity:1;transform:none;transition:none}
+    .ticker .track{animation:none}
+    html{scroll-behavior:auto}
+  }
+
+  @media (max-width:980px){
+    .hero .wrap{grid-template-columns:1fr;gap:30px}
+    .hero-3d{height:430px}
+    .stats .wrap,.prob-grid,.cap-grid{grid-template-columns:repeat(2,1fr)}
+    .steps-grid{grid-template-columns:1fr}
+    .timeline{grid-template-columns:1fr;gap:28px}
+    .timeline::before{display:none}
+  }
+  @media (max-width:640px){
+    section{padding:68px 0}
+    .nav-links{display:none}
+    .stats .wrap,.prob-grid,.cap-grid,.ai-grid{grid-template-columns:1fr}
+    .stats{margin-top:-40px}
+    .hero{padding-top:120px}
+    .hero-3d{height:360px}
+    .log::before{display:none}
+    .log-entry{grid-template-columns:1fr;gap:6px}
+    .log-entry .when{text-align:left}
+    .log-entry .node{display:none}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap nav">
+    <a class="logo" href="#top"><span class="dot" aria-hidden="true"></span>RocketAttendance</a>
+    <ul class="nav-links">
+      <li><a href="#how">How it works</a></li>
+      <li><a href="#capabilities">Platform</a></li>
+      <li><a href="#ai">AI Insights</a></li>
+      <li><a href="#rollout">Rollout</a></li>
+    </ul>
+    <div class="nav-actions">
+      <a class="btn btn-line btn-sm" href="{% url 'admin-login' %}">Log in</a>
+      <a class="btn btn-amber btn-sm" href="#cta">Book a demo</a>
+    </div>
+  </div>
+</header>
+
+<main id="top">
+
+  <!-- ============ HERO — face → dashboard, animated literally ============ -->
+  <section class="hero" id="hero">
+    <div class="wrap">
+      <div>
+        <p class="shift"><b>05:58</b> first light · muster begins</p>
+        <h1>From face to dashboard <span class="amber">in 2 seconds.</span></h1>
+        <p class="lede">RocketAttendance turns every supervisor's phone into a tamper-proof attendance scanner. Face verified on-device, geofence checked at capture, visa expiries flagged daily — for 1,000 to 20,000 workers across every site you run.</p>
+        <div class="hero-cta">
+          <a class="btn btn-amber" href="#cta">Book a demo</a>
+          <a class="btn btn-line" href="#how">See how it works</a>
+        </div>
+        <p class="trust">Works offline in remote camps · syncs on signal · <b>no biometric data leaves the phone</b></p>
+      </div>
+      <div class="hero-3d" id="heroScene" role="img" aria-label="3D animation: a phone scans a worker's face on-device, verifies it, and sends a single attendance record to a live dashboard">
+        <span class="cap3d">on-device face match → geofence check → dashboard · live</span>
+      </div>
+    </div>
+    <div class="ticker" aria-hidden="true">
+      <div class="track" id="tickerTrack">
+        <span class="ok">✓ 06:01 · R. Kumar · Carpenter Finishing · Vida</span>
+        <span class="ok">✓ 06:01 · A. Hossain · Steel Fixer · Opal Garden</span>
+        <span class="ok">✓ 06:02 · M. Farooq · Scaffolder · GRC W/Shop</span>
+        <span class="ok">✓ 06:02 · S. Thapa · Electrician · Vida</span>
+        <span>⟳ 06:03 · 14 offline entries synced · Camp 7</span>
+        <span class="ok">✓ 06:03 · J. Mendoza · MEP Foreman · Opal Garden</span>
+        <span class="bad">! 06:04 · out of bounds attempt · Site Marina</span>
+        <span class="ok">✓ 06:04 · P. Raju · Mason · Precast Yard 2</span>
+        <span class="ok">✓ 06:05 · K. Ali · Aluminium Fabricator · W/Shop</span>
+        <span>▤ 06:05 · 4 visas expiring &lt;14 days · HR queue</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ STAT CARDS ============ -->
+  <div class="stats">
+    <div class="wrap">
+      <div class="stat tilt reveal"><div class="num">2–4<span>%</span></div><div class="lbl">payroll recovered from buddy-punching</div></div>
+      <div class="stat tilt reveal"><div class="num">AED 150<span>K</span></div><div class="lbl">visa overstay fines avoided / year</div></div>
+      <div class="stat tilt reveal"><div class="num">30 <span>min</span></div><div class="lbl">monthly reporting — down from 3 days</div></div>
+      <div class="stat tilt reveal"><div class="num">3 <span>weeks</span></div><div class="lbl">to go live, incl. 1,000+ face calibrations</div></div>
+    </div>
+  </div>
+
+  <!-- ============ HOW IT WORKS — every check-in, in 3D ============ -->
+  <section id="how">
+    <div class="wrap">
+      <p class="shift"><b>06:00</b> what happens at every check-in</p>
+      <h2>Three checks in one tap</h2>
+      <p class="lede">Each scan runs three verifications before a single attendance record is written. Watch the pipeline:</p>
+      <div class="steps-grid">
+        <div class="step reveal">
+          <div class="scene" id="sceneFace"><span class="badge">Step 1 · on-device</span></div>
+          <div class="body"><span class="n">01 / FACE</span><h3>The face is the badge</h3>
+            <p>Multi-angle calibration matched on the phone itself — beard, helmet or mask, no internet required.</p>
+            <span class="verdict">✓ identity confirmed · 0.4s</span></div>
+        </div>
+        <div class="step reveal">
+          <div class="scene" id="sceneFence"><span class="badge">Step 2 · GPS + polygon</span></div>
+          <div class="body"><span class="n">02 / GEOFENCE</span><h3>Inside the boundary, or no entry</h3>
+            <p>Position tested against your KML site polygon at capture time. Off-site? The submit button never lights up.</p>
+            <span class="verdict">✓ inside Site Vida · 12m from edge</span></div>
+        </div>
+        <div class="step reveal">
+          <div class="scene" id="sceneBars"><span class="badge">Step 3 · live sync</span></div>
+          <div class="body"><span class="n">03 / DASHBOARD</span><h3>The dashboard already knows</h3>
+            <p>Present counts, trade distribution and alerts update live — or queue offline and sync the moment signal returns.</p>
+            <span class="verdict">✓ Vida headcount 312 → 313</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ PROBLEMS ============ -->
+  <section id="problems" style="padding-top:0">
+    <div class="wrap">
+      <p class="shift"><b>07:00</b> the muster sheet retires</p>
+      <h2>What stops going wrong</h2>
+      <p class="lede">Built for the way construction actually runs: multi-site, multi-sponsor, multi-employer, multi-shift — and frequently offline.</p>
+      <div class="prob-grid">
+        <div class="prob tilt reveal"><span class="was">Manual supervisor checks</span><h3>Buddy punching ends</h3><p>On-device face verification means each scan is the worker. No silicon thumbs, no marking in for a friend.</p></div>
+        <div class="prob tilt reveal"><span class="was">Reactive PM complaints</span><h3>Off-site sign-ins caught live</h3><p>Mandatory geofence check at capture — a worker can't even submit attendance from outside the boundary.</p></div>
+        <div class="prob tilt reveal"><span class="was">Excel reminder lists</span><h3>Visa overstays prevented</h3><p>Daily auto-scan buckets every document into 90 / 30 / 14-day countdowns before the AED 250/day fine starts.</p></div>
+        <div class="prob tilt reveal"><span class="was">Phone calls between supervisors</span><h3>Idle crews redeployed</h3><p>AI spots Site A's surplus against Site B's shortage and suggests the exact move, with quantities.</p></div>
+        <div class="prob tilt reveal"><span class="was">"He just stopped showing up"</span><h3>Resignations seen coming</h3><p>Attrition-risk scoring flags the worker — and the reasons — before the resignation letter lands.</p></div>
+        <div class="prob tilt reveal"><span class="was">Paper forms → data entry</span><h3>100 workers onboarded in a morning</h3><p>Bulk Excel import with auto column mapping and case-insensitive matching. No duplicates, no cleanup sprint.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ CAPABILITIES ============ -->
+  <section class="cap-section" id="capabilities">
+    <div class="wrap">
+      <p class="shift"><b>09:00</b> operations running</p>
+      <h2>Everything between the face scan and the board report</h2>
+      <p class="lede">Workers carry the scanner in their pocket. Managers see the whole workforce without leaving the desk.</p>
+      <div class="cap-grid">
+        <div class="cap tilt reveal"><span class="glyph">Mobile · Worker</span><h3>Tap-to-attend, anywhere</h3><p>Face recognition with multi-angle calibration — works after a beard, helmet or mask.</p>
+          <ul><li>Offline queue, syncs on signal</li><li>One-tap site reassignment</li><li>English · Arabic · Hindi · Urdu · Bengali</li></ul></div>
+        <div class="cap tilt reveal"><span class="glyph">Mobile · Supervisor</span><h3>An office in admin mode</h3><p>Register new workers and review attendance from the phone — no laptop on site.</p>
+          <ul><li>2-minute onboarding per worker</li><li>Live map of last-known positions</li><li>OTA app updates, no store cycle</li></ul></div>
+        <div class="cap tilt reveal"><span class="glyph">Web · Dashboard</span><h3>The whole site at a glance</h3><p>Present, absent, active sites and every geofence alert — refreshed live, filtered six ways.</p>
+          <ul><li>Daily 5-bullet executive summary</li><li>One-click status filters</li><li>Site-scoped admin access</li></ul></div>
+        <div class="cap tilt reveal"><span class="glyph">Sites · Geofencing</span><h3>KML in, boundaries live</h3><p>Upload Google Earth polygons or set a radius. Per-site shifts, weekday offs, multi-site workers.</p>
+          <ul><li>Out-of-bounds alerts in real time</li><li>Smart-tuning kills false alerts</li><li>Geofenced reports for client billing</li></ul></div>
+        <div class="cap tilt reveal"><span class="glyph">Workforce · Distribution</span><h3>Every trade, every site</h3><p>The manpower matrix owners already trust — live, with 354 pre-seeded construction trades.</p>
+          <ul><li>Department × site, trade × site</li><li>Exports in your corporate format</li><li>Board-ready, zero reformatting</li></ul></div>
+        <div class="cap tilt reveal"><span class="glyph">Compliance · Audit</span><h3>Proof on every change</h3><p>Status moves, transfers and salary increments logged with who, when and why.</p>
+          <ul><li>Salary history with effective dates</li><li>Sick leave + medical certificates</li><li>Sponsor-level data segregation</li></ul></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ AI ============ -->
+  <section id="ai">
+    <div class="wrap">
+      <p class="shift"><b>12:00</b> decisions before lunch</p>
+      <h2>Your HR team's superpower</h2>
+      <p class="lede">Insights that used to take a pivot-table afternoon, generated before the morning toolbox talk.</p>
+      <div class="ai-grid">
+        <div class="ai-card tilt reveal"><h3>Daily executive summary</h3><p>"4 visas expiring this week · Vida is short 12 carpenters · 9% absence spike at Opal Garden." The whole picture in 30 seconds.</p></div>
+        <div class="ai-card tilt reveal"><h3>Attrition risk scoring</h3><p>A 0–100 score per worker with the specific reasons — attendance drop, sick-leave spike, stale salary — so HR intervenes before the resignation.</p></div>
+        <div class="ai-card tilt reveal"><h3>Manpower recommendations</h3><p>"Move 12 carpenters from GRC W/Shop → Vida." Specific workers, specific quantities. Idle crews redeployed in hours, not weeks.</p></div>
+        <div class="ai-card tilt reveal"><h3>Ask the data</h3><p>"How many electricians are on leave at Vida this week?" Plain-English answers for supervisors — no IT ticket required.</p></div>
+      </div>
+      <p class="ai-foot">✓ Every AI feature has a deterministic fallback — remove the AI key and the same insights run on built-in rules. Zero dependency, zero hidden cost.</p>
+    </div>
+  </section>
+
+  <!-- ============ SITE LOG ============ -->
+  <section style="padding-top:0">
+    <div class="wrap">
+      <p class="shift"><b>Field log</b> a week with RocketAttendance</p>
+      <h2>How it plays out on site</h2>
+      <div class="log">
+        <article class="log-entry reveal">
+          <div class="when"><b>MON 07:40</b>Project Director<br>Site Vida</div><div class="node"></div>
+          <div><h3>"Where are my carpenters today?"</h3>
+            <p>Distribution List → Carpenter Finishing: 18 at Site A, 4 at Site B, 0 at Site C. Manpower Recs has already pre-computed the redeployment.</p>
+            <span class="result">→ crews rebalanced before the 9 AM pour</span></div>
+        </article>
+        <article class="log-entry reveal">
+          <div class="when"><b>TUE 09:02</b>Operations<br>Opal Garden</div><div class="node"></div>
+          <div><h3>"The supervisor says no one's at work"</h3>
+            <p>Geofence Alerts shows 47 workers out of bounds — the map clusters them at an unmarked site. Crews were being redirected without paperwork.</p>
+            <span class="result">→ caught the same morning, not month-end</span></div>
+        </article>
+        <article class="log-entry reveal">
+          <div class="when"><b>WED 11:15</b>HR Manager<br>Head office</div><div class="node"></div>
+          <div><h3>"We almost lost a labour card"</h3>
+            <p>Expiry Watchtower flags 4 visas critical (&lt;14 days) and 12 urgent (&lt;30 days). Renewals processed before a single overstay day.</p>
+            <span class="result">→ zero AED 250/day penalties this quarter</span></div>
+        </article>
+        <article class="log-entry reveal">
+          <div class="when"><b>THU 14:30</b>Finance<br>Audit visit</div><div class="node"></div>
+          <div><h3>"Show me proof of the salary change"</h3>
+            <p>Worker profile → Salary tab: AED 1,800 → 2,400, effective 2025-09-01, approved by the HR Manager. Timeline on screen, argument over.</p>
+            <span class="result">→ audit closed in one click</span></div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ ROLLOUT ============ -->
+  <section class="roll" id="rollout">
+    <div class="wrap">
+      <p class="shift"><b>Implementation</b> no hardware to ship</p>
+      <h2>Live in three weeks</h2>
+      <p class="lede">Including face calibration of 1,000+ workers. No scanners to install, no IT department needed.</p>
+      <div class="timeline">
+        <div class="tl reveal"><div class="pin"></div><div class="wk">Week 1</div><h3>Discovery</h3><p>Site survey, your Excel templates analysed, KML boundaries collected.</p></div>
+        <div class="tl reveal"><div class="pin"></div><div class="wk">Week 2</div><h3>Import</h3><p>Employee list bulk-imported — case-insensitive, zero duplicates.</p></div>
+        <div class="tl reveal"><div class="pin"></div><div class="wk">Week 2–3</div><h3>Mobile rollout</h3><p>OTA app push to supervisor phones; all active workers calibrated.</p></div>
+        <div class="tl live reveal"><div class="pin"></div><div class="wk">Week 3</div><h3>Go-live</h3><p>Daily attendance via mobile. Legacy systems retired.</p></div>
+        <div class="tl reveal"><div class="pin"></div><div class="wk">Month 2</div><h3>Optimisation</h3><p>Geofence smart-tuning ends false alerts; AI insights switched on.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ CTA ============ -->
+  <section class="cta" id="cta">
+    <canvas id="dust" aria-hidden="true"></canvas>
+    <div class="wrap">
+      <p class="shift"><b>17:00</b> reports done · built in the UAE for GCC contractors</p>
+      <h2>Catch the visa expiry before the fine.</h2>
+      <p>Stop running your worksite on paper musters and Excel. See your own sites, trades and boundaries inside RocketAttendance in a 30-minute walkthrough.</p>
+      <div class="hero-cta">
+        <a class="btn btn-amber" href="mailto:sales@rocketattendance.com?subject=Book%20a%20demo">Book a demo</a>
+        <a class="btn btn-line" href="mailto:sales@rocketattendance.com?subject=Pricing%20enquiry">Request pricing</a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <p>RocketAttendance © {% now "Y" %} · UAE-region hosting · HTTPS-only, encrypted at rest</p>
+    <p>UAE · KSA · Qatar · Oman · Bahrain · Kuwait · India</p>
+  </div>
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function(){
+'use strict';
+var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ---------- ticker loop ---------- */
+var track = document.getElementById('tickerTrack');
+if (track) track.innerHTML += track.innerHTML;
+
+/* ---------- scroll reveal ---------- */
+if (!reduced && 'IntersectionObserver' in window) {
+  var io = new IntersectionObserver(function(entries){
+    entries.forEach(function(e){ if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target);} });
+  },{threshold:.12});
+  document.querySelectorAll('.reveal').forEach(function(el){ io.observe(el); });
+} else {
+  document.querySelectorAll('.reveal').forEach(function(el){ el.classList.add('in'); });
+}
+
+/* ---------- card tilt ---------- */
+if (!reduced && window.matchMedia('(hover:hover) and (pointer:fine)').matches) {
+  document.querySelectorAll('.tilt').forEach(function(card){
+    card.addEventListener('pointermove', function(e){
+      var r = card.getBoundingClientRect();
+      var x = (e.clientX - r.left)/r.width - .5, y = (e.clientY - r.top)/r.height - .5;
+      card.style.transform = 'perspective(700px) rotateX(' + (-y*6) + 'deg) rotateY(' + (x*8) + 'deg) translateY(-3px)';
+    });
+    card.addEventListener('pointerleave', function(){ card.style.transform=''; });
+  });
+}
+
+/* ================================================================
+   3D scene engine — each scene mounts in its own container,
+   renders only while on screen, and freezes under reduced motion
+   ================================================================ */
+var hasGL = !!window.THREE;
+function mount(id, build){
+  var el = document.getElementById(id);
+  if (!el || !hasGL) return;
+  var renderer;
+  try { renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true }); }
+  catch(e){ return; }
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
+  el.insertBefore(renderer.domElement, el.firstChild);
+  var scene = new THREE.Scene();
+  var camera = new THREE.PerspectiveCamera(36, 1, .1, 100);
+  var update = build(scene, camera) || function(){};
+  function size(){
+    var w = el.clientWidth, h = el.clientHeight;
+    if(!w || !h) return;
+    renderer.setSize(w, h, false);
+    camera.aspect = w/h; camera.updateProjectionMatrix();
+  }
+  size(); window.addEventListener('resize', size);
+  if (reduced){ update(1.2); renderer.render(scene,camera); return; }
+  var visible = false, t = Math.random()*10, raf = 0;
+  function loop(){ t += .016; update(t); renderer.render(scene,camera); if (visible) raf = requestAnimationFrame(loop); }
+  new IntersectionObserver(function(en){
+    en.forEach(function(e){
+      visible = e.isIntersecting;
+      cancelAnimationFrame(raf);
+      if (visible) raf = requestAnimationFrame(loop);
+    });
+  },{threshold:.05}).observe(el);
+}
+function basic(c,extra){ var o={color:c}; if(extra) for(var k in extra) o[k]=extra[k]; return new THREE.MeshBasicMaterial(o); }
+function lam(c){ return new THREE.MeshLambertMaterial({color:c}); }
+function lights(scene){
+  scene.add(new THREE.HemisphereLight(0xBFD2EA, 0x2A2A33, .9));
+  var d = new THREE.DirectionalLight(0xFFD9A0, .8); d.position.set(4,6,5); scene.add(d);
+}
+/* Face-ID dot mask: front shell of an ellipsoid */
+function faceMask(scale, color){
+  var pts=[], N=560;
+  for (var i=0;i<N;i++){
+    var y = 1 - (i/(N-1))*2;
+    var r = Math.sqrt(Math.max(0,1-y*y)), th = i*2.399963229;
+    var x = Math.cos(th)*r, z = Math.sin(th)*r;
+    if (z > .25) pts.push(x*.78*scale, y*1.02*scale, z*.55*scale);
+  }
+  var g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pts,3));
+  return new THREE.Points(g, new THREE.PointsMaterial({ color:color, size:.05*scale, transparent:true, opacity:.95 }));
+}
+function flatRing(inner,outer,color){
+  var r = new THREE.Mesh(new THREE.RingGeometry(inner,outer,40),
+    basic(color,{transparent:true,side:THREE.DoubleSide}));
+  return r;
+}
+
+/* ============ HERO: phone scans a face → record flies to dashboard ============ */
+mount('heroScene', function(scene, camera){
+  camera.position.set(0,.4,9.6); camera.lookAt(0,.4,0);
+  lights(scene);
+
+  /* phone, slightly turned toward the viewer */
+  var phone = new THREE.Group();
+  phone.add(new THREE.Mesh(new THREE.BoxGeometry(2.3,4.7,.22), lam(0x1B2B42)));
+  var screen = new THREE.Mesh(new THREE.PlaneGeometry(2.08,4.46), basic(0x0B1626));
+  screen.position.z = .115; phone.add(screen);
+  var notch = new THREE.Mesh(new THREE.CircleGeometry(.06,16), basic(0x2C3F58));
+  notch.position.set(0,2.02,.12); phone.add(notch);
+  /* in-screen scan frame */
+  var frame = flatRing(.86,.92,0x2FBF7F); frame.position.set(0,.85,.13); phone.add(frame);
+  /* the face being verified, on screen */
+  var face = faceMask(.8, 0x47E09B); face.position.set(0,.85,.2); phone.add(face);
+  /* scan line sweeping the face */
+  var scanLine = new THREE.Mesh(new THREE.PlaneGeometry(1.7,.05), basic(0x9FE2C2,{transparent:true}));
+  scanLine.position.z = .55; phone.add(scanLine);
+  /* verified pulse */
+  var okPulse = flatRing(.3,.4,0x47E09B); okPulse.position.set(0,.85,.6); okPulse.material.opacity=0; phone.add(okPulse);
+  /* geofence check chip under the scan: small polygon ring + pin light */
+  var geoChip = flatRing(.28,.34,0x2FBF7F); geoChip.position.set(-.55,-1.2,.13); phone.add(geoChip);
+  var geoDot = new THREE.Mesh(new THREE.CircleGeometry(.09,14), basic(0x47E09B)); geoDot.position.set(-.55,-1.2,.14); phone.add(geoDot);
+  var gpsChip = flatRing(.28,.34,0xF5A300); gpsChip.position.set(.55,-1.2,.13); phone.add(gpsChip);
+  var gpsDot = new THREE.Mesh(new THREE.CircleGeometry(.09,14), basic(0xFFC44D)); gpsDot.position.set(.55,-1.2,.14); phone.add(gpsDot);
+  phone.position.set(-1.7,.1,0); phone.rotation.y = .3;
+  scene.add(phone);
+
+  /* dashboard panel floating to the right */
+  var dash = new THREE.Group();
+  dash.add(new THREE.Mesh(new THREE.BoxGeometry(2.7,1.9,.12), lam(0x16273E)));
+  var dashEdge = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(2.72,1.92,.13)),
+    new THREE.LineBasicMaterial({color:0x2FBF7F, transparent:true, opacity:.6}));
+  dash.add(dashEdge);
+  var titleBar = new THREE.Mesh(new THREE.PlaneGeometry(2.4,.18), basic(0x2C3F58)); titleBar.position.set(0,.72,.08); dash.add(titleBar);
+  var bars = [];
+  [[-.85,.55,0xF5A300],[-.28,.95,0xF5A300],[.28,.7,0xF5A300],[.85,1.15,0x2FBF7F]].forEach(function(b){
+    var bar = new THREE.Mesh(new THREE.BoxGeometry(.34,b[1],.14), basic(b[2]));
+    bar.position.set(b[0], -.72 + b[1]/2, .1);
+    bar.userData.h = b[1];
+    dash.add(bar); bars.push(bar);
+  });
+  dash.position.set(2.5,1.1,0); dash.rotation.y = -.28;
+  scene.add(dash);
+
+  /* the attendance record in flight: phone → dashboard, one trip per 2s */
+  var curve = new THREE.QuadraticBezierCurve3(
+    new THREE.Vector3(-1.4,1.1,.4), new THREE.Vector3(.5,3,.6), new THREE.Vector3(2.4,1.7,.2));
+  var path = new THREE.Line(new THREE.BufferGeometry().setFromPoints(curve.getPoints(48)),
+    new THREE.LineBasicMaterial({color:0x47E09B, transparent:true, opacity:.28}));
+  scene.add(path);
+  var packet = new THREE.Mesh(new THREE.SphereGeometry(.09,12,10), basic(0x47E09B));
+  scene.add(packet);
+  var glow = flatRing(.12,.2,0x47E09B); scene.add(glow);
+
+  return function(t){
+    phone.position.y = .1 + Math.sin(t*.9)*.08;
+    dash.position.y = 1.1 + Math.sin(t*.9 + 1.4)*.08;
+    /* scan cycle: 0–1.2 sweep · 1.2–1.6 verified pulse · then packet departs */
+    var cyc = t % 2;
+    if (cyc < 1.2){
+      scanLine.position.y = .85 + (-.95 + (cyc/1.2)*1.9);
+      scanLine.material.opacity = .85;
+      okPulse.material.opacity = 0;
+    } else {
+      scanLine.material.opacity = 0;
+      var p = (cyc-1.2)/.5, s = 1 + p*1.6;
+      okPulse.scale.set(s,s,1);
+      okPulse.material.opacity = Math.max(0, .9 - p);
+    }
+    face.rotation.y = Math.sin(t*.7)*.25;
+    geoDot.material.opacity = gpsDot.material.opacity = .55 + .45*Math.sin(t*3);
+    /* the 2-second trip */
+    var u = (t % 2)/2;
+    var pos = curve.getPoint(u);
+    packet.position.copy(pos);
+    glow.position.copy(pos); glow.position.z += .01;
+    var gs = 1 + Math.sin(u*Math.PI)*1.4;
+    glow.scale.set(gs,gs,1);
+    glow.material.opacity = .5*(1-Math.abs(u-.5)*2)+.15;
+    /* dashboard bars breathe; the green one ticks up when the packet lands */
+    bars.forEach(function(b,i){
+      var h = b.userData.h*(1 + Math.sin(t*1.4 + i)*.04);
+      if (i===3 && u>.92) h = b.userData.h*1.18;
+      b.scale.y = h/b.userData.h;
+      b.position.y = -.72 + (b.userData.h*b.scale.y)/2;
+    });
+  };
+});
+
+/* ============ STEP 1: face verification ============ */
+mount('sceneFace', function(scene, camera){
+  camera.position.set(0,0,4.4); camera.lookAt(0,0,0);
+  var face = faceMask(1.15, 0x47E09B); scene.add(face);
+  var frame = flatRing(1.22,1.28,0x2FBF7F); scene.add(frame);
+  var scan = new THREE.Mesh(new THREE.PlaneGeometry(2.4,.06), basic(0x9FE2C2,{transparent:true}));
+  scan.position.z = .8; scene.add(scan);
+  var ok = flatRing(.4,.52,0x47E09B); ok.position.z=.9; ok.material.opacity=0; scene.add(ok);
+  return function(t){
+    face.rotation.y = Math.sin(t*.6)*.45;
+    var cyc = t % 2.4;
+    if (cyc < 1.5){
+      scan.position.y = -1.15 + (cyc/1.5)*2.3;
+      scan.material.opacity = .9; ok.material.opacity = 0;
+    } else {
+      scan.material.opacity = 0;
+      var p=(cyc-1.5)/.7, s=1+p*1.4;
+      ok.scale.set(s,s,1); ok.material.opacity = Math.max(0,.9-p);
+    }
+  };
+});
+
+/* ============ STEP 2: geofence — pin accepted inside, rejected outside ============ */
+mount('sceneFence', function(scene, camera){
+  camera.position.set(0,4.4,5.6); camera.lookAt(0,0,0);
+  lights(scene);
+  var grid = new THREE.GridHelper(9,14,0x2C3F58,0x22344E); scene.add(grid);
+  /* extruded KML polygon */
+  var pts = [[-1.7,-1.2],[1.3,-1.5],[1.9,.3],[1.2,1.5],[-1.1,1.6],[-2,.3]];
+  var shape = new THREE.Shape();
+  shape.moveTo(pts[0][0], pts[0][1]);
+  for (var i=1;i<pts.length;i++) shape.lineTo(pts[i][0], pts[i][1]);
+  shape.closePath();
+  var wallGeo = new THREE.ExtrudeGeometry(shape,{depth:.7,bevelEnabled:false});
+  var wall = new THREE.Mesh(wallGeo, basic(0x2FBF7F,{transparent:true,opacity:.12,side:THREE.DoubleSide}));
+  wall.rotation.x = -Math.PI/2;
+  scene.add(wall);
+  var edge = new THREE.LineSegments(new THREE.EdgesGeometry(wallGeo),
+    new THREE.LineBasicMaterial({color:0x2FBF7F,transparent:true,opacity:.85}));
+  edge.rotation.x = -Math.PI/2; scene.add(edge);
+  function pin(color){
+    var g = new THREE.Group();
+    var head = new THREE.Mesh(new THREE.SphereGeometry(.2,14,12), basic(color)); head.position.y=.62; g.add(head);
+    var tip = new THREE.Mesh(new THREE.CylinderGeometry(0,.13,.42,12), basic(color)); tip.position.y=.28; tip.rotation.x=Math.PI; g.add(tip);
+    return g;
+  }
+  var inPin = pin(0x47E09B); inPin.position.set(-.1,0,.1); scene.add(inPin);
+  var inRing = flatRing(.25,.35,0x47E09B); inRing.rotation.x=-Math.PI/2; inRing.position.set(-.1,.06,.1); scene.add(inRing);
+  var outPin = pin(0xFF6B6B); outPin.position.set(3.1,0,1.9); scene.add(outPin);
+  var cross = new THREE.Group();
+  [[1,1],[-1,1]].forEach(function(d){
+    var bar = new THREE.Mesh(new THREE.BoxGeometry(.5,.07,.07), basic(0xFF6B6B,{transparent:true}));
+    bar.rotation.y = Math.PI/4*d[0]*d[1]; cross.add(bar);
+  });
+  cross.position.set(3.1,1.15,1.9); scene.add(cross);
+  var root = new THREE.Group();
+  scene.children.slice().forEach(function(c){ if(!(c instanceof THREE.Light)){ scene.remove(c); root.add(c);} });
+  scene.add(root);
+  return function(t){
+    root.rotation.y = t*.22;
+    inPin.position.y = Math.abs(Math.sin(t*2.4))*.22;
+    var cyc=(t%1.6)/1.6, s=1+cyc*2;
+    inRing.scale.set(s,s,1); inRing.material.opacity=Math.max(0,.85-cyc);
+    cross.children.forEach(function(b){ b.material.opacity = .45+.45*Math.sin(t*5); });
+    outPin.children.forEach(function(m){ m.material.opacity = 1; });
+  };
+});
+
+/* ============ STEP 3: live dashboard — trade bars per site ============ */
+mount('sceneBars', function(scene, camera){
+  camera.position.set(3.4,3.2,5.2); camera.lookAt(0,.6,0);
+  lights(scene);
+  var base = new THREE.Mesh(new THREE.BoxGeometry(4.6,.18,2.6), lam(0x1B2B42));
+  base.position.y = -.09; scene.add(base);
+  var grid = new THREE.GridHelper(4.4,8,0x2C3F58,0x22344E); grid.position.y=.01; scene.add(grid);
+  var bars=[], layout=[
+    [-1.6,-.6,1.4,0xF5A300],[-.8,-.6,2.0,0xF5A300],[0,-.6,1.1,0xF5A300],[.8,-.6,1.7,0xF5A300],[1.6,-.6,.9,0xF5A300],
+    [-1.6,.6,.8,0x2FBF7F],[-.8,.6,1.5,0x2FBF7F],[0,.6,2.1,0x2FBF7F],[.8,.6,1.2,0x2FBF7F],[1.6,.6,1.8,0x2FBF7F]
+  ];
+  layout.forEach(function(b,i){
+    var bar = new THREE.Mesh(new THREE.BoxGeometry(.5,1,.5), lam(b[3]));
+    bar.userData = { h:b[2], ph:i*.7 };
+    bar.position.set(b[0],0,b[1]);
+    scene.add(bars[bars.length]=bar);
+  });
+  var root = new THREE.Group();
+  scene.children.slice().forEach(function(c){ if(!(c instanceof THREE.Light)){ scene.remove(c); root.add(c);} });
+  scene.add(root);
+  return function(t){
+    root.rotation.y = Math.sin(t*.3)*.35;
+    bars.forEach(function(b){
+      var h = b.userData.h*(1+Math.sin(t*1.1+b.userData.ph)*.12);
+      b.scale.y = h; b.position.y = h/2;
+    });
+  };
+});
+
+/* ============ CTA: drifting site dust (2D canvas, cheap) ============ */
+(function(){
+  var cv = document.getElementById('dust');
+  if (!cv) return;
+  var ctx = cv.getContext('2d'); if(!ctx) return;
+  var P=[], n=90;
+  function size(){ cv.width = cv.offsetWidth; cv.height = cv.offsetHeight; }
+  size(); window.addEventListener('resize', size);
+  for (var i=0;i<n;i++) P.push({x:Math.random(),y:Math.random(),r:Math.random()*1.8+.4,s:Math.random()*.0006+.0002,o:Math.random()*.5+.15});
+  function draw(){
+    ctx.clearRect(0,0,cv.width,cv.height);
+    P.forEach(function(p){
+      p.y -= p.s; if (p.y < -.02){ p.y = 1.02; p.x = Math.random(); }
+      ctx.beginPath();
+      ctx.arc(p.x*cv.width, p.y*cv.height, p.r, 0, 6.283);
+      ctx.fillStyle = 'rgba(255,196,77,' + p.o + ')';
+      ctx.fill();
+    });
+    if (!reduced) requestAnimationFrame(draw);
+  }
+  draw();
+})();
+})();
+</script>
+</body>
+</html>

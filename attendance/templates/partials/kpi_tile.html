@@ -1,0 +1,27 @@
+{% comment %}
+KPI tile.
+Usage:
+    {% include 'partials/kpi_tile.html' with label="Total Employees" value_id="stat-total-employees" icon="ri-team-line" icon_bg="brand" %}
+Required:  label, value_id, icon
+Optional:  icon_bg (brand|success|warning|danger|info|neutral), trend_id, interactive_target, onclick
+{% endcomment %}
+{% with bg=icon_bg|default:"brand" %}
+<div class="kpi-tile {% if interactive_target %}kpi-tile--interactive{% endif %}"
+     {% if interactive_target %}id="{{ interactive_target }}"{% endif %}
+     {% if onclick %}onclick="{{ onclick }}"{% endif %}>
+    <div class="kpi-icon"
+        style="
+            {% if bg == 'brand'   %}background: var(--brand-soft);   color: var(--brand);
+            {% elif bg == 'success' %}background: var(--success-soft); color: var(--success);
+            {% elif bg == 'warning' %}background: var(--warning-soft); color: var(--warning);
+            {% elif bg == 'danger'  %}background: var(--danger-soft);  color: var(--danger);
+            {% elif bg == 'info'    %}background: var(--info-soft);    color: var(--info);
+            {% else %}background: var(--surface-sunken); color: var(--text-default);{% endif %}
+        ">
+        <i class="{{ icon }}"></i>
+    </div>
+    <div class="kpi-label">{{ label }}</div>
+    <div class="kpi-value" id="{{ value_id }}">…</div>
+    {% if trend_id %}<div class="kpi-trend" id="{{ trend_id }}"></div>{% endif %}
+</div>
+{% endwith %}

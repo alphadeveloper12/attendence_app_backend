@@ -5,253 +5,567 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}RocketAttendance{% endblock %}</title>
-    <!-- Bootstrap 5 CSS -->
+
+    <!-- Bootstrap 5 CSS (kept for modals + dropdowns + tabs that existing JS depends on) -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- Google Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Tailwind CSS via Play CDN (configurable in-page) -->
+    <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+    <!-- Remix Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+    <!-- Inter font -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <!-- Alpine.js for declarative interactivity -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.5/dist/cdn.min.js"></script>
+
+    <script>
+        // Extend Tailwind with our design tokens so utility classes match the system.
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'monospace'],
+                    },
+                    colors: {
+                        brand: {
+                            50:  '#eef2ff',
+                            100: '#e0e7ff',
+                            200: '#c7d2fe',
+                            300: '#a5b4fc',
+                            400: '#818cf8',
+                            500: '#6366f1',
+                            600: '#4f46e5',
+                            700: '#4338ca',
+                            800: '#3730a3',
+                            900: '#312e81',
+                        },
+                    },
+                    boxShadow: {
+                        soft:    '0 1px 2px rgba(15,23,42,0.04), 0 1px 1px rgba(15,23,42,0.02)',
+                        card:    '0 1px 3px rgba(15,23,42,0.05), 0 1px 2px rgba(15,23,42,0.03)',
+                        elev:    '0 4px 12px rgba(15,23,42,0.06), 0 2px 4px rgba(15,23,42,0.04)',
+                        pop:     '0 14px 40px rgba(15,23,42,0.10), 0 4px 12px rgba(15,23,42,0.06)',
+                    },
+                    borderRadius: {
+                        'xl':  '0.875rem',
+                        '2xl': '1.125rem',
+                    },
+                    transitionTimingFunction: {
+                        'out-expo': 'cubic-bezier(0.16, 1, 0.3, 1)',
+                    },
+                },
+            },
+        }
+    </script>
+
     <style>
+        /* ─────────────────────────────────────────────────────────────────
+           DESIGN TOKENS — single source of truth. Page CSS should read these
+           instead of redefining magic numbers.
+           ─────────────────────────────────────────────────────────────── */
         :root {
-            --primary-color: #1e293b;
-            --primary-light: #f8fafc;
-            --secondary-color: #334155;
-            --bg-color: #ffffff;
-            --card-bg: #ffffff;
-            --text-primary: #000000;
-            --text-secondary: #475569;
-            --sidebar-width: 260px;
-            --success-color: #000000;
-            --danger-color: #000000;
-            --warning-color: #000000;
-            --border-color: #000000;
+            /* Surfaces */
+            --surface-canvas:   #f8fafc;   /* app background  */
+            --surface-card:     #ffffff;   /* default card    */
+            --surface-sunken:   #f1f5f9;   /* secondary card  */
+            --surface-overlay:  rgba(15, 23, 42, 0.45);
+
+            /* Text */
+            --text-strong:      #0f172a;   /* headings, table values */
+            --text-default:     #1e293b;   /* body */
+            --text-muted:       #64748b;   /* labels, captions */
+            --text-faint:       #94a3b8;   /* placeholders */
+            --text-inverse:     #f8fafc;
+
+            /* Borders */
+            --border-default:   #e2e8f0;
+            --border-strong:    #cbd5e1;
+            --border-focus:     #6366f1;
+
+            /* Brand + semantic */
+            --brand:            #4f46e5;   /* indigo-600 */
+            --brand-hover:      #4338ca;
+            --brand-soft:       #eef2ff;
+            --success:          #059669;
+            --success-soft:     #d1fae5;
+            --warning:          #d97706;
+            --warning-soft:     #fef3c7;
+            --danger:           #dc2626;
+            --danger-soft:      #fee2e2;
+            --info:             #0284c7;
+            --info-soft:        #e0f2fe;
+
+            /* Radius + shadow shortcuts (utility classes below use these) */
+            --radius-sm: 8px;
+            --radius-md: 12px;
+            --radius-lg: 16px;
+            --radius-xl: 20px;
+            --shadow-card: 0 1px 3px rgba(15,23,42,0.05), 0 1px 2px rgba(15,23,42,0.03);
+            --shadow-elev: 0 4px 12px rgba(15,23,42,0.06), 0 2px 4px rgba(15,23,42,0.04);
+
+            /* Layout */
+            --sidebar-width:    264px;
+            --header-height:    64px;
         }
 
-        body {
-            background-color: #fcfcfc;
-            font-family: 'Inter', sans-serif;
+        /* Reset + base */
+        * { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+        html, body {
+            background: var(--surface-canvas);
+            color: var(--text-default);
+            font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+            font-feature-settings: 'cv11', 'ss01';
+            margin: 0; padding: 0;
             overflow-x: hidden;
-            margin: 0;
-            color: var(--text-primary);
         }
+        h1, h2, h3, h4, h5, h6 { color: var(--text-strong); letter-spacing: -0.011em; }
 
-        /* Professional Monochrome Utilities */
-        .btn-pro {
-            background: white !important;
-            color: black !important;
-            border: 1px solid black !important;
-            border-radius: 0.75rem !important;
-            font-weight: 600 !important;
-            padding: 0.6rem 1.25rem !important;
-            transition: all 0.2s !important;
-            box-shadow: none !important;
-        }
+        /* ─────────────────────────────────────────────────────────────────
+           LAYOUT — fixed sidebar + offset main. Picked over `position: sticky`
+           because sticky inside a grid silently breaks when any ancestor has
+           an `overflow` rule. `fixed` is bullet-proof.
+           ─────────────────────────────────────────────────────────────── */
+        .app-shell { min-height: 100vh; }
 
-        .btn-pro:hover {
-            background: black !important;
-            color: white !important;
-        }
-
-        .card-pro {
-            background: white !important;
-            border: 1px solid black !important;
-            border-radius: 1.25rem !important;
-            box-shadow: none !important;
-            padding: 1.5rem !important;
-        }
-
-        /* Layout */
-        .dashboard-container {
-            display: flex;
-            min-height: 100vh;
-        }
-
-        /* Sidebar */
-        .sidebar {
-            width: var(--sidebar-width);
-            background: var(--card-bg);
-            border-right: 1px solid #e5e7eb;
+        .app-sidebar {
             position: fixed;
-            height: 100vh;
-            z-index: 1000;
-            transition: transform 0.3s ease;
-            display: flex;
-            flex-direction: column;
+            top: 0; left: 0; bottom: 0;
+            width: var(--sidebar-width);
+            display: flex; flex-direction: column;
+            background: var(--surface-card);
+            border-right: 1px solid var(--border-default);
+            z-index: 30;
         }
-
-        .sidebar-header {
-            padding: 1.5rem;
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-            border-bottom: 1px solid #f3f4f6;
+        .sidebar-brand {
+            display: flex; align-items: center; gap: 0.75rem;
+            padding: 1.25rem 1.5rem; min-height: var(--header-height);
+            border-bottom: 1px solid var(--border-default);
         }
-
-        .brand-logo {
-            width: 32px;
-            height: 32px;
-            background: var(--primary-color);
-            border-radius: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-weight: bold;
+        .sidebar-brand .brand-mark {
+            width: 36px; height: 36px;
+            background: linear-gradient(135deg, var(--brand) 0%, #7c3aed 100%);
+            border-radius: 10px; color: #fff; font-weight: 800;
+            display: grid; place-items: center;
+            box-shadow: 0 4px 12px rgba(79, 70, 229, 0.25);
         }
-
-        .nav-links {
-            padding: 1.5rem 1rem;
-            flex-grow: 1;
-            overflow-y: auto;
+        .sidebar-brand .brand-name {
+            font-size: 1.05rem; font-weight: 700; color: var(--text-strong);
+            letter-spacing: -0.012em;
         }
-
+        .sidebar-nav {
+            padding: 0.75rem; flex: 1; overflow-y: auto;
+            scrollbar-width: thin; scrollbar-color: var(--border-default) transparent;
+        }
+        .sidebar-nav::-webkit-scrollbar { width: 6px; }
+        .sidebar-nav::-webkit-scrollbar-thumb { background: var(--border-default); border-radius: 3px; }
+        .nav-section-label {
+            font-size: 0.65rem; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 0.06em; color: var(--text-faint);
+            padding: 1rem 0.875rem 0.5rem;
+        }
         .nav-item {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-            padding: 0.75rem 1rem;
-            color: var(--text-secondary);
+            display: flex; align-items: center; gap: 0.75rem;
+            padding: 0.55rem 0.875rem;
+            color: var(--text-muted);
             text-decoration: none;
-            border-radius: 0.5rem;
-            margin-bottom: 0.5rem;
-            transition: all 0.2s;
-            font-weight: 500;
+            border-radius: var(--radius-sm);
+            font-size: 0.875rem; font-weight: 500;
+            transition: all 150ms ease;
+            margin-bottom: 1px;
         }
-
-        .nav-item:hover,
+        .nav-item:hover {
+            background: var(--surface-sunken);
+            color: var(--text-strong);
+        }
         .nav-item.active {
-            background-color: var(--primary-light);
-            color: var(--primary-color);
+            background: var(--brand-soft);
+            color: var(--brand);
+            font-weight: 600;
+            box-shadow: inset 0 0 0 1px rgba(79, 70, 229, 0.10);
         }
-
         .nav-icon {
-            width: 20px;
-            text-align: center;
+            width: 20px; height: 20px;
+            display: grid; place-items: center;
+            font-size: 1rem;
         }
-
+        .nav-item.active .nav-icon { filter: none; }
         .sidebar-footer {
-            padding: 1rem;
-            border-top: 1px solid #f3f4f6;
+            padding: 1rem; border-top: 1px solid var(--border-default);
+        }
+        .user-tile {
+            display: flex; align-items: center; gap: 0.75rem;
+            padding: 0.5rem; border-radius: var(--radius-sm);
+            background: var(--surface-sunken); margin-bottom: 0.5rem;
+        }
+        .user-tile .avatar {
+            width: 36px; height: 36px; border-radius: 50%;
+            background: linear-gradient(135deg, var(--brand) 0%, #7c3aed 100%);
+            color: #fff; display: grid; place-items: center;
+            font-weight: 700; font-size: 0.9rem;
         }
 
-        /* Main Content */
-        .main-content {
-            flex-grow: 1;
-            padding: 2rem;
-            transition: margin 0.3s ease;
-            width: 100%;
-        }
-
-        .with-sidebar {
+        /* Main content — offset by the sidebar width on desktop.
+           This is the ONLY thing that scrolls vertically with the page. */
+        .app-main {
             margin-left: var(--sidebar-width);
-            width: calc(100% - var(--sidebar-width));
+            min-height: 100vh;
+            padding: 1.5rem 2rem 4rem;
+            min-width: 0;
         }
 
-        /* Mobile Responsive */
-        @media (max-width: 768px) {
-            .sidebar {
+        /* ─────────────────────────────────────────────────────────────────
+           COMPONENT CLASSES — read once, used everywhere
+           ─────────────────────────────────────────────────────────────── */
+
+        /* Cards */
+        .card-surface {
+            background: var(--surface-card);
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-card);
+        }
+        .card-surface--interactive { transition: all 200ms cubic-bezier(0.16, 1, 0.3, 1); cursor: pointer; }
+        .card-surface--interactive:hover {
+            border-color: var(--border-strong);
+            box-shadow: var(--shadow-elev);
+            transform: translateY(-1px);
+        }
+
+        /* Page header */
+        .page-header {
+            display: flex; justify-content: space-between; align-items: flex-end;
+            gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap;
+        }
+        .page-header h1 {
+            font-size: 1.75rem; font-weight: 700; line-height: 1.1;
+            color: var(--text-strong); margin: 0;
+            letter-spacing: -0.022em;
+        }
+        .page-header .subtitle {
+            color: var(--text-muted); font-size: 0.875rem; margin-top: 0.25rem;
+        }
+
+        /* Buttons — semantic + modern */
+        .btn-modern {
+            display: inline-flex; align-items: center; gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            font-size: 0.875rem; font-weight: 600;
+            border-radius: var(--radius-sm);
+            border: 1px solid transparent;
+            transition: all 150ms ease;
+            cursor: pointer;
+            white-space: nowrap;
+            line-height: 1.25;
+        }
+        .btn-modern:disabled { opacity: 0.55; cursor: not-allowed; }
+        .btn-modern--primary {
+            background: var(--brand); color: #fff;
+            box-shadow: 0 1px 2px rgba(79, 70, 229, 0.20);
+        }
+        .btn-modern--primary:hover { background: var(--brand-hover); }
+        .btn-modern--ghost {
+            background: var(--surface-card); color: var(--text-default);
+            border-color: var(--border-default);
+        }
+        .btn-modern--ghost:hover {
+            background: var(--surface-sunken);
+            border-color: var(--border-strong);
+        }
+        .btn-modern--success {
+            background: var(--success); color: #fff;
+        }
+        .btn-modern--success:hover { background: #047857; }
+        .btn-modern--danger {
+            background: var(--danger); color: #fff;
+        }
+        .btn-modern--danger:hover { background: #b91c1c; }
+        .btn-modern--icon {
+            padding: 0.5rem; width: 36px; height: 36px;
+            display: grid; place-items: center;
+        }
+
+        /* Status pills */
+        .pill {
+            display: inline-flex; align-items: center; gap: 0.4rem;
+            padding: 0.25rem 0.75rem;
+            font-size: 0.75rem; font-weight: 600;
+            border-radius: 999px;
+            line-height: 1.25;
+        }
+        .pill--neutral { background: var(--surface-sunken);   color: var(--text-default); }
+        .pill--brand   { background: var(--brand-soft);       color: var(--brand); }
+        .pill--success { background: var(--success-soft);     color: #047857; }
+        .pill--warning { background: var(--warning-soft);     color: #b45309; }
+        .pill--danger  { background: var(--danger-soft);      color: #b91c1c; }
+        .pill--info    { background: var(--info-soft);        color: #0369a1; }
+
+        /* KPI tile */
+        .kpi-tile {
+            background: var(--surface-card);
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-lg);
+            padding: 1.25rem;
+            transition: all 200ms cubic-bezier(0.16, 1, 0.3, 1);
+            position: relative; overflow: hidden;
+        }
+        .kpi-tile--interactive { cursor: pointer; }
+        .kpi-tile--interactive:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-elev);
+            border-color: var(--border-strong);
+        }
+        .kpi-tile .kpi-icon {
+            width: 40px; height: 40px;
+            border-radius: var(--radius-sm);
+            display: grid; place-items: center;
+            font-size: 1.25rem; margin-bottom: 0.75rem;
+        }
+        .kpi-tile .kpi-label {
+            font-size: 0.7rem; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 0.04em;
+            color: var(--text-muted);
+            margin-bottom: 0.25rem;
+        }
+        .kpi-tile .kpi-value {
+            font-size: 2rem; font-weight: 700; line-height: 1.1;
+            color: var(--text-strong);
+            letter-spacing: -0.02em;
+            font-feature-settings: 'tnum';
+        }
+        .kpi-tile .kpi-trend {
+            font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;
+        }
+
+        /* Form inputs */
+        .input-modern {
+            width: 100%;
+            padding: 0.5rem 0.75rem;
+            font-size: 0.875rem;
+            background: var(--surface-card);
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-sm);
+            transition: border-color 150ms ease, box-shadow 150ms ease;
+            color: var(--text-default);
+        }
+        .input-modern:focus {
+            outline: none;
+            border-color: var(--border-focus);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
+        }
+        .input-modern::placeholder { color: var(--text-faint); }
+
+        /* Section card with header bar */
+        .section-card {
+            background: var(--surface-card);
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+        }
+        .section-card__head {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 1rem 1.25rem;
+            border-bottom: 1px solid var(--border-default);
+            background: var(--surface-card);
+            gap: 0.75rem; flex-wrap: wrap;
+        }
+        .section-card__title {
+            font-size: 1rem; font-weight: 600; color: var(--text-strong);
+            display: flex; align-items: center; gap: 0.5rem;
+            margin: 0;
+        }
+        .section-card__body { padding: 1.25rem; }
+
+        /* Table */
+        .table-modern {
+            width: 100%; border-collapse: collapse;
+        }
+        .table-modern thead th {
+            background: var(--surface-sunken);
+            color: var(--text-muted);
+            font-size: 0.7rem; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 0.05em;
+            padding: 0.625rem 1rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border-default);
+        }
+        .table-modern tbody td {
+            padding: 0.875rem 1rem;
+            font-size: 0.875rem; color: var(--text-default);
+            border-bottom: 1px solid var(--border-default);
+            vertical-align: middle;
+        }
+        .table-modern tbody tr:hover { background: var(--surface-sunken); }
+        .table-modern tbody tr:last-child td { border-bottom: 0; }
+
+        /* Empty state */
+        .empty-state {
+            text-align: center; padding: 3rem 1.5rem;
+            color: var(--text-faint);
+        }
+        .empty-state .empty-icon { font-size: 2.5rem; opacity: 0.5; margin-bottom: 0.75rem; }
+        .empty-state h3 { color: var(--text-muted); font-size: 1rem; font-weight: 600; margin-bottom: 0.25rem; }
+        .empty-state p { font-size: 0.875rem; margin: 0; }
+
+        /* ─────────────────────────────────────────────────────────────────
+           OVERRIDES — soften Bootstrap utility defaults so they match
+           ─────────────────────────────────────────────────────────────── */
+        .modal-content {
+            border-radius: var(--radius-lg) !important;
+            border: 1px solid var(--border-default) !important;
+            box-shadow: 0 20px 50px rgba(15, 23, 42, 0.18) !important;
+        }
+        .modal-header { border-bottom: 1px solid var(--border-default) !important; padding: 1rem 1.25rem !important; }
+        .modal-body   { padding: 1.25rem !important; }
+        .modal-footer { border-top: 1px solid var(--border-default) !important; padding: 1rem 1.25rem !important; }
+
+        .dropdown-menu {
+            border-radius: var(--radius-md) !important;
+            border: 1px solid var(--border-default) !important;
+            box-shadow: 0 14px 40px rgba(15, 23, 42, 0.10), 0 4px 12px rgba(15, 23, 42, 0.06) !important;
+            padding: 0.5rem !important;
+        }
+        .dropdown-item {
+            border-radius: var(--radius-sm) !important;
+            font-size: 0.875rem !important;
+            padding: 0.5rem 0.75rem !important;
+            color: var(--text-default) !important;
+        }
+        .dropdown-item:hover { background: var(--surface-sunken) !important; color: var(--text-strong) !important; }
+
+        /* Mobile */
+        @media (max-width: 992px) {
+            .app-sidebar {
                 transform: translateX(-100%);
+                transition: transform 250ms cubic-bezier(0.16, 1, 0.3, 1);
+                box-shadow: 0 20px 50px rgba(15, 23, 42, 0.18);
             }
-
-            .sidebar.active {
-                transform: translateX(0);
+            .app-sidebar.is-open { transform: translateX(0); }
+            .app-main {
+                margin-left: 0;       /* no offset on mobile, sidebar overlays */
+                padding: 1rem;
             }
-
-            .main-content.with-sidebar {
-                margin-left: 0;
-                width: 100%;
+            .mobile-menu-btn { display: inline-flex !important; }
+            .sidebar-backdrop.is-open {
+                position: fixed; inset: 0; background: rgba(15, 23, 42, 0.45); z-index: 20;
             }
         }
+        .mobile-menu-btn { display: none; }
     </style>
 </head>
 
-<body>
-    <div class="dashboard-container">
+<body x-data="{ sidebarOpen: false }">
+    <div class="app-shell">
         {% if not hide_sidebar %}
-        <!-- Global Sidebar -->
-        <aside class="sidebar">
-            <div class="sidebar-header">
-                <div class="brand-logo">R</div>
-                <span class="fs-5 fw-bold text-dark">RocketAttendance</span>
-            </div>
+        <!-- Mobile backdrop -->
+        <div class="sidebar-backdrop"
+             :class="sidebarOpen ? 'is-open' : ''"
+             @click="sidebarOpen = false"
+             x-show="sidebarOpen"
+             x-cloak></div>
 
-            <nav class="nav-links">
-                <a href="{% url 'admin-dashboard' %}"
-                    class="nav-item {% if request.path == '/api/attendance/dashboard/' %}active{% endif %}">
-                    <span class="nav-icon">📊</span> Dashboard
+        <!-- Sidebar -->
+        <aside class="app-sidebar" :class="sidebarOpen ? 'is-open' : ''">
+            <a href="{% url 'admin-dashboard' %}" class="sidebar-brand" style="text-decoration:none;">
+                <div class="brand-mark">R</div>
+                <div>
+                    <div class="brand-name">RocketAttendance</div>
+                    <div style="font-size:0.7rem; color: var(--text-faint); font-weight:500; margin-top:-2px;">Admin Console</div>
+                </div>
+            </a>
+
+            <nav class="sidebar-nav">
+                <div class="nav-section-label">Overview</div>
+                <a href="{% url 'admin-dashboard' %}" class="nav-item {% if request.path == '/api/attendance/dashboard/' %}active{% endif %}">
+                    <span class="nav-icon"><i class="ri-dashboard-3-line"></i></span> Dashboard
                 </a>
-                <a href="{% url 'admin-reports' %}"
-                    class="nav-item {% if '/dashboard/reports/' in request.path and 'salary' not in request.path %}active{% endif %}">
-                    <span class="nav-icon">📈</span> Reports
+                <a href="{% url 'admin-reports' %}" class="nav-item {% if '/dashboard/reports/' in request.path and 'salary' not in request.path %}active{% endif %}">
+                    <span class="nav-icon"><i class="ri-line-chart-line"></i></span> Reports
                 </a>
-                <a href="{% url 'monthly-report' %}"
-                    class="nav-item {% if 'monthly-report' in request.path %}active{% endif %}">
-                    <span class="nav-icon">🗓️</span> Monthly Report
+                <a href="{% url 'monthly-report' %}" class="nav-item {% if 'monthly-report' in request.path %}active{% endif %}">
+                    <span class="nav-icon"><i class="ri-calendar-2-line"></i></span> Monthly Report
                 </a>
-                <a href="{% url 'admin-distribution-list' %}"
-                    class="nav-item {% if 'distribution-list' in request.path %}active{% endif %}">
-                    <span class="nav-icon">📊</span> Distribution List
+
+                <div class="nav-section-label">Workforce</div>
+                <a href="{% url 'admin-distribution-list' %}" class="nav-item {% if 'distribution-list' in request.path %}active{% endif %}">
+                    <span class="nav-icon"><i class="ri-bar-chart-grouped-line"></i></span> Distribution List
                 </a>
-                <a href="{% url 'admin-departments-management' %}"
-                    class="nav-item {% if 'departments-management' in request.path %}active{% endif %}">
-                    <span class="nav-icon">🏢</span> Departments
+                <a href="{% url 'admin-departments-management' %}" class="nav-item {% if 'departments-management' in request.path %}active{% endif %}">
+                    <span class="nav-icon"><i class="ri-building-line"></i></span> Departments
                 </a>
-                <a href="{% url 'admin-user-face' %}"
-                    class="nav-item {% if 'user-face' in request.path %}active{% endif %}">
-                    <span class="nav-icon">👤</span> User Face
+                <a href="{% url 'admin-user-face' %}" class="nav-item {% if 'user-face' in request.path %}active{% endif %}">
+                    <span class="nav-icon"><i class="ri-user-search-line"></i></span> User Face
                 </a>
+
+                <div class="nav-section-label">Analytics <span class="pill pill--brand" style="font-size:0.55rem; margin-left:6px;">AI</span></div>
+                <a href="{% url 'admin-attrition-risk' %}" class="nav-item {% if 'attrition-risk' in request.path %}active{% endif %}">
+                    <span class="nav-icon"><i class="ri-pulse-line"></i></span> Attrition Risk
+                </a>
+                <a href="{% url 'admin-document-expiry' %}" class="nav-item {% if 'document-expiry' in request.path %}active{% endif %}">
+                    <span class="nav-icon"><i class="ri-time-line"></i></span> Document Expiry
+                </a>
+                <a href="{% url 'admin-manpower-recommendations' %}" class="nav-item {% if 'manpower-recommendations' in request.path %}active{% endif %}">
+                    <span class="nav-icon"><i class="ri-scales-3-line"></i></span> Manpower Recs
+                </a>
+                <a href="{% url 'admin-ask-data' %}" class="nav-item {% if 'ask-data' in request.path %}active{% endif %}">
+                    <span class="nav-icon"><i class="ri-question-answer-line"></i></span> Ask the Data
+                </a>
+                <a href="{% url 'admin-geofence-tuning' %}" class="nav-item {% if 'geofence-tuning' in request.path %}active{% endif %}">
+                    <span class="nav-icon"><i class="ri-focus-3-line"></i></span> Geofence Tuning
+                </a>
+
+                <div class="nav-section-label">Operations</div>
                 {% if user.is_superuser %}
-                <a href="{% url 'admin-salary-report' %}"
-                    class="nav-item {% if 'salary-report' in request.path %}active{% endif %}">
-                    <span class="nav-icon">💰</span> Salary
+                <a href="{% url 'admin-salary-report' %}" class="nav-item {% if 'salary-report' in request.path %}active{% endif %}">
+                    <span class="nav-icon"><i class="ri-money-dollar-circle-line"></i></span> Salary
                 </a>
                 {% endif %}
-                <a href="{% url 'admin-sites' %}"
-                    class="nav-item {% if '/sites/' in request.path and 'site-admins' not in request.path %}active{% endif %}">
-                    <span class="nav-icon">🏢</span> Sites
+                <a href="{% url 'admin-sites' %}" class="nav-item {% if '/sites/' in request.path and 'site-admins' not in request.path %}active{% endif %}">
+                    <span class="nav-icon"><i class="ri-map-pin-line"></i></span> Sites
                 </a>
-                <a href="{% url 'admin-site-admins' %}"
-                    class="nav-item {% if 'site-admins' in request.path %}active{% endif %}">
-                    <span class="nav-icon">🛡️</span> Site Admins
+                <a href="{% url 'admin-site-admins' %}" class="nav-item {% if 'site-admins' in request.path %}active{% endif %}">
+                    <span class="nav-icon"><i class="ri-shield-user-line"></i></span> Site Admins
                 </a>
             </nav>
 
             <div class="sidebar-footer">
                 {% if user.is_authenticated %}
-                <div class="d-flex align-items-center gap-3 mb-3">
-                    <div class="avatar-placeholder rounded-circle bg-primary text-white d-flex align-items-center justify-content-center fw-bold"
-                        style="width: 40px; height: 40px; min-width: 40px;">
-                        {{ user.username|slice:":1"|upper }}
-                    </div>
-                    <div>
-                        <div class="fw-bold text-dark text-truncate" style="max-width: 120px;">{{ user.username }}</div>
-                        <div class="small text-muted">Admin</div>
+                <div class="user-tile">
+                    <div class="avatar">{{ user.username|slice:":1"|upper }}</div>
+                    <div style="min-width:0;">
+                        <div style="font-weight:600; font-size:0.875rem; color: var(--text-strong); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                            {{ user.username }}
+                        </div>
+                        <div style="font-size:0.7rem; color: var(--text-muted);">{% if user.is_superuser %}Super Admin{% else %}Admin{% endif %}</div>
                     </div>
                 </div>
-                <a href="{% url 'admin-logout' %}" class="btn btn-outline-danger w-100 btn-sm">Logout</a>
+                <a href="{% url 'admin-logout' %}" class="btn-modern btn-modern--ghost" style="width:100%; justify-content:center;">
+                    <i class="ri-logout-box-r-line"></i> Logout
+                </a>
                 {% else %}
-                <a href="{% url 'admin-login' %}" class="btn btn-primary w-100 btn-sm">Login</a>
+                <a href="{% url 'admin-login' %}" class="btn-modern btn-modern--primary" style="width:100%; justify-content:center;">
+                    <i class="ri-login-box-line"></i> Login
+                </a>
                 {% endif %}
             </div>
         </aside>
         {% endif %}
 
-        <!-- Main Content Wrapper -->
-        <main class="main-content {% if not hide_sidebar %}with-sidebar{% endif %}">
+        <main class="app-main">
             {% if not hide_sidebar %}
-            <!-- Header for Mobile Sidebar Toggle -->
-            <div class="d-md-none mb-4">
-                <button onclick="document.querySelector('.sidebar').classList.toggle('active')"
-                    class="btn btn-white border shadow-sm">
-                    ☰ Menu
-                </button>
-            </div>
+            <!-- Mobile menu trigger -->
+            <button @click="sidebarOpen = !sidebarOpen"
+                    class="btn-modern btn-modern--ghost btn-modern--icon mobile-menu-btn mb-3"
+                    aria-label="Open menu">
+                <i class="ri-menu-line"></i>
+            </button>
             {% endif %}
-
-            {% block content %}
-            {% endblock %}
+            {% block content %}{% endblock %}
         </main>
     </div>
 
-    <!-- Bootstrap 5 JS Bundle with Popper -->
+    <!-- Bootstrap JS Bundle (kept for modals + dropdowns + tabs that existing JS depends on) -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     {% block scripts %}{% endblock %}
 </body>

@@ -6917,3 +6917,1504 @@ def admin_departments_management_view(request):
     return render(request, 'departments_management.html', {
         'is_superuser': request.user.is_superuser,
     })
+
+
+# ---------------------------------------------------------------------------
+# AI-style analytics: Attrition risk + Document expiry + Excel auto-mapper
+# ---------------------------------------------------------------------------
+
+def _compute_attrition_score(emp, today,
+                              attendance_recent_count,
+                              attendance_baseline_count,
+                              sick_count_60d,
+                              geofence_misses_30d,
+                              last_salary_days_ago):
+    """Heuristic 0-100 risk score per employee + ordered list of contributing
+    factors. Explainable on purpose: HR can read why a person is high-risk and
+    act on it. Weights chosen so the worst plausible employee tops out near 100
+    and the average healthy employee sits well under 20.
+    """
+    score = 0
+    factors = []
+
+    # --- 1. Attendance decline (max 30) -----------------------------------
+    # Compare last 14d check-ins to the prior 30d baseline (days 14-44).
+    # Drop > 30% = a real signal.
+    recent_rate = attendance_recent_count / 14.0
+    baseline_rate = attendance_baseline_count / 30.0 if attendance_baseline_count else 0
+    if baseline_rate > 0 and recent_rate < baseline_rate * 0.70:
+        drop_pct = (baseline_rate - recent_rate) / baseline_rate
+        pts = min(30, int(drop_pct * 40))
+        if pts > 0:
+            score += pts
+            factors.append({
+                'label': f'Attendance down {int(drop_pct*100)}% vs prior month',
+                'points': pts,
+                'severity': 'high' if pts >= 15 else 'med',
+            })
+
+    # --- 2. Sick-leave frequency (max 20) ---------------------------------
+    if sick_count_60d >= 3:
+        pts = min(20, sick_count_60d * 4)
+        score += pts
+        factors.append({
+            'label': f'{sick_count_60d} sick days in last 60 days',
+            'points': pts,
+            'severity': 'high' if sick_count_60d >= 5 else 'med',
+        })
+
+    # --- 3. Geofence misses (max 15) --------------------------------------
+    if geofence_misses_30d >= 3:
+        pts = min(15, geofence_misses_30d * 2)
+        score += pts
+        factors.append({
+            'label': f'{geofence_misses_30d} geofence misses (last 30d)',
+            'points': pts,
+            'severity': 'med',
+        })
+
+    # --- 4. Stale salary (max 20) -----------------------------------------
+    # Past 12 months without a salary change is mildly concerning;
+    # past 18+ months is a strong demotivator signal.
+    if last_salary_days_ago is not None and last_salary_days_ago > 365:
+        months_stale = (last_salary_days_ago - 365) // 30
+        pts = min(20, months_stale * 2)
+        if pts > 0:
+            score += pts
+            factors.append({
+                'label': f'No salary change in {last_salary_days_ago // 30} months',
+                'points': pts,
+                'severity': 'high' if months_stale >= 6 else 'med',
+            })
+
+    # --- 5. Tenure inverse (max 15) ---------------------------------------
+    # Newer employees (< 12 mo tenure) are statistically higher flight risk.
+    if emp.date_of_joining:
+        tenure_days = (today - emp.date_of_joining).days
+        if 0 <= tenure_days < 365:
+            tenure_months = tenure_days // 30
+            pts = max(0, 15 - tenure_months)
+            if pts > 0:
+                score += pts
+                factors.append({
+                    'label': f'Tenure only {tenure_months} months',
+                    'points': pts,
+                    'severity': 'med' if pts >= 10 else 'low',
+                })
+
+    return min(100, score), factors
+
+
+class AttritionRiskView(APIView):
+    """GET /api/attendance/analytics/attrition-risk/?site=&department=&min_score=
+    Returns Active employees ranked by attrition-risk score with explainable factors.
+    """
+    permission_classes = [IsAdminUser | IsSiteAdmin]
+
+    def get(self, request):
+        from collections import Counter as _Counter
+        from datetime import timedelta
+
+        today = timezone.localdate()
+        scope = Employee.objects.select_related('site').filter(status__iexact='Active')
+
+        # Optional filters (mirror the dashboard semantics)
+        site_id = request.GET.get('site')
+        if site_id and site_id != 'all':
+            try:
+                scope = scope.filter(site_id=int(site_id))
+            except (ValueError, TypeError):
+                pass
+        dept = (request.GET.get('department') or '').strip()
+        if dept and dept != 'all':
+            scope = scope.filter(department__iexact=dept)
+        try:
+            min_score = int(request.GET.get('min_score') or 0)
+        except (TypeError, ValueError):
+            min_score = 0
+
+        # Site-admin scope
+        if not request.user.is_superuser:
+            try:
+                profile = AdminProfile.objects.get(user=request.user)
+                scope = scope.filter(site__in=profile.sites.all())
+            except AdminProfile.DoesNotExist:
+                scope = scope.none()
+
+        emp_ids = list(scope.values_list('id', flat=True))
+        if not emp_ids:
+            return Response({'count': 0, 'rows': []})
+
+        # ── Batch the per-employee aggregates so we don't make N queries ─
+        recent_window_start = today - timedelta(days=14)
+        baseline_start = today - timedelta(days=44)
+        sick_window_start = today - timedelta(days=60)
+        geo_window_start = today - timedelta(days=30)
+
+        # Attendance counts per employee (recent 14d)
+        recent_qs = (Attendance.objects
+                     .filter(user_id__in=emp_ids, date__gte=recent_window_start, date__lte=today)
+                     .values('user_id').annotate(n=Count('id')))
+        recent_map = {r['user_id']: r['n'] for r in recent_qs}
+
+        # Attendance counts per employee (prior 30d baseline = days 14..44)
+        baseline_qs = (Attendance.objects
+                       .filter(user_id__in=emp_ids,
+                               date__gte=baseline_start, date__lt=recent_window_start)
+                       .values('user_id').annotate(n=Count('id')))
+        baseline_map = {r['user_id']: r['n'] for r in baseline_qs}
+
+        # Sick count per employee (60d)
+        sick_qs = (Attendance.objects
+                   .filter(user_id__in=emp_ids, status='sick', date__gte=sick_window_start)
+                   .values('user_id').annotate(n=Count('id')))
+        sick_map = {r['user_id']: r['n'] for r in sick_qs}
+
+        # Geofence misses per employee (30d)
+        geo_qs = (Attendance.objects
+                  .filter(user_id__in=emp_ids, is_within_geofence=False, date__gte=geo_window_start)
+                  .values('user_id').annotate(n=Count('id')))
+        geo_map = {r['user_id']: r['n'] for r in geo_qs}
+
+        # Latest salary change date per employee
+        salary_qs = (EmployeeSalaryHistory.objects
+                     .filter(employee_id__in=emp_ids)
+                     .values('employee_id'))
+        latest_salary_map = {}
+        for r in EmployeeSalaryHistory.objects.filter(employee_id__in=emp_ids).order_by('employee_id', '-effective_from'):
+            if r.employee_id not in latest_salary_map:
+                latest_salary_map[r.employee_id] = r.effective_from
+
+        # ── Score every employee ─────────────────────────────────────────
+        rows = []
+        for emp in scope:
+            last_salary_days = None
+            if emp.id in latest_salary_map:
+                last_salary_days = (today - latest_salary_map[emp.id]).days
+            elif emp.date_of_joining:
+                last_salary_days = (today - emp.date_of_joining).days
+
+            score, factors = _compute_attrition_score(
+                emp, today,
+                attendance_recent_count=recent_map.get(emp.id, 0),
+                attendance_baseline_count=baseline_map.get(emp.id, 0),
+                sick_count_60d=sick_map.get(emp.id, 0),
+                geofence_misses_30d=geo_map.get(emp.id, 0),
+                last_salary_days_ago=last_salary_days,
+            )
+            if score < min_score:
+                continue
+            rows.append({
+                'employee_id': emp.id,
+                'name': emp.name,
+                'badge_number': emp.badge_number or '',
+                'site': emp.site.name if emp.site else '',
+                'department': emp.department or '',
+                'position': emp.position or '',
+                'score': score,
+                'band': 'high' if score >= 50 else ('medium' if score >= 25 else 'low'),
+                'factors': factors,
+            })
+
+        rows.sort(key=lambda r: r['score'], reverse=True)
+
+        # Distribution summary for the page header pills
+        band_counts = _Counter(r['band'] for r in rows)
+
+        return Response({
+            'count': len(rows),
+            'as_of': str(today),
+            'bands': {'high': band_counts.get('high', 0),
+                      'medium': band_counts.get('medium', 0),
+                      'low': band_counts.get('low', 0)},
+            'rows': rows,
+        })
+
+
+# ---------------------------------------------------------------------------
+# Document expiry
+# ---------------------------------------------------------------------------
+
+def _doc_bucket(days):
+    if days is None: return None
+    if days < 0:     return 'expired'
+    if days <= 14:   return 'critical'
+    if days <= 30:   return 'urgent'
+    if days <= 90:   return 'soon'
+    return 'ok'
+
+
+class DocumentExpiryView(APIView):
+    """GET /api/attendance/analytics/document-expiry/?site=&bucket=
+    Returns Active employees with passport or visa expiring soon (or already
+    expired), bucketed by urgency.
+    """
+    permission_classes = [IsAdminUser | IsSiteAdmin]
+
+    def get(self, request):
+        today = timezone.localdate()
+        scope = Employee.objects.select_related('site').filter(status__iexact='Active')
+
+        site_id = request.GET.get('site')
+        if site_id and site_id != 'all':
+            try:
+                scope = scope.filter(site_id=int(site_id))
+            except (ValueError, TypeError):
+                pass
+
+        if not request.user.is_superuser:
+            try:
+                profile = AdminProfile.objects.get(user=request.user)
+                scope = scope.filter(site__in=profile.sites.all())
+            except AdminProfile.DoesNotExist:
+                scope = scope.none()
+
+        bucket_filter = (request.GET.get('bucket') or '').strip().lower() or None
+
+        rows = []
+        bucket_counts = {'expired': 0, 'critical': 0, 'urgent': 0, 'soon': 0}
+        for emp in scope:
+            docs = []
+            worst = None
+            if emp.passport_expiry:
+                d = (emp.passport_expiry - today).days
+                b = _doc_bucket(d)
+                docs.append({'type': 'Passport', 'date': str(emp.passport_expiry), 'days': d, 'bucket': b})
+            if emp.visa_expiry_date:
+                d = (emp.visa_expiry_date - today).days
+                b = _doc_bucket(d)
+                docs.append({'type': 'Visa', 'date': str(emp.visa_expiry_date), 'days': d, 'bucket': b})
+            # Pick the worst doc bucket for this employee
+            severity_order = ['expired', 'critical', 'urgent', 'soon', 'ok']
+            for sev in severity_order:
+                if any(doc['bucket'] == sev for doc in docs):
+                    worst = sev
+                    break
+            if not worst or worst == 'ok':
+                continue
+            if bucket_filter and worst != bucket_filter:
+                continue
+            bucket_counts[worst] = bucket_counts.get(worst, 0) + 1
+            rows.append({
+                'employee_id': emp.id,
+                'name': emp.name,
+                'badge_number': emp.badge_number or '',
+                'site': emp.site.name if emp.site else '',
+                'department': emp.department or '',
+                'docs': docs,
+                'worst_bucket': worst,
+            })
+
+        # Sort: expired first, then by min days remaining
+        sev_rank = {'expired': 0, 'critical': 1, 'urgent': 2, 'soon': 3}
+        def _row_key(r):
+            mind = min((d['days'] for d in r['docs'] if d['days'] is not None), default=99999)
+            return (sev_rank.get(r['worst_bucket'], 9), mind)
+        rows.sort(key=_row_key)
+
+        return Response({
+            'count': len(rows),
+            'as_of': str(today),
+            'buckets': bucket_counts,
+            'rows': rows,
+        })
+
+
+# ---------------------------------------------------------------------------
+# Excel auto-mapper preview
+# ---------------------------------------------------------------------------
+
+# Canonical field → alias keywords (lowercased, token-style).
+# When the admin's sheet has weird columns, we score each header against this
+# dictionary using token overlap + substring; the best match wins. Beats
+# the rigid regex matcher in import_employees.
+IMPORT_FIELD_ALIASES = {
+    'name':             ['name', 'full name', 'employee name', 'worker name', 'worker', 'employee'],
+    'badge_number':     ['badge', 'badge id', 'badge number', 'emp id', 'employee id', 'staff id', 'card id'],
+    'mol_id':           ['mol', 'mol id', 'personal nr', 'personal number'],
+    'labor_card_number':['labour card', 'labor card', 'l.card', 'cec', 'cec nr', 'work permit'],
+    'passport_number':  ['passport', 'passport no', 'passport number', 'pp no', 'pp number'],
+    'passport_expiry':  ['passport expiry', 'expiry date', 'pp expiry'],
+    'visa_details':     ['visa', 'visa details', 'visa info'],
+    'visa_expiry_date': ['visa expiry', 'visa expiry date'],
+    'department':       ['department', 'dept', 'division', 'section'],
+    'position':         ['position', 'designation', 'job title', 'present designation', 'trade'],
+    'salary_grade':     ['category', 'grade', 'salary grade', 'level'],
+    'site':             ['site', 'project', 'location'],
+    'status':           ['status', 'employment status', 'active'],
+    'nationality':      ['nationality', 'country'],
+    'gender':           ['gender', 'sex'],
+    'marital_status':   ['marital', 'marital status'],
+    'religion':         ['religion'],
+    'dob':              ['dob', 'date of birth', 'birth date', 'birthday'],
+    'doj':              ['doj', 'date of joining', 'joining date', 'date joined', 'd.o.j', 'joined'],
+    'gross_salary':     ['gross salary', 'gross', 'total salary'],
+    'basic_salary':     ['basic salary', 'basic', 'base salary'],
+    'job_description':  ['job description', 'job desc', 'description'],
+    'sponsor':          ['sponsor', 'employer', 'sponsoring company'],
+    'employer':         ['employer company', 'parent company', 'company', 'group'],
+    'phone':            ['phone', 'mobile', 'contact'],
+    'email':            ['email', 'e-mail'],
+}
+
+
+def _norm_header(s):
+    import re as _re
+    if s is None:
+        return ''
+    return _re.sub(r'[^a-z0-9 ]+', ' ', _re.sub(r'\s+', ' ', str(s).lower())).strip()
+
+
+def _score_header_against_field(header_norm, aliases):
+    """Returns 0-100 score for how well header matches any of the aliases.
+
+    Tie-breaks substring matches by coverage — a longer matched alias wins
+    over a shorter one, so "passport expiry date" picks `passport_expiry`
+    instead of tying with the bare `passport` alias on `passport_number`.
+    """
+    if not header_norm:
+        return 0
+    h_tokens = set(header_norm.split())
+    h_len = max(len(header_norm), 1)
+    best = 0
+    for alias in aliases:
+        a = _norm_header(alias)
+        if not a:
+            continue
+        if header_norm == a:
+            return 100
+        a_tokens = set(a.split())
+        # Substring boost — weighted by how much of the header the alias
+        # actually covers, so longer aliases outrank shorter ones.
+        if a in header_norm:
+            coverage = len(a) / h_len
+            best = max(best, 60 + int(coverage * 35))   # range 60-95
+            continue
+        if header_norm in a:
+            coverage = h_len / max(len(a), 1)
+            best = max(best, 60 + int(coverage * 25))   # range 60-85
+            continue
+        # Token-overlap (Jaccard-style) fallback
+        if h_tokens and a_tokens:
+            inter = len(h_tokens & a_tokens)
+            if inter:
+                jaccard = inter / max(len(h_tokens | a_tokens), 1)
+                best = max(best, int(jaccard * 80))
+    return best
+
+
+class ExcelMappingPreviewView(APIView):
+    """POST /api/attendance/employees/import-preview/
+
+    Body: multipart form with `file` = the Excel sheet.
+    Returns the auto-detected column mapping (with confidence) so the admin
+    can confirm or override BEFORE the actual import runs. No DB writes here.
+    """
+    permission_classes = [IsAdminUser]
+
+    def post(self, request):
+        file = request.FILES.get('file')
+        if not file:
+            return Response({'error': 'No file uploaded.'}, status=400)
+        try:
+            df = pd.read_excel(file, header=None, engine='openpyxl')
+        except Exception as e:  # noqa: BLE001
+            return Response({'error': f'Could not read Excel: {e}'}, status=400)
+
+        # Find the most-likely header row in the first 20 rows.
+        header_idx = -1
+        for i in range(min(20, len(df))):
+            row = df.iloc[i].astype(str).str.strip().tolist()
+            if any(any(k in v.lower() for k in ('name', 'badge', 'status', 'sr.', 'sl.no')) for v in row if v != 'nan'):
+                header_idx = i
+                break
+        if header_idx == -1:
+            return Response({'error': "Couldn't find a header row in the first 20 rows."}, status=400)
+
+        headers = [str(v).strip() if v is not None else '' for v in df.iloc[header_idx].tolist()]
+        # Also peek at the row below (merged-header sheets often split labels across two rows)
+        sub_headers = []
+        if header_idx + 1 < len(df):
+            sub_headers = [str(v).strip() if v is not None else '' for v in df.iloc[header_idx + 1].tolist()]
+
+        mapping = []
+        for col_idx, h in enumerate(headers):
+            text = h
+            if sub_headers and col_idx < len(sub_headers) and sub_headers[col_idx] and sub_headers[col_idx].lower() != 'nan':
+                text = f'{h} {sub_headers[col_idx]}'.strip()
+            text_norm = _norm_header(text)
+            if not text_norm or text_norm == 'nan':
+                continue
+            best_field, best_score = None, 0
+            for field, aliases in IMPORT_FIELD_ALIASES.items():
+                score = _score_header_against_field(text_norm, aliases)
+                if score > best_score:
+                    best_field, best_score = field, score
+            mapping.append({
+                'column_index': col_idx,
+                'header': text.strip(),
+                'matched_field': best_field if best_score >= 40 else None,
+                'confidence': best_score,
+                'status': ('strong' if best_score >= 80
+                           else 'likely' if best_score >= 60
+                           else 'weak' if best_score >= 40
+                           else 'unknown'),
+            })
+
+        return Response({
+            'header_row': header_idx,
+            'columns': mapping,
+            'available_fields': sorted(IMPORT_FIELD_ALIASES.keys()),
+        })
+
+
+# ---------------------------------------------------------------------------
+# Analytics template views
+# ---------------------------------------------------------------------------
+
+@login_required(login_url='admin-login')
+def admin_attrition_risk_view(request):
+    if not request.user.is_staff:
+        return redirect('admin-login')
+    return render(request, 'attrition_risk.html', {'is_superuser': request.user.is_superuser})
+
+
+@login_required(login_url='admin-login')
+def admin_document_expiry_view(request):
+    if not request.user.is_staff:
+        return redirect('admin-login')
+    return render(request, 'document_expiry.html', {'is_superuser': request.user.is_superuser})
+
+
+# ---------------------------------------------------------------------------
+# Manpower distribution recommendations
+# ---------------------------------------------------------------------------
+
+class ManpowerRecommendationsView(APIView):
+    """GET /api/attendance/analytics/manpower-recommendations/
+
+    For each (department, position) combination, compares each site's headcount
+    to the median across all sites that host the position. Flags sites that
+    sit > median * `over_factor` or < median * `under_factor` and proposes
+    redeployment moves from over → under.
+
+    Query params:
+        over_factor     — default 1.5  (over-staffed if count > median * 1.5)
+        under_factor    — default 0.5  (under-staffed if count < median * 0.5)
+        min_total       — default 4    (skip positions with < 4 total to avoid noise)
+        site            — optional ID to filter recommendations involving that site
+    """
+    permission_classes = [IsAdminUser | IsSiteAdmin]
+
+    def get(self, request):
+        from collections import defaultdict
+
+        def _float(name, default):
+            try:
+                v = float(request.GET.get(name) or default)
+                return max(0.01, v)
+            except (TypeError, ValueError):
+                return default
+        def _int(name, default):
+            try:
+                return max(0, int(request.GET.get(name) or default))
+            except (TypeError, ValueError):
+                return default
+
+        over_factor  = _float('over_factor', 1.5)
+        under_factor = _float('under_factor', 0.5)
+        min_total    = _int('min_total', 4)
+        site_focus   = request.GET.get('site')
+
+        # ── Pull every Active employee with site / department / position ──
+        scope = (Employee.objects
+                 .filter(status__iexact='Active')
+                 .select_related('site')
+                 .values('site_id', 'site__name', 'department', 'position', 'salary_grade'))
+
+        if not request.user.is_superuser:
+            try:
+                profile = AdminProfile.objects.get(user=request.user)
+                allowed = set(profile.sites.values_list('id', flat=True))
+                scope = [e for e in scope if e['site_id'] in allowed]
+            except AdminProfile.DoesNotExist:
+                scope = []
+
+        # ── Group: (department, position) → site_id → count ──
+        # Position uses Employee.position first, salary_grade fall-back
+        # (matches how the distribution list counts).
+        groups = defaultdict(lambda: defaultdict(int))  # (dept, pos) -> {site_id: n}
+        site_names = {}
+        for e in scope:
+            if e.get('site_id') is None:
+                continue
+            dept = (e.get('department') or '—').strip() or '—'
+            pos  = ((e.get('position') or e.get('salary_grade') or '').strip() or '—')
+            if pos == '—':
+                continue
+            groups[(dept, pos)][e['site_id']] += 1
+            site_names[e['site_id']] = e.get('site__name') or f'Site {e["site_id"]}'
+
+        # ── Build recommendations per (dept, pos) ──
+        recommendations = []
+        for (dept, pos), per_site in groups.items():
+            counts = list(per_site.values())
+            total  = sum(counts)
+            if total < min_total or len(counts) < 2:
+                continue
+            counts_sorted = sorted(counts)
+            mid = len(counts_sorted) // 2
+            median = (counts_sorted[mid] if len(counts_sorted) % 2
+                      else (counts_sorted[mid - 1] + counts_sorted[mid]) / 2)
+            if median <= 0:
+                continue
+
+            over  = []   # (site_id, count, surplus)
+            under = []   # (site_id, count, deficit)
+            for sid, n in per_site.items():
+                if n > median * over_factor:
+                    over.append((sid, n, n - median))
+                elif n < median * under_factor:
+                    under.append((sid, n, median - n))
+
+            if not over or not under:
+                continue
+
+            over.sort(key=lambda x: -x[2])
+            under.sort(key=lambda x: -x[2])
+
+            # Greedy assignment from biggest surplus to biggest deficit
+            moves = []
+            i = j = 0
+            while i < len(over) and j < len(under):
+                src_id, src_n, src_surplus = over[i]
+                dst_id, dst_n, dst_deficit = under[j]
+                qty = max(1, int(min(src_surplus, dst_deficit)))
+                if qty == 0:
+                    break
+                moves.append({
+                    'from_site_id': src_id,
+                    'from_site':    site_names[src_id],
+                    'from_count':   src_n,
+                    'to_site_id':   dst_id,
+                    'to_site':      site_names[dst_id],
+                    'to_count':     dst_n,
+                    'quantity':     qty,
+                })
+                src_surplus -= qty
+                dst_deficit -= qty
+                over[i]  = (src_id, src_n, src_surplus)
+                under[j] = (dst_id, dst_n, dst_deficit)
+                if src_surplus <= 0: i += 1
+                if dst_deficit <= 0: j += 1
+
+            if site_focus and site_focus != 'all':
+                try:
+                    sf = int(site_focus)
+                    moves = [m for m in moves if m['from_site_id'] == sf or m['to_site_id'] == sf]
+                except (TypeError, ValueError):
+                    pass
+                if not moves:
+                    continue
+
+            recommendations.append({
+                'department':   dept,
+                'position':     pos,
+                'total':        total,
+                'median':       round(float(median), 1),
+                'moves':        moves,
+                'impact':       sum(m['quantity'] for m in moves),
+            })
+
+        recommendations.sort(key=lambda r: -r['impact'])
+
+        return Response({
+            'count':            len(recommendations),
+            'as_of':            str(timezone.localdate()),
+            'over_factor':      over_factor,
+            'under_factor':     under_factor,
+            'recommendations':  recommendations,
+        })
+
+
+# ---------------------------------------------------------------------------
+# Executive summary (5 NL bullets)
+# ---------------------------------------------------------------------------
+
+class ExecutiveSummaryView(APIView):
+    """GET /api/attendance/analytics/executive-summary/?period=daily|weekly
+
+    Auto-composes 5 bullets summarising the state of the operation. Pure
+    template-based NLG — no LLM call needed. Each bullet has a metric value,
+    a comparison delta, and a sentence ready for display.
+    """
+    permission_classes = [IsAdminUser | IsSiteAdmin]
+
+    def get(self, request):
+        from datetime import timedelta
+        from collections import defaultdict
+
+        period = (request.GET.get('period') or 'daily').lower()
+        if period not in ('daily', 'weekly'):
+            period = 'daily'
+        today = timezone.localdate()
+
+        # Scope
+        emp_scope = Employee.objects.all()
+        if not request.user.is_superuser:
+            try:
+                profile = AdminProfile.objects.get(user=request.user)
+                emp_scope = emp_scope.filter(site__in=profile.sites.all())
+            except AdminProfile.DoesNotExist:
+                emp_scope = emp_scope.none()
+
+        active_emp_qs = emp_scope.filter(status__iexact='Active')
+        active_emp_ids = list(active_emp_qs.values_list('id', flat=True))
+        bullets = []
+
+        # ── 1. Alerts today vs yesterday ─────────────────────────────────
+        def _alerts_for(d):
+            geofence = Attendance.objects.filter(date=d, is_within_geofence=False, user_id__in=active_emp_ids).count()
+            on_leave = (Attendance.objects.filter(date=d, user__status='Leave', user_id__in=active_emp_ids)
+                        .filter(Q(check_in_time__isnull=False) | Q(check_out_time__isnull=False))
+                        .filter(Q(user__leave_start_date__isnull=True) | Q(user__leave_start_date__lte=d))
+                        .filter(Q(user__leave_end_date__isnull=True)   | Q(user__leave_end_date__gte=d))
+                        .count())
+            return geofence + on_leave
+
+        if period == 'daily':
+            today_alerts = _alerts_for(today)
+            comp_alerts  = _alerts_for(today - timedelta(days=1))
+            comp_label   = 'yesterday'
+        else:
+            today_alerts = sum(_alerts_for(today - timedelta(days=i)) for i in range(7))
+            comp_alerts  = sum(_alerts_for(today - timedelta(days=i)) for i in range(7, 14))
+            comp_label   = 'previous 7 days'
+        delta = today_alerts - comp_alerts
+        pct = int(round((delta / comp_alerts) * 100)) if comp_alerts else None
+        if delta > 0:
+            sev = 'warn' if (pct is None or pct < 25) else 'bad'
+            sentence = f"{today_alerts} alerts {'today' if period=='daily' else 'this week'} — "
+            sentence += f"+{delta} vs {comp_label}" + (f" ({pct}% up)" if pct is not None else '')
+        elif delta < 0:
+            sev = 'good'
+            sentence = f"{today_alerts} alerts {'today' if period=='daily' else 'this week'} — {abs(delta)} fewer than {comp_label}"
+        else:
+            sev = 'neutral'
+            sentence = f"{today_alerts} alerts {'today' if period=='daily' else 'this week'} — unchanged vs {comp_label}"
+        bullets.append({'icon': '🚨', 'severity': sev, 'metric': today_alerts, 'delta': delta, 'text': sentence})
+
+        # ── 2. Biggest absence spike per site ─────────────────────────────
+        # For each site, compare today's absent count (active employees w/ no
+        # attendance) to the recent average.
+        def _absent_for(d):
+            present_ids = set(Attendance.objects.filter(date=d, user_id__in=active_emp_ids)
+                              .values_list('user_id', flat=True))
+            absent_by_site = defaultdict(int)
+            for emp in active_emp_qs.values('id', 'site_id', 'site__name'):
+                if emp['site_id'] is None or emp['id'] in present_ids:
+                    continue
+                absent_by_site[(emp['site_id'], emp.get('site__name') or 'Unassigned')] += 1
+            return absent_by_site
+
+        today_absent = _absent_for(today)
+        # Avg over last 7 days (excluding today)
+        baseline_totals = defaultdict(list)
+        for back in range(1, 8):
+            day_absent = _absent_for(today - timedelta(days=back))
+            for site_key, n in day_absent.items():
+                baseline_totals[site_key].append(n)
+        spike = None  # (site_name, today_n, baseline_avg, delta)
+        for site_key, n in today_absent.items():
+            samples = baseline_totals.get(site_key, [])
+            avg = sum(samples) / len(samples) if samples else 0
+            d = n - avg
+            if d >= 5 and (spike is None or d > spike[3]):
+                spike = (site_key[1], n, avg, d)
+        if spike:
+            site_name, n, avg, d = spike
+            bullets.append({'icon': '📍', 'severity': 'warn' if d < 15 else 'bad',
+                            'metric': n,
+                            'delta': round(d, 1),
+                            'text': f"Absence spike at {site_name} — {n} absent today vs ~{int(round(avg))} typical (+{int(round(d))})"})
+        else:
+            bullets.append({'icon': '📍', 'severity': 'good', 'metric': 0, 'delta': 0,
+                            'text': 'No site is significantly above its usual absence rate today.'})
+
+        # ── 3. Document expiry urgency ────────────────────────────────────
+        expired = critical = urgent = 0
+        for emp in active_emp_qs.values('passport_expiry', 'visa_expiry_date'):
+            for fld in ('passport_expiry', 'visa_expiry_date'):
+                v = emp.get(fld)
+                if not v:
+                    continue
+                d = (v - today).days
+                if d < 0:    expired  += 1
+                elif d <= 14: critical += 1
+                elif d <= 30: urgent   += 1
+        if expired or critical:
+            bullets.append({'icon': '📄', 'severity': 'bad' if expired else 'warn',
+                            'metric': expired + critical,
+                            'delta': None,
+                            'text': (f"{expired} document(s) already expired"
+                                     + (f" and {critical} expiring in the next 14 days" if critical else ''))})
+        elif urgent:
+            bullets.append({'icon': '📄', 'severity': 'warn',
+                            'metric': urgent, 'delta': None,
+                            'text': f"{urgent} document(s) expiring within 30 days."})
+        else:
+            bullets.append({'icon': '📄', 'severity': 'good', 'metric': 0, 'delta': None,
+                            'text': 'No documents expiring in the next 30 days.'})
+
+        # ── 4. Manpower imbalance (most critically understaffed trade-site) ─
+        # Reuses the same median-based detector as ManpowerRecommendationsView.
+        groups = defaultdict(lambda: defaultdict(int))
+        for e in active_emp_qs.values('site_id', 'site__name', 'department', 'position', 'salary_grade'):
+            if e.get('site_id') is None:
+                continue
+            pos = ((e.get('position') or e.get('salary_grade') or '').strip())
+            if not pos:
+                continue
+            groups[(e.get('department') or '—', pos)][(e['site_id'], e.get('site__name') or 'Unassigned')] += 1
+        worst_under = None  # (dept, pos, site_name, count, median, deficit)
+        for (dept, pos), per_site in groups.items():
+            if len(per_site) < 2:
+                continue
+            counts = sorted(per_site.values())
+            mid = len(counts) // 2
+            median = counts[mid] if len(counts) % 2 else (counts[mid - 1] + counts[mid]) / 2
+            if median < 2:
+                continue
+            for (sid, sname), n in per_site.items():
+                if n < median * 0.5:
+                    deficit = median - n
+                    if worst_under is None or deficit > worst_under[5]:
+                        worst_under = (dept, pos, sname, n, median, deficit)
+        if worst_under:
+            dept, pos, sname, n, median, deficit = worst_under
+            bullets.append({'icon': '👷', 'severity': 'warn' if deficit < 10 else 'bad',
+                            'metric': int(deficit),
+                            'delta': None,
+                            'text': f"{sname} is short on {pos} — {int(n)} on site vs ~{int(round(median))} typical (need {int(round(deficit))} more)"})
+        else:
+            bullets.append({'icon': '👷', 'severity': 'good', 'metric': 0, 'delta': None,
+                            'text': 'Manpower is well-balanced across sites today.'})
+
+        # ── 5. Attendance rate snapshot ───────────────────────────────────
+        today_attended = Attendance.objects.filter(date=today, user_id__in=active_emp_ids).values_list('user_id', flat=True).distinct().count()
+        total_active = len(active_emp_ids)
+        rate = (today_attended / total_active * 100) if total_active else 0
+        last_week_rates = []
+        for back in range(1, 8):
+            d = today - timedelta(days=back)
+            attended = Attendance.objects.filter(date=d, user_id__in=active_emp_ids).values_list('user_id', flat=True).distinct().count()
+            last_week_rates.append((attended / total_active * 100) if total_active else 0)
+        avg_rate = sum(last_week_rates) / len(last_week_rates) if last_week_rates else 0
+        delta = rate - avg_rate
+        if delta < -3:
+            sev = 'warn' if delta > -8 else 'bad'
+            txt = f"Attendance {rate:.1f}% — {abs(delta):.1f} pts below 7-day average ({avg_rate:.1f}%)"
+        elif delta > 3:
+            sev = 'good'
+            txt = f"Attendance {rate:.1f}% — {delta:.1f} pts above 7-day average ({avg_rate:.1f}%)"
+        else:
+            sev = 'neutral'
+            txt = f"Attendance {rate:.1f}% — in line with 7-day average ({avg_rate:.1f}%)"
+        bullets.append({'icon': '📊', 'severity': sev, 'metric': round(rate, 1), 'delta': round(delta, 1), 'text': txt})
+
+        # ── Optional LLM polish ──────────────────────────────────────────
+        # Opt-in per request via ?ai=true. We compute the bullets with the
+        # heuristic engine FIRST (so the response is correct even if the LLM
+        # fails or is disabled), then rewrite the prose only if asked.
+        engine = 'heuristic'
+        if (request.GET.get('ai') or '').lower() in ('1', 'true', 'yes'):
+            from attendance.services import llm as _llm
+            polished = _llm.polish_summary(bullets)
+            if polished:
+                bullets = polished
+                engine = 'llm'
+
+        return Response({
+            'as_of': str(today),
+            'period': period,
+            'engine': engine,
+            'bullets': bullets,
+        })
+
+
+# ---------------------------------------------------------------------------
+# Ask-the-Data — natural-language Q&A
+# ---------------------------------------------------------------------------
+
+class AskDataView(APIView):
+    """POST /api/attendance/analytics/ask/   body: {"q": "<question>"}
+
+    Two-tier NL parser:
+      1) If AI_ENABLED + OPENAI_API_KEY are set, gpt-4o-mini parses the
+         question into structured fields (much better at long-tail phrasings).
+      2) On any LLM failure (disabled, missing key, timeout, malformed JSON,
+         etc.) it falls back to the original keyword parser — predictable,
+         free, never breaks.
+
+    Returns the same `as_understood` shape either way + an `engine` field so
+    the UI can show whether the answer came from the LLM or the heuristic.
+    """
+    permission_classes = [IsAdminUser | IsSiteAdmin]
+
+    def post(self, request):
+        from datetime import timedelta
+        import re as _re
+        from attendance.services import llm as _llm
+
+        q_raw = (request.data.get('q') or '').strip()
+        if not q_raw:
+            return Response({'error': 'Please type a question.'}, status=400)
+        today = timezone.localdate()
+
+        # ── Snapshot the entity catalogues once (used by both parsers) ───
+        sites_qs       = list(Site.objects.values('id', 'name'))
+        positions_qs   = list(JobCategory.objects.filter(is_active=True).values_list('name', flat=True))
+        departments_qs = list(Department.objects.filter(is_active=True).values_list('name', flat=True))
+
+        # ── Engine 1: LLM parser (preferred when enabled) ────────────────
+        engine = 'heuristic'
+        parsed = None
+        if _llm.ai_is_enabled():
+            parsed = _llm.parse_question(
+                q_raw,
+                sites=[s['name'] for s in sites_qs],
+                positions=positions_qs,
+                departments=departments_qs,
+            )
+            if parsed:
+                engine = 'llm'
+
+        # ── Engine 2 (fallback): original keyword parser ─────────────────
+        if not parsed:
+            q = ' ' + q_raw.lower() + ' '
+            intent = 'list'
+            if any(k in q for k in (' how many ', ' how much ', ' count ', ' number of ', ' total ')):
+                intent = 'count'
+            if any(k in q for k in (' show me ', ' list ', ' find ', ' give me ')):
+                intent = 'list'
+
+            status = None
+            if   ' on leave '   in q or ' on-leave '   in q or ' leave '       in q: status = 'Leave'
+            elif ' resigned '   in q: status = 'Resigned'
+            elif ' terminated ' in q: status = 'Terminated'
+            elif ' active '     in q: status = 'Active'
+            elif ' no renewal ' in q or ' no-renewal ' in q:                        status = 'No Renewal'
+            elif ' absconding ' in q or ' absconded '  in q:                        status = 'Absconding'
+
+            time_window = None
+            if   ' today '     in q: time_window = 'today'
+            elif ' yesterday ' in q: time_window = 'yesterday'
+            elif ' this week ' in q: time_window = 'this_week'
+            elif ' last week ' in q: time_window = 'last_week'
+            elif ' this month ' in q: time_window = 'this_month'
+
+            attendance_mod = None
+            if ' absent ' in q:    attendance_mod = 'absent'
+            elif ' present ' in q: attendance_mod = 'present'
+            elif ' late ' in q:    attendance_mod = 'late'
+
+            def _norm(s): return _re.sub(r'\s+', ' ', s.lower()).strip()
+            q_norm = _norm(q_raw)
+            site_name = next((s['name'] for s in sites_qs if _norm(s['name']) in q_norm), None)
+            position  = next((p for p in positions_qs if len(p) >= 4 and _norm(p) in q_norm), None)
+            department = next((d for d in departments_qs if _norm(d) in q_norm), None)
+
+            parsed = {
+                'intent': intent, 'status': status, 'attendance': attendance_mod,
+                'site': site_name, 'position': position, 'department': department,
+                'time_window': time_window,
+            }
+
+        # ── Resolve site name → id (works for both engines) ──────────────
+        site = None
+        if parsed.get('site'):
+            site = next((s for s in sites_qs
+                         if (s['name'] or '').strip().lower() == (parsed['site'] or '').strip().lower()),
+                        None)
+
+        intent         = parsed.get('intent') or 'list'
+        status         = parsed.get('status')
+        attendance_mod = parsed.get('attendance')
+        position       = parsed.get('position')
+        department     = parsed.get('department')
+
+        # Translate the LLM's symbolic time-window into a date range
+        date_filter = None
+        tw = parsed.get('time_window')
+        if tw == 'today':       date_filter = {'start': today, 'end': today}
+        elif tw == 'yesterday': date_filter = {'start': today - timedelta(days=1), 'end': today - timedelta(days=1)}
+        elif tw == 'this_week': date_filter = {'start': today - timedelta(days=today.weekday()), 'end': today}
+        elif tw == 'last_week': date_filter = {'start': today - timedelta(days=today.weekday() + 7), 'end': today - timedelta(days=today.weekday() + 1)}
+        elif tw == 'this_month': date_filter = {'start': today.replace(day=1), 'end': today}
+
+        # ── Build queryset ────────────────────────────────────────────────
+        qs = Employee.objects.select_related('site').all()
+        if not request.user.is_superuser:
+            try:
+                profile = AdminProfile.objects.get(user=request.user)
+                qs = qs.filter(site__in=profile.sites.all())
+            except AdminProfile.DoesNotExist:
+                qs = qs.none()
+
+        if status:
+            qs = qs.filter(status__iexact=status)
+        if site:
+            qs = qs.filter(site_id=site['id'])
+        if position:
+            qs = qs.filter(Q(position__iexact=position) | (Q(position__in=['', None]) & Q(salary_grade__iexact=position)))
+        if department:
+            qs = qs.filter(department__iexact=department)
+
+        # Attendance-based filters
+        if attendance_mod and date_filter:
+            d_start, d_end = date_filter['start'], date_filter['end']
+            att = Attendance.objects.filter(date__gte=d_start, date__lte=d_end)
+            if attendance_mod == 'present':
+                ids = att.filter(status='present').values_list('user_id', flat=True)
+                qs = qs.filter(id__in=ids)
+            elif attendance_mod == 'late':
+                ids = att.filter(status='late').values_list('user_id', flat=True)
+                qs = qs.filter(id__in=ids)
+            elif attendance_mod == 'absent':
+                # Active employees with no attendance record in the window.
+                ids = att.values_list('user_id', flat=True).distinct()
+                qs = qs.filter(status__iexact='Active').exclude(id__in=ids)
+
+        # Avoid run-away lists
+        sample_limit = 50
+        results = list(qs.values('id', 'name', 'badge_number', 'department', 'position', 'site__name', 'status')[:sample_limit])
+        total_count = qs.count()
+
+        as_understood = {
+            'intent':       intent,
+            'status':       status,
+            'site':         site['name'] if site else None,
+            'position':     position,
+            'department':   department,
+            'attendance':   attendance_mod,
+            'window':       (f"{date_filter['start']} → {date_filter['end']}"
+                             if date_filter else None),
+        }
+
+        # Compose a friendly answer sentence
+        bits = []
+        if status:                              bits.append(f"on {status}")
+        if attendance_mod:                       bits.append(attendance_mod)
+        if position:                             bits.append(f'"{position}"')
+        if department:                           bits.append(f'in {department}')
+        if site:                                 bits.append(f'at {site["name"]}')
+        if date_filter:                          bits.append(f"between {date_filter['start']} and {date_filter['end']}")
+        descriptor = ' '.join(bits) or 'employees'
+        if intent == 'count':
+            answer = f"{total_count} {descriptor}".strip()
+        else:
+            if total_count == 0:
+                answer = f"No {descriptor} found.".strip()
+            else:
+                answer = f"{total_count} {descriptor}".strip()
+                if total_count > sample_limit:
+                    answer += f" — showing first {sample_limit}"
+
+        return Response({
+            'question':     q_raw,
+            'engine':       engine,                # 'llm' or 'heuristic'
+            'as_understood': as_understood,
+            'count':        total_count,
+            'answer':       answer,
+            'results':      [{
+                'employee_id': r['id'],
+                'name':        r['name'],
+                'badge':       r['badge_number'] or '',
+                'department':  r['department'] or '',
+                'position':    r['position'] or '',
+                'site':        r['site__name'] or '',
+                'status':      r['status'] or '',
+            } for r in results],
+        })
+
+
+# Template views
+@login_required(login_url='admin-login')
+def admin_manpower_recommendations_view(request):
+    if not request.user.is_staff:
+        return redirect('admin-login')
+    return render(request, 'manpower_recommendations.html', {'is_superuser': request.user.is_superuser})
+
+
+@login_required(login_url='admin-login')
+def admin_ask_data_view(request):
+    if not request.user.is_staff:
+        return redirect('admin-login')
+    return render(request, 'ask_data.html', {'is_superuser': request.user.is_superuser})
+
+
+# ---------------------------------------------------------------------------
+# Geofence smart-tuning
+# ---------------------------------------------------------------------------
+
+def _haversine_m(lat1, lon1, lat2, lon2):
+    """Distance in meters between two WGS84 points."""
+    from math import radians, sin, cos, asin, sqrt
+    R = 6371000.0
+    a = (radians(lat1), radians(lon1), radians(lat2), radians(lon2))
+    d_lat = a[2] - a[0]
+    d_lon = a[3] - a[1]
+    h = sin(d_lat / 2) ** 2 + cos(a[0]) * cos(a[2]) * sin(d_lon / 2) ** 2
+    return 2 * R * asin(sqrt(h))
+
+
+def _point_in_polygon(lat, lon, polygon):
+    """Ray-casting in lat/lon space. Polygon is [(lat, lon), ...]."""
+    if not polygon or len(polygon) < 3:
+        return False
+    inside = False
+    j = len(polygon) - 1
+    for i in range(len(polygon)):
+        lat_i, lon_i = polygon[i]
+        lat_j, lon_j = polygon[j]
+        if ((lon_i > lon) != (lon_j > lon)) and \
+           (lat < (lat_j - lat_i) * (lon - lon_i) / ((lon_j - lon_i) or 1e-12) + lat_i):
+            inside = not inside
+        j = i
+    return inside
+
+
+def _dist_to_segment_m(plat, plon, lat1, lon1, lat2, lon2):
+    """Approximate point-to-segment distance in meters. Uses local equirect.
+    projection — fine for sub-km segments where Earth curvature is negligible.
+    """
+    from math import radians, cos
+    # Pick the segment midpoint's latitude for the projection scale
+    mid_lat_rad = radians((lat1 + lat2) / 2)
+    mx = 111320.0 * cos(mid_lat_rad)   # meters per degree of longitude at this latitude
+    my = 110540.0                       # meters per degree of latitude (close enough)
+    # Project both segment endpoints and the point into local x-y meters
+    x1, y1 = (lon1 * mx, lat1 * my)
+    x2, y2 = (lon2 * mx, lat2 * my)
+    px, py = (plon * mx, plat * my)
+    dx, dy = x2 - x1, y2 - y1
+    seg_len2 = dx * dx + dy * dy
+    if seg_len2 == 0:
+        return ((px - x1) ** 2 + (py - y1) ** 2) ** 0.5
+    t = max(0.0, min(1.0, ((px - x1) * dx + (py - y1) * dy) / seg_len2))
+    cx, cy = (x1 + t * dx, y1 + t * dy)
+    return ((px - cx) ** 2 + (py - cy) ** 2) ** 0.5
+
+
+def _dist_to_polygon_m(lat, lon, polygon):
+    """Min distance in meters from a point to any edge of the polygon."""
+    if not polygon or len(polygon) < 2:
+        return None
+    best = float('inf')
+    for i in range(len(polygon)):
+        lat1, lon1 = polygon[i]
+        lat2, lon2 = polygon[(i + 1) % len(polygon)]
+        d = _dist_to_segment_m(lat, lon, lat1, lon1, lat2, lon2)
+        if d < best:
+            best = d
+    return best
+
+
+def _cluster_points(points, eps_m=30.0):
+    """Greedy single-link clustering — each new point joins the existing
+    cluster whose centroid is within `eps_m` meters. Good enough at our scale.
+
+    points: list of dicts {'lat': float, 'lon': float, ...meta}
+    Returns: list of clusters; each = {'centroid': (lat, lon), 'points': [...]}.
+    """
+    clusters = []
+    for p in points:
+        joined = False
+        for c in clusters:
+            cl, cn = c['centroid']
+            if _haversine_m(p['lat'], p['lon'], cl, cn) <= eps_m:
+                c['points'].append(p)
+                # Update centroid as running mean
+                n = len(c['points'])
+                avg_lat = (cl * (n - 1) + p['lat']) / n
+                avg_lon = (cn * (n - 1) + p['lon']) / n
+                c['centroid'] = (avg_lat, avg_lon)
+                joined = True
+                break
+        if not joined:
+            clusters.append({'centroid': (p['lat'], p['lon']), 'points': [p]})
+    return clusters
+
+
+def _polygon_centroid(polygon):
+    if not polygon:
+        return None
+    lats = [p[0] for p in polygon]
+    lons = [p[1] for p in polygon]
+    return (sum(lats) / len(lats), sum(lons) / len(lons))
+
+
+def _direction_from(lat0, lon0, lat1, lon1):
+    """Returns a compass direction (N/NE/E/...) from point 0 → point 1."""
+    from math import atan2, degrees, radians, cos
+    d_lon = (lon1 - lon0) * cos(radians((lat0 + lat1) / 2))
+    d_lat = (lat1 - lat0)
+    angle = (degrees(atan2(d_lon, d_lat)) + 360) % 360
+    rose = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']
+    return rose[int((angle + 22.5) // 45) % 8]
+
+
+class GeofenceTuningView(APIView):
+    """GET /api/attendance/analytics/geofence-tuning/?site=&days=
+
+    For each site (or just the requested one), pulls the last `days` of
+    out-of-bounds attendance records, computes how far each miss was from the
+    closest polygon edge, clusters them, and emits actionable suggestions:
+
+    - "boundary": cluster is close to the polygon edge (likely a too-tight gate)
+        → suggested action: extend the polygon ~Xm in compass direction Y
+    - "off_site": cluster is far from the polygon (>200m)
+        → suggested action: investigate; not a geofence issue
+    - "near": single-digit hits very near the edge — quieter signal
+    """
+    permission_classes = [IsAdminUser | IsSiteAdmin]
+
+    def get(self, request):
+        from datetime import timedelta
+
+        try:
+            days = max(1, min(int(request.GET.get('days') or 30), 365))
+        except (TypeError, ValueError):
+            days = 30
+
+        site_filter = request.GET.get('site')
+        sites_qs = Site.objects.exclude(coordinates__isnull=True).exclude(coordinates=[])
+        if site_filter and site_filter != 'all':
+            try:
+                sites_qs = sites_qs.filter(id=int(site_filter))
+            except (TypeError, ValueError):
+                pass
+        if not request.user.is_superuser:
+            try:
+                profile = AdminProfile.objects.get(user=request.user)
+                sites_qs = sites_qs.filter(id__in=profile.sites.values_list('id', flat=True))
+            except AdminProfile.DoesNotExist:
+                sites_qs = sites_qs.none()
+
+        today = timezone.localdate()
+        window_start = today - timedelta(days=days)
+
+        out = []
+        for site in sites_qs:
+            polygon = list(site.coordinates or [])
+            if len(polygon) < 3:
+                continue
+
+            misses = list(Attendance.objects
+                          .filter(user__site=site,
+                                  is_within_geofence=False,
+                                  date__gte=window_start,
+                                  latitude__isnull=False, longitude__isnull=False)
+                          .values('latitude', 'longitude', 'date', 'user_id'))
+            if not misses:
+                continue
+
+            # Compute distance-to-edge for every miss
+            points = []
+            for m in misses:
+                try:
+                    lat = float(m['latitude']); lon = float(m['longitude'])
+                except (TypeError, ValueError):
+                    continue
+                d_edge = _dist_to_polygon_m(lat, lon, polygon)
+                if d_edge is None:
+                    continue
+                inside = _point_in_polygon(lat, lon, polygon)
+                points.append({
+                    'lat': lat, 'lon': lon,
+                    'distance_m': d_edge,
+                    'inside': inside,
+                    'user_id': m['user_id'],
+                    'date': m['date'],
+                })
+
+            if not points:
+                continue
+
+            clusters = _cluster_points(points, eps_m=30.0)
+            poly_centroid = _polygon_centroid(polygon)
+
+            cluster_recs = []
+            for c in clusters:
+                pts = c['points']
+                n = len(pts)
+                avg_dist = sum(p['distance_m'] for p in pts) / n
+                unique_users = len({p['user_id'] for p in pts})
+                # Categorise
+                if avg_dist <= 50:
+                    kind = 'boundary'
+                    severity = 'high' if n >= 5 else ('med' if n >= 3 else 'low')
+                elif avg_dist <= 200:
+                    kind = 'near'
+                    severity = 'med' if n >= 5 else 'low'
+                else:
+                    kind = 'off_site'
+                    severity = 'low' if n < 5 else 'med'
+                # Direction from polygon centroid out to cluster centroid
+                cl, cn = c['centroid']
+                direction = _direction_from(poly_centroid[0], poly_centroid[1], cl, cn) if poly_centroid else None
+
+                suggestion = None
+                if kind == 'boundary' and n >= 3:
+                    add_m = int(round(min(avg_dist + 10, 50)))
+                    suggestion = (f"Extend the geofence by ~{add_m} m on the {direction} side — "
+                                  f"{n} miss{'es' if n != 1 else ''} from {unique_users} worker"
+                                  f"{'s' if unique_users != 1 else ''} clustered there.")
+                elif kind == 'off_site' and n >= 5:
+                    suggestion = (f"Cluster sits {int(round(avg_dist))} m off-site ({direction}) — "
+                                  f"likely workers at a different location, not a boundary issue.")
+
+                cluster_recs.append({
+                    'lat': cl, 'lon': cn,
+                    'count': n,
+                    'unique_users': unique_users,
+                    'avg_distance_m': round(avg_dist, 1),
+                    'direction': direction,
+                    'kind': kind,
+                    'severity': severity,
+                    'suggestion': suggestion,
+                })
+
+            # Sort: boundary issues with most points first, then near, then off_site
+            kind_rank = {'boundary': 0, 'near': 1, 'off_site': 2}
+            cluster_recs.sort(key=lambda r: (kind_rank.get(r['kind'], 9), -r['count']))
+
+            actionable = [c for c in cluster_recs if c.get('suggestion')]
+            out.append({
+                'site_id': site.id,
+                'site_name': site.name,
+                'polygon': [[lat, lon] for lat, lon in polygon],
+                'centroid': list(poly_centroid) if poly_centroid else None,
+                'total_misses': len(points),
+                'clusters': cluster_recs,
+                'has_action_items': bool(actionable),
+                'action_summary': self._site_summary(cluster_recs, points),
+            })
+
+        # Sort: sites with most misses first
+        out.sort(key=lambda s: -s['total_misses'])
+
+        return Response({
+            'as_of': str(today),
+            'window_days': days,
+            'sites': out,
+        })
+
+    @staticmethod
+    def _site_summary(clusters, points):
+        boundary = sum(1 for c in clusters if c['kind'] == 'boundary')
+        off_site = sum(1 for c in clusters if c['kind'] == 'off_site')
+        near_edge = sum(1 for p in points if p['distance_m'] <= 50)
+        far = sum(1 for p in points if p['distance_m'] > 200)
+        return {
+            'total_misses': len(points),
+            'near_edge_misses': near_edge,
+            'far_misses': far,
+            'boundary_clusters': boundary,
+            'off_site_clusters': off_site,
+        }
+
+
+@login_required(login_url='admin-login')
+def admin_geofence_tuning_view(request):
+    if not request.user.is_staff:
+        return redirect('admin-login')
+    return render(request, 'geofence_tuning.html', {'is_superuser': request.user.is_superuser})
+
+
+# ---------------------------------------------------------------------------
+# Site Activity Report
+# ---------------------------------------------------------------------------
+
+class SiteActivityView(APIView):
+    """GET /api/attendance/analytics/site-activity/?days=14
+
+    Per-site activity report — which sites are actively recording attendance
+    today, which are idle, and which haven't received any attendance in a
+    while. Drives the dashboard's daily Site Activity panel.
+
+    Per site:
+      - active_employees:        total Active employees assigned to the site
+      - present_today:           distinct employees with an Attendance row today
+      - present_rate:            present_today / active_employees (percentage)
+      - last_attendance:         most recent attendance datetime on this site
+      - hours_since_last:        time since that attendance (None if never)
+      - activity_status:         'active' | 'idle' | 'inactive' | 'never_used'
+      - trend_7d:                attendance counts for the last 7 days (oldest → newest)
+      - avg_7d:                  7-day moving average
+      - delta_vs_avg:            today vs 7-day average (percentage points)
+
+    Activity bands (tunable via ?idle_hours= / ?inactive_days=):
+      active     — at least one attendance in the last `idle_hours` (default 24h)
+      idle       — last attendance 1-`inactive_days` days ago
+      inactive   — last attendance > `inactive_days` days ago (default 7d)
+      never_used — no attendance recorded ever
+    """
+    permission_classes = [IsAdminUser | IsSiteAdmin]
+
+    def get(self, request):
+        from datetime import timedelta
+        from collections import defaultdict
+        from django.db.models import Max, Count
+
+        try:
+            days = max(1, min(int(request.GET.get('days') or 14), 90))
+        except (TypeError, ValueError):
+            days = 14
+        try:
+            idle_hours = max(1, min(int(request.GET.get('idle_hours') or 24), 168))
+        except (TypeError, ValueError):
+            idle_hours = 24
+        try:
+            inactive_days = max(1, min(int(request.GET.get('inactive_days') or 7), 90))
+        except (TypeError, ValueError):
+            inactive_days = 7
+
+        now = timezone.now()
+        today = timezone.localdate()
+
+        # ── Scope sites by site-admin permission ──────────────────────────
+        sites_qs = Site.objects.all().order_by('name')
+        if not request.user.is_superuser:
+            try:
+                profile = AdminProfile.objects.get(user=request.user)
+                sites_qs = sites_qs.filter(id__in=profile.sites.values_list('id', flat=True))
+            except AdminProfile.DoesNotExist:
+                sites_qs = sites_qs.none()
+        site_ids = list(sites_qs.values_list('id', flat=True))
+        if not site_ids:
+            return Response({'as_of': str(today), 'sites': [],
+                             'totals': {}, 'inactive_sites': []})
+
+        # ── Active-employee counts per site ───────────────────────────────
+        emp_counts = dict(
+            Employee.objects
+            .filter(status__iexact='Active', site_id__in=site_ids)
+            .values('site_id')
+            .annotate(n=Count('id'))
+            .values_list('site_id', 'n')
+        )
+
+        # ── Today's distinct attended employees per site ──────────────────
+        present_today = dict(
+            Attendance.objects
+            .filter(date=today, user__site_id__in=site_ids)
+            .values('user__site_id')
+            .annotate(n=Count('user_id', distinct=True))
+            .values_list('user__site_id', 'n')
+        )
+
+        # ── Most recent attendance per site (by check_in_time) ────────────
+        last_attendance_raw = dict(
+            Attendance.objects
+            .filter(user__site_id__in=site_ids, check_in_time__isnull=False)
+            .values('user__site_id')
+            .annotate(latest=Max('check_in_time'))
+            .values_list('user__site_id', 'latest')
+        )
+
+        # ── 7-day rolling attendance counts per site (for trend chart) ───
+        trend_start = today - timedelta(days=6)
+        trend_rows = (
+            Attendance.objects
+            .filter(date__gte=trend_start, date__lte=today, user__site_id__in=site_ids)
+            .values('user__site_id', 'date')
+            .annotate(n=Count('user_id', distinct=True))
+            .values_list('user__site_id', 'date', 'n')
+        )
+        per_site_per_day = defaultdict(lambda: defaultdict(int))
+        for sid, d, n in trend_rows:
+            per_site_per_day[sid][d] = n
+
+        # ── Compose per-site rows ─────────────────────────────────────────
+        rows = []
+        for site in sites_qs:
+            sid = site.id
+            active_emps = emp_counts.get(sid, 0)
+            today_count = present_today.get(sid, 0)
+            last_ci = last_attendance_raw.get(sid)
+            hours_since = None
+            if last_ci:
+                hours_since = round((now - last_ci).total_seconds() / 3600.0, 1)
+
+            if last_ci is None:
+                status_band = 'never_used'
+            elif hours_since is not None and hours_since <= idle_hours:
+                status_band = 'active'
+            elif hours_since is not None and hours_since <= inactive_days * 24:
+                status_band = 'idle'
+            else:
+                status_band = 'inactive'
+
+            # Trend array: 7 days oldest → newest
+            trend = []
+            for offset in range(6, -1, -1):
+                d = today - timedelta(days=offset)
+                trend.append(per_site_per_day[sid].get(d, 0))
+            avg7 = round(sum(trend) / 7.0, 1) if trend else 0
+            delta = round(today_count - avg7, 1)
+
+            present_rate = round(today_count / active_emps * 100, 1) if active_emps else 0.0
+
+            rows.append({
+                'site_id':           sid,
+                'site_name':         site.name,
+                'active_employees':  active_emps,
+                'present_today':     today_count,
+                'present_rate':      present_rate,
+                'last_attendance':   last_ci.isoformat() if last_ci else None,
+                'hours_since_last':  hours_since,
+                'activity_status':   status_band,
+                'trend_7d':          trend,
+                'avg_7d':            avg7,
+                'delta_vs_avg':      delta,
+            })
+
+        # Sort: inactive + never_used first (admin needs to act on these),
+        # then by present_today desc so busy sites surface near the top.
+        order = {'never_used': 0, 'inactive': 1, 'idle': 2, 'active': 3}
+        rows.sort(key=lambda r: (order.get(r['activity_status'], 9), -r['present_today']))
+
+        # ── Roll-up totals ────────────────────────────────────────────────
+        totals = {
+            'sites_total':      len(rows),
+            'sites_active':     sum(1 for r in rows if r['activity_status'] == 'active'),
+            'sites_idle':       sum(1 for r in rows if r['activity_status'] == 'idle'),
+            'sites_inactive':   sum(1 for r in rows if r['activity_status'] == 'inactive'),
+            'sites_never_used': sum(1 for r in rows if r['activity_status'] == 'never_used'),
+            'present_today':    sum(r['present_today'] for r in rows),
+            'active_employees': sum(r['active_employees'] for r in rows),
+        }
+        totals['overall_present_rate'] = (
+            round(totals['present_today'] / totals['active_employees'] * 100, 1)
+            if totals['active_employees'] else 0.0
+        )
+
+        # Quick-access list of the "system not used" sites for the alert callout
+        inactive_sites = [
+            {'site_id': r['site_id'], 'site_name': r['site_name'],
+             'hours_since_last': r['hours_since_last'],
+             'activity_status': r['activity_status'],
+             'active_employees': r['active_employees']}
+            for r in rows
+            if r['activity_status'] in ('inactive', 'never_used')
+        ]
+
+        return Response({
+            'as_of':           str(today),
+            'idle_hours':      idle_hours,
+            'inactive_days':   inactive_days,
+            'totals':          totals,
+            'sites':           rows,
+            'inactive_sites':  inactive_sites,
+        })

@@ -1,0 +1,11 @@
+{% comment %}
+Page header.
+Usage:
+    {% include 'partials/page_header.html' with title="Dashboard" subtitle="Saturday, June 12, 2026" %}
+{% endcomment %}
+<div class="page-header">
+    <div>
+        <h1>{{ title }}</h1>
+        {% if subtitle %}<div class="subtitle">{{ subtitle }}</div>{% endif %}
+    </div>
+</div>

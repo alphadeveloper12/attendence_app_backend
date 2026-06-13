@@ -1,0 +1,224 @@
+{% extends 'base.html' %}
+
+{% block title %}Geofence Smart-Tuning - Admin Dashboard{% endblock %}
+
+{% block content %}
+<link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+
+<style>
+    .site-card { border: 1px solid #e5e7eb; border-radius: 14px; background: #fff; overflow: hidden; transition: box-shadow 120ms ease; }
+    .site-card:hover { box-shadow: 0 6px 18px rgba(0,0,0,0.06); }
+    .site-card + .site-card { margin-top: 16px; }
+    .site-head { padding: 14px 18px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; gap: 12px; }
+    .site-head .chev { color: #94a3b8; transition: transform 120ms ease; }
+    .site-card.is-open .site-head .chev { transform: rotate(90deg); color: #2563eb; }
+    .site-body { display: none; padding: 16px 18px 18px; border-top: 1px solid #f1f5f9; }
+    .site-card.is-open .site-body { display: block; }
+
+    .pill { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 0.7rem; font-weight: 600; }
+    .pill-bad   { background: rgba(220,38,38,0.12);  color: #b91c1c; }
+    .pill-warn  { background: rgba(217,119,6,0.12);  color: #b45309; }
+    .pill-info  { background: rgba(59,130,246,0.10); color: #1d4ed8; }
+    .pill-good  { background: rgba(34,197,94,0.10);  color: #15803d; }
+
+    .cluster-row { padding: 10px 12px; border: 1px solid #f1f5f9; border-radius: 10px; margin-top: 8px; background: #fafafa; display: flex; align-items: center; gap: 12px; }
+    .cluster-row.kind-boundary { background: #fffbeb; border-color: #fde68a; }
+    .cluster-row.kind-off_site { background: #f8fafc; }
+    .cluster-row.kind-near     { background: #ecfeff; }
+    .cluster-row .icon { font-size: 1.4rem; }
+    .map-pane { width: 100%; height: 360px; border-radius: 10px; margin-top: 12px; background: #f1f5f9; }
+    .empty-state { text-align: center; padding: 60px 20px; color: #94a3b8; }
+</style>
+
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+        <h2 class="fw-bold mb-1">Geofence Smart-Tuning</h2>
+        <div class="small text-secondary" id="tuneSubtitle">Loading…</div>
+    </div>
+    <div class="d-flex gap-2 align-items-end flex-wrap">
+        <div>
+            <label class="form-label small fw-bold text-uppercase mb-0" style="font-size:0.6rem;">Window</label>
+            <select id="daysSelect" class="form-select form-select-sm" onchange="loadData()">
+                <option value="7">Last 7 days</option>
+                <option value="30" selected>Last 30 days</option>
+                <option value="90">Last 90 days</option>
+            </select>
+        </div>
+        <div>
+            <label class="form-label small fw-bold text-uppercase mb-0" style="font-size:0.6rem;">Site</label>
+            <select id="siteFilter" class="form-select form-select-sm" onchange="loadData()">
+                <option value="all">All Sites</option>
+            </select>
+        </div>
+    </div>
+</div>
+
+<div id="siteList">
+    <div class="text-center text-muted py-5"><div class="spinner-border spinner-border-sm"></div> Crunching coordinates…</div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDSFQyDq5VpsbAXjsie3xZKvah0__PCyBc"></script>
+<script>
+    const _maps = {};  // site_id -> {map, markers, polygon}
+
+    document.addEventListener('DOMContentLoaded', () => {
+        loadSites();
+        loadData();
+    });
+
+    async function loadSites() {
+        try {
+            const res = await fetch('/api/attendance/stats/');
+            const data = await res.json();
+            const sel = document.getElementById('siteFilter');
+            (data.sites || []).forEach(s => {
+                const opt = document.createElement('option');
+                opt.value = s.id; opt.textContent = s.name;
+                sel.appendChild(opt);
+            });
+        } catch (e) {}
+    }
+
+    async function loadData() {
+        const days = document.getElementById('daysSelect').value;
+        const site = document.getElementById('siteFilter').value;
+        const c = document.getElementById('siteList');
+        c.innerHTML = `<div class="text-center text-muted py-5"><div class="spinner-border spinner-border-sm"></div> Crunching coordinates…</div>`;
+        try {
+            const res = await fetch(`/api/attendance/analytics/geofence-tuning/?days=${days}&site=${site}`);
+            const data = await res.json();
+            document.getElementById('tuneSubtitle').textContent =
+                `${data.sites.length} site${data.sites.length === 1 ? '' : 's'} analysed over the last ${data.window_days} days (as of ${data.as_of})`;
+            render(data.sites || []);
+        } catch (e) {
+            c.innerHTML = `<div class="text-danger small text-center py-5">Failed to load.</div>`;
+        }
+    }
+
+    function _esc(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    function render(sites) {
+        const c = document.getElementById('siteList');
+        if (!sites.length) {
+            c.innerHTML = `<div class="empty-state">
+                <div style="font-size:3rem;opacity:0.3;">🎯</div>
+                <h5 class="fw-bold text-secondary mt-3">No geofence misses in this window</h5>
+                <p class="text-muted">Either things are working perfectly or no sites have polygons set up.</p>
+            </div>`;
+            return;
+        }
+        let html = '';
+        for (const s of sites) {
+            const sev = s.has_action_items ? 'pill-warn' : 'pill-info';
+            const a = s.action_summary || {};
+            html += `<div class="site-card" data-site-id="${s.site_id}">
+                <div class="site-head" onclick="toggleSite(${s.site_id})">
+                    <i class="ri-arrow-right-s-line chev" style="font-size:1.5rem;"></i>
+                    <div class="flex-grow-1">
+                        <div class="fw-bold">${_esc(s.site_name)}</div>
+                        <div class="small text-secondary mt-1">
+                            <span class="pill pill-info">${s.total_misses} miss${s.total_misses === 1 ? '' : 'es'}</span>
+                            ${a.near_edge_misses ? `<span class="pill pill-warn ms-1">${a.near_edge_misses} near edge</span>` : ''}
+                            ${a.far_misses ? `<span class="pill pill-info ms-1">${a.far_misses} far off-site</span>` : ''}
+                            ${a.boundary_clusters ? `<span class="pill pill-bad ms-1">${a.boundary_clusters} tight-gate cluster${a.boundary_clusters === 1 ? '' : 's'}</span>` : ''}
+                        </div>
+                    </div>
+                    <span class="pill ${sev}">${s.has_action_items ? 'Action suggested' : 'Looks OK'}</span>
+                </div>
+                <div class="site-body">
+                    ${s.clusters.map(cl => `
+                        <div class="cluster-row kind-${cl.kind}">
+                            <div class="icon">${cl.kind === 'boundary' ? '🚧' : cl.kind === 'near' ? '📍' : '🛰️'}</div>
+                            <div class="flex-grow-1">
+                                <div class="fw-bold small">${_clusterTitle(cl)}</div>
+                                ${cl.suggestion
+                                    ? `<div class="small mt-1" style="color:#b45309;">${_esc(cl.suggestion)}</div>`
+                                    : `<div class="small text-secondary mt-1">No action needed — just informational.</div>`}
+                            </div>
+                            <div class="text-secondary small" style="white-space:nowrap;">
+                                ${cl.count} hit${cl.count === 1 ? '' : 's'} · ${cl.unique_users} worker${cl.unique_users === 1 ? '' : 's'}
+                            </div>
+                        </div>
+                    `).join('')}
+                    <div class="map-pane" id="map-${s.site_id}"></div>
+                </div>
+            </div>`;
+        }
+        c.innerHTML = html;
+
+        // Stash site data for map rendering on expand
+        sites.forEach(s => { _maps[s.site_id] = { siteData: s, rendered: false }; });
+    }
+
+    function _clusterTitle(cl) {
+        const kind = cl.kind === 'boundary' ? 'Tight-gate cluster'
+                   : cl.kind === 'near'     ? 'Near-edge cluster'
+                   : 'Off-site cluster';
+        const dir = cl.direction ? ` (${cl.direction})` : '';
+        return `${kind}${dir} — avg ${cl.avg_distance_m} m from edge`;
+    }
+
+    function toggleSite(siteId) {
+        const card = document.querySelector(`.site-card[data-site-id="${siteId}"]`);
+        if (!card) return;
+        card.classList.toggle('is-open');
+        if (card.classList.contains('is-open')) {
+            renderMap(siteId);
+        }
+    }
+
+    function renderMap(siteId) {
+        const entry = _maps[siteId];
+        if (!entry || entry.rendered) return;
+        const s = entry.siteData;
+        const el = document.getElementById(`map-${siteId}`);
+        if (!el || !s.centroid) return;
+
+        const center = { lat: s.centroid[0], lng: s.centroid[1] };
+        const map = new google.maps.Map(el, {
+            center,
+            zoom: 18,
+            mapTypeId: 'hybrid',
+            mapTypeControl: false,
+            streetViewControl: false,
+        });
+
+        // Polygon
+        new google.maps.Polygon({
+            paths: s.polygon.map(([lat, lon]) => ({ lat, lng: lon })),
+            strokeColor: '#2563eb', strokeOpacity: 0.9, strokeWeight: 2,
+            fillColor: '#2563eb', fillOpacity: 0.10, map,
+        });
+
+        // Cluster markers (sized by count, coloured by kind)
+        const colors = { boundary: '#dc2626', near: '#2563eb', off_site: '#64748b' };
+        const bounds = new google.maps.LatLngBounds();
+        bounds.extend(center);
+        s.polygon.forEach(([lat, lon]) => bounds.extend({ lat, lng: lon }));
+        s.clusters.forEach(cl => {
+            const pos = { lat: cl.lat, lng: cl.lon };
+            new google.maps.Marker({
+                position: pos, map,
+                icon: {
+                    path: google.maps.SymbolPath.CIRCLE,
+                    scale: Math.min(20, 6 + cl.count),
+                    fillColor: colors[cl.kind] || '#64748b',
+                    fillOpacity: 0.8,
+                    strokeColor: '#fff', strokeWeight: 2,
+                },
+                title: `${cl.count} miss${cl.count === 1 ? '' : 'es'} — avg ${cl.avg_distance_m}m from edge`,
+            });
+            bounds.extend(pos);
+        });
+        map.fitBounds(bounds);
+
+        entry.rendered = true;
+    }
+</script>
+{% endblock %}

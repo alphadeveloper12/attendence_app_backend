@@ -3,510 +3,420 @@
 {% block title %}Dashboard - Attendance{% endblock %}
 
 {% block content %}
-<!-- Remix Icons -->
-<link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
-<!-- Google Fonts (Outfit) -->
-<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
 
 <style>
-    :root {
-        --font-family: 'Outfit', sans-serif;
-        --card-bg: #ffffff;
-        --text-primary: #1e293b;
-        --text-secondary: #64748b;
-
-        /* Matching Gradients from Reports */
-        --grad-primary: linear-gradient(135deg, #4f46e5 0%, #818cf8 100%);
-        --grad-success: linear-gradient(135deg, #10b981 0%, #34d399 100%);
-        --grad-danger: linear-gradient(135deg, #e11d48 0%, #fb7185 100%);
-        --grad-warning: linear-gradient(135deg, #d97706 0%, #fbbf24 100%);
-        --grad-info: linear-gradient(135deg, #0ea5e9 0%, #38bdf8 100%);
-    }
-
-    body {
-        font-family: var(--font-family) !important;
-        background-color: #f8fafc;
-    }
-
-    /* Stat Cards Styling - Professional Monochrome */
-    .stat-card {
-        background: white !important;
-        border: 1px solid black !important;
-        border-radius: 1.25rem;
-        transition: all 0.2s ease;
-        overflow: hidden;
-        position: relative;
-        height: 100%;
-        cursor: pointer;
-        box-shadow: none !important;
-    }
-
-    .stat-card:hover {
-        transform: translateY(-4px);
-        background: #fbfbfb !important;
-    }
-
-    .stat-card.active {
-        border: 2px solid #4f46e5 !important;
-        background: #f8fafc !important;
-    }
-
-    .stat-card.active .stat-icon-wrapper {
-        background: #4f46e5;
-        color: white;
-    }
-
-    .stat-card .card-body {
-        padding: 1.75rem;
-        display: flex;
-        flex-direction: column;
-        justify-content: space-between;
-        height: 100%;
-    }
-
-    .stat-icon-wrapper {
-        width: 48px;
-        height: 48px;
-        border-radius: 12px;
-        background: #f1f5f9;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        margin-bottom: 1rem;
-        font-size: 1.5rem;
-        color: black;
-        border: 1px solid #e2e8f0;
-    }
-
-    .stat-label {
-        font-size: 0.75rem;
-        font-weight: 700;
-        color: #64748b;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-        margin-bottom: 0.25rem;
-    }
-
-    .stat-value {
-        font-size: 2.25rem;
-        font-weight: 800;
-        color: black;
-        line-height: 1.1;
-    }
-
-    /* Action Bar Buttons */
-    .btn-premium {
-        padding: 0.75rem 1.5rem;
-        border-radius: 0.875rem;
-        font-weight: 600;
-        transition: all 0.2s;
-        border: 1px solid black !important;
-        display: inline-flex;
-        align-items: center;
-        gap: 0.6rem;
-        background: white !important;
-        color: black !important;
-        box-shadow: none !important;
-    }
-
-    .btn-premium:hover {
-        background: black !important;
-        color: white !important;
-        transform: translateY(-2px);
-    }
-
-    /* Table Parity */
-    .modern-table-container {
-        background: white;
-        border-radius: 1.25rem;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-        border: none;
-        overflow: hidden;
-    }
-
-    .table thead th {
-        background: #f8fafc;
-        color: #64748b;
-        font-weight: 600;
-        text-transform: uppercase;
-        font-size: 0.75rem;
-        padding: 1.25rem 1rem;
-        border-bottom: 2px solid #f1f5f9;
-    }
-
-    .table tbody td {
-        padding: 1rem;
-        border-bottom: 1px solid #f1f5f9;
-        font-size: 0.95rem;
-    }
-
+    /* Legacy classes still referenced by Recent Employees rows + modals
+       (search bar, avatar circle). Rebuilt to fit the new design tokens. */
     .avatar-circle {
-        width: 38px;
-        height: 38px;
-        border-radius: 50%;
-        background: #f1f5f9;
-        color: #4f46e5;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-weight: 700;
-        overflow: hidden;
-        border: 1px solid #e2e8f0;
+        width: 38px; height: 38px; border-radius: 50%;
+        background: var(--surface-sunken); color: var(--brand);
+        display: grid; place-items: center;
+        font-weight: 700; overflow: hidden;
+        border: 1px solid var(--border-default);
+        flex-shrink: 0;
     }
-
-    .avatar-circle img {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-    }
-
-    .search-box {
-        position: relative;
-        max-width: 340px;
-        width: 100%;
-    }
-
+    .avatar-circle img { width: 100%; height: 100%; object-fit: cover; }
+    .search-box { position: relative; max-width: 320px; width: 100%; }
     .search-input {
-        width: 100%;
-        padding: 0.75rem 1rem 0.75rem 2.75rem;
-        border: 1px solid #e2e8f0;
-        border-radius: 0.75rem;
+        width: 100%; padding: 0.5rem 0.75rem 0.5rem 2.5rem;
+        background: var(--surface-card);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-sm);
+        font-size: 0.875rem; color: var(--text-default);
+        transition: border-color 150ms ease, box-shadow 150ms ease;
+    }
+    .search-input:focus {
         outline: none;
-        font-size: 0.95rem;
+        border-color: var(--border-focus);
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
     }
+    .search-icon { position: absolute; left: 0.875rem; top: 50%; transform: translateY(-50%); color: var(--text-faint); font-size: 1rem; }
+    .dropdown-menu-scrollable { max-height: 380px; overflow-y: auto; }
+</style>
 
-    .search-icon {
-        position: absolute;
-        left: 1rem;
-        top: 50%;
-        transform: translateY(-50%);
-        color: #94a3b8;
-        font-size: 1.2rem;
+<!-- ───── MODERN DASHBOARD (rebuilt with design tokens) ─────────────── -->
+
+<style>
+    /* Dashboard-specific tweaks that build on base.html's tokens */
+    .dashboard-filter-bar {
+        display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center;
+        padding: 0.75rem; background: var(--surface-card);
+        border: 1px solid var(--border-default); border-radius: var(--radius-md);
+        margin-bottom: 1rem;
     }
-
-    /* Responsive adjustments */
-    @media (max-width: 768px) {
-        .header-actions {
-            flex-direction: column;
-            align-items: stretch !important;
-            gap: 1rem;
-        }
-
-        .action-bar {
-            flex-direction: column;
-        }
-
-        .btn-premium {
-            width: 100%;
-            justify-content: center;
-        }
+    .filter-chip-btn {
+        display: inline-flex; align-items: center; gap: 0.5rem;
+        padding: 0.45rem 0.85rem; font-size: 0.825rem; font-weight: 500;
+        color: var(--text-default);
+        background: var(--surface-card);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-sm);
+        transition: all 150ms ease;
     }
-
-    /* Scrollable Dropdown */
-    .dropdown-menu-scrollable {
-        max-height: 380px;
-        overflow-y: auto;
-        padding: 0.5rem;
+    .filter-chip-btn:hover {
+        background: var(--surface-sunken);
+        border-color: var(--border-strong);
+        color: var(--text-strong);
     }
+    .filter-chip-btn .ri-arrow-down-s-line { margin-left: 0.15rem; color: var(--text-faint); }
 
-    .dropdown-item {
-        border-radius: 0.5rem;
-        transition: all 0.2s;
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
+    .action-toolbar {
+        display: flex; justify-content: space-between; align-items: center;
+        gap: 1rem; flex-wrap: wrap; margin-bottom: 1.25rem;
     }
+    .action-toolbar .actions-left { display: flex; gap: 0.5rem; flex-wrap: wrap; }
 
-    .dropdown-item:hover {
-        background-color: #f1f5f9;
-        color: #4f46e5;
-        transform: translateX(4px);
+    /* KPI grid */
+    .kpi-grid {
+        display: grid; gap: 1rem;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        margin-bottom: 1.25rem;
+    }
+    .kpi-tile.is-active {
+        border-color: var(--brand);
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.10);
+        background: var(--brand-soft);
+    }
+    .kpi-tile.is-active .kpi-icon { background: var(--brand); color: #fff; }
+
+    /* Executive summary */
+    .exec-summary {
+        background: linear-gradient(135deg, #eef2ff 0%, #faf5ff 100%);
+        border: 1px solid var(--brand-200, #c7d2fe);
+        border-radius: var(--radius-lg);
+        padding: 1rem 1.25rem;
+        margin-bottom: 1.25rem;
+    }
+    .exec-summary .exec-head {
+        display: flex; justify-content: space-between; align-items: center; gap: 0.75rem;
+        margin-bottom: 0.5rem; flex-wrap: wrap;
+    }
+    .exec-summary .exec-title {
+        display: flex; align-items: center; gap: 0.5rem;
+        font-size: 0.95rem; font-weight: 700; color: var(--brand);
+        margin: 0;
+    }
+    .exec-summary .ai-badge {
+        font-size: 0.6rem; font-weight: 700;
+        padding: 0.15rem 0.5rem; border-radius: 999px;
+        background: var(--brand); color: #fff;
+        letter-spacing: 0.06em;
+    }
+    .exec-summary .exec-controls { display: flex; gap: 0.5rem; align-items: center; }
+    .exec-summary .exec-controls select {
+        font-size: 0.825rem; padding: 0.35rem 1.75rem 0.35rem 0.65rem;
+        border: 1px solid var(--border-default); border-radius: var(--radius-sm);
+        background: var(--surface-card); color: var(--text-default);
+    }
+    .exec-bullet {
+        display: flex; align-items: flex-start; gap: 0.65rem;
+        padding: 0.35rem 0; font-size: 0.875rem;
+    }
+    .exec-bullet .bullet-icon { font-size: 1.1rem; line-height: 1.2; }
+
+    /* Status pills */
+    .status-bar { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1.25rem; align-items: center; }
+    .status-pill {
+        display: inline-flex; align-items: center; gap: 0.4rem;
+        padding: 0.4rem 0.85rem;
+        font-size: 0.8rem; font-weight: 600;
+        border-radius: 999px; border: 1px solid transparent;
+        transition: all 150ms ease;
+        background: var(--surface-card); color: var(--text-default);
+    }
+    .status-pill:hover { transform: translateY(-1px); border-color: var(--border-strong); }
+    .status-pill.is-active {
+        background: var(--text-strong); color: #fff;
+        box-shadow: 0 4px 12px rgba(15,23,42,0.15);
+    }
+    .status-pill.is-dim { opacity: 0.50; }
+    .status-pill .count {
+        background: rgba(15, 23, 42, 0.08); padding: 0.05rem 0.45rem;
+        border-radius: 999px; font-size: 0.7rem;
+    }
+    .status-pill.is-active .count { background: rgba(255, 255, 255, 0.20); color: #fff; }
+
+    /* Date + clock chip */
+    .date-chip {
+        display: inline-flex; align-items: center; gap: 0.5rem;
+        padding: 0.35rem 0.75rem;
+        background: var(--surface-card); border: 1px solid var(--border-default);
+        border-radius: var(--radius-sm);
+        font-size: 0.825rem; color: var(--text-muted);
+        font-variant-numeric: tabular-nums;
     }
 </style>
 
-<!-- Header Section -->
-<div
-    class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-5 pt-2 header-actions">
+<!-- Page header with date + primary CTA -->
+<div class="page-header">
     <div>
-        <h1 class="h3 fw-bold text-dark mb-1">Dashboard</h1>
-        <div class="d-flex align-items-center gap-2 text-secondary font-monospace small">
-            <i class="ri-calendar-event-line"></i>
-            <span id="currentDate">loading date...</span>
+        <h1>Dashboard</h1>
+        <div class="subtitle d-flex align-items-center gap-2 mt-1">
+            <span class="date-chip">
+                <i class="ri-calendar-event-line"></i>
+                <span id="currentDate">loading…</span>
+            </span>
         </div>
     </div>
-
-    <div class="d-flex gap-3 align-items-center">
-        <!-- Status Filter -->
-        <div class="dropdown">
-            <button class="btn btn-white border shadow-sm dropdown-toggle rounded-3 px-3 py-2 fw-semibold" type="button"
-                id="statusFilterBtn" data-bs-toggle="dropdown">
-                <i class="ri-filter-3-line me-1"></i> All Statuses
-            </button>
-            <ul class="dropdown-menu dropdown-menu-end shadow-lg border-0 rounded-4 dropdown-menu-scrollable"
-                id="statusDropdown">
-                <li><a class="dropdown-item py-2" href="#" onclick="filterStatus('all', 'All Statuses')"><i
-                            class="ri-history-line"></i> All Statuses</a></li>
-            </ul>
-        </div>
-
-        <!-- Site Filter -->
-        <div class="dropdown">
-            <button class="btn btn-white border shadow-sm dropdown-toggle rounded-3 px-3 py-2 fw-semibold" type="button"
-                id="siteFilterBtn" data-bs-toggle="dropdown">
-                <i class="ri-building-line me-1"></i> All Sites
-            </button>
-            <ul class="dropdown-menu dropdown-menu-end shadow-lg border-0 rounded-4 dropdown-menu-scrollable"
-                id="siteDropdown">
-                <li><a class="dropdown-item py-2" href="#" onclick="filterSite('all', 'All Sites')"><i
-                            class="ri-history-line"></i> All Sites</a></li>
-            </ul>
-        </div>
-
-        <!-- Position Filter (was: Category) -->
-        <div class="dropdown">
-            <button class="btn btn-white border shadow-sm dropdown-toggle rounded-3 px-3 py-2 fw-semibold" type="button"
-                id="positionFilterBtn" data-bs-toggle="dropdown">
-                <i class="ri-briefcase-line me-1"></i> All Positions
-            </button>
-            <ul class="dropdown-menu dropdown-menu-end shadow-lg border-0 rounded-4 dropdown-menu-scrollable"
-                id="positionDropdown" style="min-width: 320px; max-height: 420px; overflow-y: auto;">
-                <li class="px-2 py-2 sticky-top bg-white" style="border-bottom:1px solid #e5e7eb;">
-                    <input type="text" id="positionSearchInput" class="form-control form-control-sm"
-                        placeholder="Search positions…" oninput="filterPositionDropdown()">
-                </li>
-                <li><a class="dropdown-item py-2" href="#" onclick="filterPosition('all', 'All Positions')"><i
-                            class="ri-history-line"></i> All Positions</a></li>
-            </ul>
-        </div>
-
-        <!-- Department Filter (NEW, searchable) -->
-        <div class="dropdown">
-            <button class="btn btn-white border shadow-sm dropdown-toggle rounded-3 px-3 py-2 fw-semibold" type="button"
-                id="departmentFilterBtn" data-bs-toggle="dropdown">
-                <i class="ri-building-2-line me-1"></i> All Departments
-            </button>
-            <ul class="dropdown-menu dropdown-menu-end shadow-lg border-0 rounded-4 dropdown-menu-scrollable"
-                id="departmentFilterDropdown" style="min-width: 320px; max-height: 420px; overflow-y: auto;">
-                <li class="px-2 py-2 sticky-top bg-white" style="border-bottom:1px solid #e5e7eb;">
-                    <input type="text" id="departmentSearchInput" class="form-control form-control-sm"
-                        placeholder="Search departments…" oninput="filterDepartmentDropdown()">
-                </li>
-                <li><a class="dropdown-item py-2" href="#" onclick="filterDepartment('all', 'All Departments')"><i
-                            class="ri-history-line"></i> All Departments</a></li>
-            </ul>
-        </div>
-
-        <!-- Category Filter (NEW — Staff / Worker enum) -->
-        <div class="dropdown">
-            <button class="btn btn-white border shadow-sm dropdown-toggle rounded-3 px-3 py-2 fw-semibold" type="button"
-                id="categoryFilterBtn" data-bs-toggle="dropdown">
-                <i class="ri-user-settings-line me-1"></i> All Categories
-            </button>
-            <ul class="dropdown-menu dropdown-menu-end shadow-lg border-0 rounded-4"
-                id="categoryDropdown" style="min-width: 200px;">
-                <li><a class="dropdown-item py-2" href="#" onclick="filterCategory('all', 'All Categories')"><i class="ri-history-line text-secondary"></i> All Categories</a></li>
-                <li><a class="dropdown-item py-2" href="#" onclick="filterCategory('staff', 'Staff')"><i class="ri-user-star-line text-secondary"></i> Staff</a></li>
-                <li><a class="dropdown-item py-2" href="#" onclick="filterCategory('worker', 'Worker')"><i class="ri-team-line text-secondary"></i> Worker</a></li>
-            </ul>
-        </div>
-
-        <!-- Employer Filter -->
-        <div class="dropdown">
-            <button class="btn btn-white border shadow-sm dropdown-toggle rounded-3 px-3 py-2 fw-semibold" type="button"
-                id="employerFilterBtn" data-bs-toggle="dropdown">
-                <i class="ri-building-2-line me-1"></i> All Employers
-            </button>
-            <ul class="dropdown-menu dropdown-menu-end shadow-lg border-0 rounded-4"
-                id="employerDropdown">
-                <li><a class="dropdown-item py-2" href="#" onclick="filterEmployer('all', 'All Employers')"><i
-                            class="ri-history-line"></i> All Employers</a></li>
-                <li><a class="dropdown-item py-2" href="#" onclick="filterEmployer('PIC', 'PIC')"><i
-                            class="ri-building-2-line"></i> PIC</a></li>
-                <li><a class="dropdown-item py-2" href="#" onclick="filterEmployer('KFD', 'KFD')"><i
-                            class="ri-building-2-line"></i> KFD</a></li>
-                <li><a class="dropdown-item py-2" href="#" onclick="filterEmployer('Kami', 'Kami')"><i
-                            class="ri-building-2-line"></i> Kami</a></li>
-                <li><a class="dropdown-item py-2" href="#" onclick="filterEmployer('PRMC', 'PRMC')"><i
-                            class="ri-building-2-line"></i> PRMC</a></li>
-            </ul>
-        </div>
-        <button onclick="openAddModal()" class="btn btn-premium shadow-sm">
-            <i class="ri-user-add-line"></i> <span>Add Employee</span>
+    <div class="d-flex gap-2 align-items-center">
+        <button onclick="openAddModal()" class="btn-modern btn-modern--primary">
+            <i class="ri-user-add-line"></i> Add Employee
         </button>
     </div>
 </div>
 
-<!-- Action Bar -->
-<div class="d-flex justify-content-between align-items-center mb-5 flex-wrap gap-3">
-    <div class="action-bar d-flex gap-3 flex-wrap">
-        <button onclick="openBuildModal()" class="btn btn-premium">
-            <i class="ri-smartphone-line"></i> <span>Update App Build</span>
+<!-- Filter bar -->
+<div class="dashboard-filter-bar">
+    <!-- Status -->
+    <div class="dropdown">
+        <button class="filter-chip-btn dropdown-toggle" type="button" id="statusFilterBtn" data-bs-toggle="dropdown">
+            <i class="ri-filter-3-line"></i> <span>All Statuses</span>
         </button>
-
-        <button onclick="openImportModal()" class="btn btn-premium">
-            <i class="ri-file-upload-line"></i> <span>Import Employees</span>
+        <ul class="dropdown-menu dropdown-menu-end dropdown-menu-scrollable" id="statusDropdown">
+            <li><a class="dropdown-item" href="#" onclick="filterStatus('all', 'All Statuses')"><i class="ri-history-line"></i> All Statuses</a></li>
+        </ul>
+    </div>
+    <!-- Site -->
+    <div class="dropdown">
+        <button class="filter-chip-btn dropdown-toggle" type="button" id="siteFilterBtn" data-bs-toggle="dropdown">
+            <i class="ri-map-pin-line"></i> <span>All Sites</span>
         </button>
+        <ul class="dropdown-menu dropdown-menu-end dropdown-menu-scrollable" id="siteDropdown">
+            <li><a class="dropdown-item" href="#" onclick="filterSite('all', 'All Sites')"><i class="ri-history-line"></i> All Sites</a></li>
+        </ul>
+    </div>
+    <!-- Position -->
+    <div class="dropdown">
+        <button class="filter-chip-btn dropdown-toggle" type="button" id="positionFilterBtn" data-bs-toggle="dropdown">
+            <i class="ri-briefcase-line"></i> <span>All Positions</span>
+        </button>
+        <ul class="dropdown-menu dropdown-menu-end dropdown-menu-scrollable" id="positionDropdown" style="min-width: 320px; max-height: 420px; overflow-y: auto;">
+            <li class="px-2 py-2 sticky-top bg-white" style="border-bottom:1px solid var(--border-default);">
+                <input type="text" id="positionSearchInput" class="input-modern" placeholder="Search positions…" oninput="filterPositionDropdown()">
+            </li>
+            <li><a class="dropdown-item" href="#" onclick="filterPosition('all', 'All Positions')"><i class="ri-history-line"></i> All Positions</a></li>
+        </ul>
+    </div>
+    <!-- Department -->
+    <div class="dropdown">
+        <button class="filter-chip-btn dropdown-toggle" type="button" id="departmentFilterBtn" data-bs-toggle="dropdown">
+            <i class="ri-building-line"></i> <span>All Departments</span>
+        </button>
+        <ul class="dropdown-menu dropdown-menu-end dropdown-menu-scrollable" id="departmentFilterDropdown" style="min-width: 320px; max-height: 420px; overflow-y: auto;">
+            <li class="px-2 py-2 sticky-top bg-white" style="border-bottom:1px solid var(--border-default);">
+                <input type="text" id="departmentSearchInput" class="input-modern" placeholder="Search departments…" oninput="filterDepartmentDropdown()">
+            </li>
+            <li><a class="dropdown-item" href="#" onclick="filterDepartment('all', 'All Departments')"><i class="ri-history-line"></i> All Departments</a></li>
+        </ul>
+    </div>
+    <!-- Category -->
+    <div class="dropdown">
+        <button class="filter-chip-btn dropdown-toggle" type="button" id="categoryFilterBtn" data-bs-toggle="dropdown">
+            <i class="ri-user-settings-line"></i> <span>All Categories</span>
+        </button>
+        <ul class="dropdown-menu dropdown-menu-end" id="categoryDropdown" style="min-width: 200px;">
+            <li><a class="dropdown-item" href="#" onclick="filterCategory('all', 'All Categories')"><i class="ri-history-line"></i> All Categories</a></li>
+            <li><a class="dropdown-item" href="#" onclick="filterCategory('staff', 'Staff')"><i class="ri-user-star-line"></i> Staff</a></li>
+            <li><a class="dropdown-item" href="#" onclick="filterCategory('worker', 'Worker')"><i class="ri-team-line"></i> Worker</a></li>
+        </ul>
+    </div>
+    <!-- Employer -->
+    <div class="dropdown">
+        <button class="filter-chip-btn dropdown-toggle" type="button" id="employerFilterBtn" data-bs-toggle="dropdown">
+            <i class="ri-building-2-line"></i> <span>All Employers</span>
+        </button>
+        <ul class="dropdown-menu dropdown-menu-end" id="employerDropdown">
+            <li><a class="dropdown-item" href="#" onclick="filterEmployer('all', 'All Employers')"><i class="ri-history-line"></i> All Employers</a></li>
+            <li><a class="dropdown-item" href="#" onclick="filterEmployer('PIC', 'PIC')"><i class="ri-building-2-line"></i> PIC</a></li>
+            <li><a class="dropdown-item" href="#" onclick="filterEmployer('KFD', 'KFD')"><i class="ri-building-2-line"></i> KFD</a></li>
+            <li><a class="dropdown-item" href="#" onclick="filterEmployer('Kami', 'Kami')"><i class="ri-building-2-line"></i> Kami</a></li>
+            <li><a class="dropdown-item" href="#" onclick="filterEmployer('PRMC', 'PRMC')"><i class="ri-building-2-line"></i> PRMC</a></li>
+        </ul>
+    </div>
+</div>
 
-        <a href="{% url 'download-employee-template' %}" class="btn btn-premium">
-            <i class="ri-file-text-line"></i> <span>Download Template</span>
+<!-- Action toolbar -->
+<div class="action-toolbar">
+    <div class="actions-left">
+        <button onclick="openBuildModal()" class="btn-modern btn-modern--ghost">
+            <i class="ri-smartphone-line"></i> Update App Build
+        </button>
+        <button onclick="openImportModal()" class="btn-modern btn-modern--ghost">
+            <i class="ri-file-upload-line"></i> Import Employees
+        </button>
+        <a href="{% url 'download-employee-template' %}" class="btn-modern btn-modern--ghost">
+            <i class="ri-file-text-line"></i> Download Template
         </a>
-
-        <button onclick="openBulkEditModal()" class="btn btn-premium">
-            <i class="ri-edit-2-line"></i> <span>Edit Employees in Bulk</span>
+        <button onclick="openBulkEditModal()" class="btn-modern btn-modern--ghost">
+            <i class="ri-edit-2-line"></i> Edit in Bulk
         </button>
     </div>
-
-    <!-- Bulk Actions -->
+    <!-- Bulk Actions (visible when rows are selected) -->
     <div id="bulkActions" class="d-none d-flex gap-2">
-        <button onclick="downloadSelected()" class="btn btn-premium"
-            style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #fff;">
-            <i class="ri-file-excel-2-line"></i> <span>Download Selected (<span id="selectedCountDl">0</span>)</span>
+        <button onclick="downloadSelected()" class="btn-modern btn-modern--success">
+            <i class="ri-file-excel-2-line"></i> Download Selected (<span id="selectedCountDl">0</span>)
         </button>
-        <button onclick="bulkDelete()" class="btn btn-premium btn-premium-danger"
-            style="background: var(--grad-danger);">
-            <i class="ri-delete-bin-line"></i> <span>Delete Selected (<span id="selectedCount">0</span>)</span>
+        <button onclick="bulkDelete()" class="btn-modern btn-modern--danger">
+            <i class="ri-delete-bin-line"></i> Delete Selected (<span id="selectedCount">0</span>)
         </button>
     </div>
 </div>
 
-<!-- Stats Grid -->
-<div class="row g-4 mb-5">
-    <div class="col-12 col-md-6 col-xl-3">
-        <div class="stat-card" id="card-total" onclick="filterByCard('total')">
-            <div class="card-body">
-                <div class="stat-icon-wrapper"><i class="ri-group-line"></i></div>
-                <div>
-                    <div class="stat-label">Total Employees</div>
-                    <div class="stat-value" id="stat-total-employees">...</div>
-                </div>
-            </div>
+<!-- KPI tiles -->
+<div class="kpi-grid">
+    {% include 'partials/kpi_tile.html' with label="Total Employees" value_id="stat-total-employees" icon="ri-team-line" icon_bg="brand" interactive_target="card-total" onclick="filterByCard('total')" %}
+    {% include 'partials/kpi_tile.html' with label="Present Today" value_id="stat-today-attendance" icon="ri-checkbox-circle-line" icon_bg="success" interactive_target="card-present" onclick="filterByCard('present')" %}
+    {% include 'partials/kpi_tile.html' with label="Absent Today" value_id="stat-absent" icon="ri-user-unfollow-line" icon_bg="danger" interactive_target="card-absent" onclick="filterByCard('absent')" %}
+    {% include 'partials/kpi_tile.html' with label="Active Sites" value_id="stat-total-sites" icon="ri-map-pin-2-line" icon_bg="info" interactive_target="card-sites" %}
+</div>
+
+<!-- Executive Summary -->
+<div class="exec-summary" id="execSummaryCard">
+    <div class="exec-head">
+        <h6 class="exec-title">
+            <i class="ri-sparkling-2-line"></i> Daily Executive Summary
+            <span class="ai-badge">AI</span>
+        </h6>
+        <div class="exec-controls">
+            <select id="execPeriod" onchange="loadExecSummary()">
+                <option value="daily" selected>Daily</option>
+                <option value="weekly">Weekly</option>
+            </select>
+            <label class="d-inline-flex align-items-center gap-1 small" style="cursor:pointer; padding:0.35rem 0.65rem; border:1px solid var(--border-default); border-radius:var(--radius-sm); background: var(--surface-card); user-select:none;" title="Use OpenAI to rewrite the bullets in a more natural tone">
+                <input type="checkbox" id="execAi" onchange="loadExecSummary()" style="margin:0;">
+                <span style="color: var(--brand); font-weight:600;">✨ Polish with AI</span>
+            </label>
+            <button class="btn-modern btn-modern--ghost btn-modern--icon" onclick="loadExecSummary()" title="Refresh">
+                <i class="ri-refresh-line"></i>
+            </button>
         </div>
     </div>
-    <div class="col-12 col-md-6 col-xl-3">
-        <div class="stat-card" id="card-present" onclick="filterByCard('present')">
-            <div class="card-body">
-                <div class="stat-icon-wrapper"><i class="ri-checkbox-circle-line"></i></div>
-                <div>
-                    <div class="stat-label">Present Today</div>
-                    <div class="stat-value" id="stat-today-attendance">...</div>
-                </div>
-            </div>
-        </div>
+    <div id="execSummaryList">
+        <div class="text-secondary py-2 small"><div class="spinner-border spinner-border-sm me-1"></div> Composing…</div>
     </div>
-    <div class="col-12 col-md-6 col-xl-3">
-        <div class="stat-card" id="card-absent" onclick="filterByCard('absent')">
-            <div class="card-body">
-                <div class="stat-icon-wrapper"><i class="ri-user-unfollow-line"></i></div>
-                <div>
-                    <div class="stat-label">Absent Today</div>
-                    <div class="stat-value" id="stat-absent">0</div>
-                </div>
-            </div>
-        </div>
+</div>
+
+<!-- ─────────────────────────────────────────────────────────────────────
+     Site Activity Report — auto-refreshes every 60s
+     Shows which sites are actively recording attendance vs. idle/inactive.
+     ───────────────────────────────────────────────────────────────────── -->
+<style>
+    .site-activity { background: var(--surface-card); border: 1px solid var(--border-default);
+                     border-radius: var(--radius-lg); margin-bottom: 1.25rem; overflow: hidden; }
+    .site-activity .sa-head { padding: 0.875rem 1.25rem; border-bottom: 1px solid var(--border-default);
+                              display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem; }
+    .site-activity .sa-title { font-size: 1rem; font-weight: 600; color: var(--text-strong);
+                               display: flex; align-items: center; gap: 0.5rem; margin: 0; }
+    .site-activity .sa-summary { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    .site-activity .sa-meta { font-size: 0.7rem; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+    .site-activity .sa-body { padding: 1rem 1.25rem; }
+    .inactive-callout { background: linear-gradient(135deg, #fef2f2 0%, #fef3c7 100%);
+                        border: 1px solid #fecaca; border-radius: var(--radius-md);
+                        padding: 0.75rem 1rem; margin-bottom: 1rem;
+                        display: flex; gap: 0.75rem; align-items: flex-start; }
+    .inactive-callout i { color: var(--danger); font-size: 1.25rem; flex-shrink: 0; margin-top: 0.1rem; }
+    .inactive-callout .title { font-weight: 700; font-size: 0.875rem; color: var(--text-strong); margin-bottom: 0.25rem; }
+    .inactive-callout .body { font-size: 0.8rem; color: var(--text-muted); }
+    .site-grid { display: grid; gap: 0.75rem;
+                 grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+    .site-card { padding: 0.875rem 1rem; border-radius: var(--radius-md);
+                 border: 1px solid var(--border-default); background: var(--surface-card);
+                 transition: all 200ms cubic-bezier(0.16, 1, 0.3, 1); cursor: pointer; position: relative; }
+    .site-card:hover { transform: translateY(-1px); box-shadow: var(--shadow-card); border-color: var(--border-strong); }
+    .site-card .sc-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; gap: 0.5rem; }
+    .site-card .sc-name { font-weight: 600; font-size: 0.875rem; color: var(--text-strong);
+                          overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .site-card .sc-stat { display: flex; gap: 1rem; }
+    .site-card .sc-stat .v { font-size: 1.25rem; font-weight: 700; color: var(--text-strong);
+                             font-variant-numeric: tabular-nums; line-height: 1.1; }
+    .site-card .sc-stat .l { font-size: 0.65rem; font-weight: 600; color: var(--text-muted);
+                             text-transform: uppercase; letter-spacing: 0.04em; }
+    .site-card .sc-foot { display: flex; justify-content: space-between; align-items: center;
+                          margin-top: 0.5rem; font-size: 0.7rem; color: var(--text-muted); }
+    .site-card .sc-spark { display: flex; align-items: flex-end; gap: 2px; height: 18px; }
+    .site-card .sc-spark span { width: 4px; background: var(--text-faint); border-radius: 1px; min-height: 2px; }
+    .site-card .sc-spark span.peak { background: var(--brand); }
+    .badge-status { display: inline-flex; align-items: center; gap: 0.3rem;
+                    padding: 0.15rem 0.5rem; border-radius: 999px;
+                    font-size: 0.65rem; font-weight: 700; text-transform: uppercase;
+                    letter-spacing: 0.04em; white-space: nowrap; flex-shrink: 0; }
+    .badge-status::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+    .badge-status.s-active     { background: var(--success-soft); color: #047857; }
+    .badge-status.s-idle       { background: var(--warning-soft); color: #b45309; }
+    .badge-status.s-inactive   { background: var(--danger-soft);  color: #b91c1c; }
+    .badge-status.s-never_used { background: #1f2937; color: #fff; }
+    .badge-status.s-never_used::before { background: #fff; }
+    .site-card.is-inactive,
+    .site-card.is-never_used { border-left: 4px solid var(--danger); }
+    .site-card.is-idle       { border-left: 4px solid var(--warning); }
+</style>
+
+<div class="site-activity">
+    <div class="sa-head">
+        <h3 class="sa-title">
+            <i class="ri-broadcast-line" style="color: var(--brand);"></i> Site Activity Report
+            <span class="sa-meta" id="siteActivityMeta">loading…</span>
+        </h3>
+        <div class="sa-summary" id="siteActivitySummary"></div>
     </div>
-    <div class="col-12 col-md-6 col-xl-3">
-        <div class="stat-card" id="card-sites">
-            <div class="card-body">
-                <div class="stat-icon-wrapper"><i class="ri-building-2-line"></i></div>
-                <div>
-                    <div class="stat-label">Active Sites</div>
-                    <div class="stat-value" id="stat-total-sites">...</div>
-                </div>
+    <div class="sa-body">
+        <div id="siteActivityCallout"></div>
+        <div id="siteActivityGrid" class="site-grid">
+            <div class="text-secondary small py-3">
+                <div class="spinner-border spinner-border-sm me-1"></div> Scanning all sites…
             </div>
         </div>
     </div>
 </div>
 
 <!-- Employment status breakdown -->
-<div class="d-flex flex-wrap gap-2 mb-4 mt-2 align-items-center" id="statusBreakdown" style="display:none;">
-    <button type="button" data-status-pill="all" onclick="filterStatus('all', 'All Statuses')"
-        class="status-pill btn btn-sm rounded-pill px-3 py-2 fw-semibold border-0"
-        style="background:rgba(59,130,246,0.12);color:#1d4ed8;">
-        <i class="ri-list-check me-1"></i> All
+<div class="status-bar" id="statusBreakdown" style="display:none;">
+    <button type="button" data-status-pill="all" onclick="filterStatus('all', 'All Statuses')" class="status-pill">
+        <i class="ri-list-check"></i> All
     </button>
-    <button type="button" data-status-pill="Active" onclick="filterStatus('Active', 'Active')"
-        class="status-pill btn btn-sm rounded-pill px-3 py-2 fw-semibold border-0"
-        style="background:rgba(34,197,94,0.12);color:#15803d;">
-        <i class="ri-checkbox-circle-line me-1"></i> Active:
-        <span class="ms-1 fw-bold" id="status-count-Active">0</span>
+    <button type="button" data-status-pill="Active" onclick="filterStatus('Active', 'Active')" class="status-pill" style="color:#047857;">
+        <i class="ri-checkbox-circle-line"></i> Active <span class="count" id="status-count-Active">0</span>
     </button>
-    <button type="button" data-status-pill="Leave" onclick="filterStatus('Leave', 'Leave')"
-        class="status-pill btn btn-sm rounded-pill px-3 py-2 fw-semibold border-0"
-        style="background:rgba(217,119,6,0.12);color:#b45309;">
-        <i class="ri-flight-takeoff-line me-1"></i> Leave:
-        <span class="ms-1 fw-bold" id="status-count-Leave">0</span>
+    <button type="button" data-status-pill="Leave" onclick="filterStatus('Leave', 'Leave')" class="status-pill" style="color:#b45309;">
+        <i class="ri-flight-takeoff-line"></i> Leave <span class="count" id="status-count-Leave">0</span>
     </button>
-    <button type="button" data-status-pill="Resigned" onclick="filterStatus('Resigned', 'Resigned')"
-        class="status-pill btn btn-sm rounded-pill px-3 py-2 fw-semibold border-0"
-        style="background:rgba(220,38,38,0.12);color:#b91c1c;">
-        <i class="ri-logout-box-r-line me-1"></i> Resigned:
-        <span class="ms-1 fw-bold" id="status-count-Resigned">0</span>
+    <button type="button" data-status-pill="Resigned" onclick="filterStatus('Resigned', 'Resigned')" class="status-pill" style="color:#b91c1c;">
+        <i class="ri-logout-box-r-line"></i> Resigned <span class="count" id="status-count-Resigned">0</span>
     </button>
-    <button type="button" data-status-pill="Terminated" onclick="filterStatus('Terminated', 'Terminated')"
-        class="status-pill btn btn-sm rounded-pill px-3 py-2 fw-semibold border-0"
-        style="background:rgba(220,38,38,0.12);color:#b91c1c;">
-        <i class="ri-close-circle-line me-1"></i> Terminated:
-        <span class="ms-1 fw-bold" id="status-count-Terminated">0</span>
+    <button type="button" data-status-pill="Terminated" onclick="filterStatus('Terminated', 'Terminated')" class="status-pill" style="color:#b91c1c;">
+        <i class="ri-close-circle-line"></i> Terminated <span class="count" id="status-count-Terminated">0</span>
     </button>
-    <button type="button" data-status-pill="No Renewal" onclick="filterStatus('No Renewal', 'No Renewal')"
-        class="status-pill btn btn-sm rounded-pill px-3 py-2 fw-semibold border-0"
-        style="background:rgba(107,114,128,0.12);color:#374151;">
-        <i class="ri-file-history-line me-1"></i> No Renewal:
-        <span class="ms-1 fw-bold" id="status-count-No-Renewal">0</span>
+    <button type="button" data-status-pill="No Renewal" onclick="filterStatus('No Renewal', 'No Renewal')" class="status-pill" style="color:#374151;">
+        <i class="ri-file-history-line"></i> No Renewal <span class="count" id="status-count-No-Renewal">0</span>
     </button>
-    <button type="button" data-status-pill="Absconding" onclick="filterStatus('Absconding', 'Absconding')"
-        class="status-pill btn btn-sm rounded-pill px-3 py-2 fw-semibold border-0"
-        style="background:rgba(31,41,55,0.12);color:#111827;">
-        <i class="ri-user-unfollow-line me-1"></i> Absconding:
-        <span class="ms-1 fw-bold" id="status-count-Absconding">0</span>
+    <button type="button" data-status-pill="Absconding" onclick="filterStatus('Absconding', 'Absconding')" class="status-pill" style="color:#111827;">
+        <i class="ri-user-unfollow-line"></i> Absconding <span class="count" id="status-count-Absconding">0</span>
     </button>
-    <button type="button" data-status-pill="Other" onclick="filterStatus('Other', 'Other')"
-        class="status-pill btn btn-sm rounded-pill px-3 py-2 fw-semibold border-0"
-        style="background:rgba(99,102,241,0.12);color:#4338ca;">
-        <i class="ri-more-line me-1"></i> Other:
-        <span class="ms-1 fw-bold" id="status-count-Other">0</span>
+    <button type="button" data-status-pill="Other" onclick="filterStatus('Other', 'Other')" class="status-pill" style="color:#4338ca;">
+        <i class="ri-more-line"></i> Other <span class="count" id="status-count-Other">0</span>
     </button>
 </div>
 
-<style>
-    .status-pill { transition: transform 120ms ease, box-shadow 120ms ease, opacity 120ms ease; }
-    .status-pill:hover { transform: translateY(-1px); }
-    .status-pill.is-active {
-        box-shadow: 0 0 0 2px currentColor inset, 0 4px 12px rgba(0,0,0,0.10);
-        transform: translateY(-1px);
-    }
-    .status-pill.is-dim { opacity: 0.45; }
-</style>
-
-<!-- Alerts Section -->
+<!-- Geofence Alerts -->
 <div id="alertsWrapper" class="d-none">
-    <div class="card modern-table-container border-0 mb-5">
-        <div class="card-header bg-white py-3 px-4 border-bottom">
-            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-                <h5 class="fw-bold mb-0 text-danger d-flex align-items-center gap-2">
-                    <i class="ri-error-warning-fill"></i> Geofence Alerts
-                    <span class="badge rounded-pill bg-danger bg-opacity-10 text-danger ms-1" id="alertsCount">0</span>
-                </h5>
-                <div class="d-flex align-items-center gap-2 flex-wrap">
-                    <button type="button" class="btn btn-sm btn-light border" onclick="setAlertsDate('today')">
-                        Today
-                    </button>
-                    <button type="button" class="btn btn-sm btn-light border" onclick="setAlertsDate('yesterday')">
-                        Yesterday
-                    </button>
-                    <input type="date" id="alertsDateInput"
-                        class="form-control form-control-sm border" style="width:160px;"
-                        onchange="loadAlerts()">
-                    <button type="button" class="btn btn-sm btn-success" onclick="downloadAlerts()" title="Download alert employees as Excel">
-                        <i class="ri-file-excel-2-line"></i> Download
-                    </button>
-                    <span class="small text-secondary ms-2">Click any alert for details</span>
-                </div>
+    <div class="section-card mb-4">
+        <div class="section-card__head">
+            <h3 class="section-card__title" style="color: var(--danger);">
+                <i class="ri-error-warning-fill"></i> Geofence Alerts
+                <span class="pill pill--danger" id="alertsCount">0</span>
+            </h3>
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <button type="button" class="btn-modern btn-modern--ghost" style="padding:0.35rem 0.75rem; font-size:0.8rem;" onclick="setAlertsDate('today')">Today</button>
+                <button type="button" class="btn-modern btn-modern--ghost" style="padding:0.35rem 0.75rem; font-size:0.8rem;" onclick="setAlertsDate('yesterday')">Yesterday</button>
+                <input type="date" id="alertsDateInput" class="input-modern" style="width:160px;" onchange="loadAlerts()">
+                <button type="button" class="btn-modern btn-modern--success" style="padding:0.35rem 0.75rem; font-size:0.8rem;" onclick="downloadAlerts()" title="Download alert employees as Excel">
+                    <i class="ri-file-excel-2-line"></i> Download
+                </button>
             </div>
         </div>
-        <div id="alertsContainer" class="p-3 row g-3" style="max-height: 360px; overflow-y: auto;">
-            <div class="col-12 text-center text-muted py-3">Loading alerts…</div>
+        <div id="alertsContainer" class="row g-3 p-3" style="max-height: 380px; overflow-y: auto; margin: 0;">
+            <div class="col-12 empty-state" style="padding: 1.5rem;">Loading alerts…</div>
         </div>
     </div>
 </div>
@@ -557,49 +467,96 @@
     </div>
 </div>
 
-<!-- Employees Table Container -->
-<div class="modern-table-container">
-    <div
-        class="card-header bg-white py-4 px-4 border-bottom d-flex flex-wrap justify-content-between align-items-center gap-3">
-        <div class="d-flex align-items-center gap-3">
-            <h5 class="fw-bold mb-0">Recent Employees</h5>
-            <select class="form-select form-select-sm w-auto rounded-3 border-light" id="rowsPerPage"
-                onchange="changeRowsPerPage()">
-                <option value="10">10 / Page</option>
-                <option value="20" selected>20 / Page</option>
-                <option value="50">50 / Page</option>
+<!-- Recent Employees -->
+<div class="section-card">
+    <div class="section-card__head">
+        <div class="d-flex align-items-center gap-3 flex-wrap">
+            <h3 class="section-card__title">
+                <i class="ri-team-line" style="color: var(--brand);"></i> Recent Employees
+            </h3>
+            <select class="input-modern" style="width:auto; padding: 0.3rem 0.5rem; font-size: 0.8rem;" id="rowsPerPage" onchange="changeRowsPerPage()">
+                <option value="10">10 / page</option>
+                <option value="20" selected>20 / page</option>
+                <option value="50">50 / page</option>
             </select>
-            <button class="btn btn-outline-primary btn-sm rounded-3 px-3 d-flex align-items-center gap-2"
-                onclick="exportFilteredEmployees()">
+            <button class="btn-modern btn-modern--ghost" style="padding: 0.35rem 0.75rem; font-size: 0.8rem;" onclick="exportFilteredEmployees()">
                 <i class="ri-download-2-line"></i> Export Filtered
             </button>
         </div>
         <div class="search-box">
             <i class="ri-search-2-line search-icon"></i>
-            <input type="text" class="search-input" id="tableSearch" placeholder="Search by name, ID, or email..."
-                onkeyup="debounceSearch()">
+            <input type="text" class="search-input" id="tableSearch" placeholder="Search by name, ID, or email…" onkeyup="debounceSearch()">
         </div>
     </div>
 
-    <div class="table-responsive">
-        <table class="table table-hover align-middle mb-0">
+    <!-- Compact 6-column layout that fits a normal viewport without h-scroll.
+         Secondary info is stacked under primary (sub-line text). -->
+    <style>
+        .table-modern.t-compact td { padding: 0.75rem 1rem; }
+        .table-modern.t-compact th { padding: 0.55rem 1rem; }
+        .cell-stack { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
+        .cell-stack .sub { font-size: 0.72rem; color: var(--text-muted); display: block;
+                           white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+        .badge-id { display: inline-block; padding: 0.1rem 0.5rem;
+                    font-family: 'JetBrains Mono', monospace; font-size: 0.72rem;
+                    font-weight: 600; color: var(--text-default);
+                    background: var(--surface-sunken); border-radius: 6px; }
+        .id-grid { display: grid; grid-template-columns: auto 1fr; gap: 0.15rem 0.5rem;
+                   font-size: 0.72rem; line-height: 1.3; min-width: 0; }
+        .id-grid .lbl { color: var(--text-muted); text-transform: uppercase;
+                        letter-spacing: 0.03em; font-weight: 600; font-size: 0.6rem; }
+        .id-grid .val { color: var(--text-default); font-family: 'JetBrains Mono', monospace;
+                        font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+                        max-width: 14ch; }
+        .id-grid .val.empty { color: var(--text-faint); font-style: italic; font-family: inherit; }
+        .status-tag { display: inline-flex; align-items: center; gap: 0.35rem;
+                      padding: 0.2rem 0.6rem; border-radius: 999px;
+                      font-size: 0.72rem; font-weight: 600; white-space: nowrap; }
+        .status-tag::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+        .status-tag.s-active     { background: var(--success-soft); color: #047857; }
+        .status-tag.s-leave      { background: var(--warning-soft); color: #b45309; }
+        .status-tag.s-resigned,
+        .status-tag.s-terminated { background: var(--danger-soft); color: #b91c1c; }
+        .status-tag.s-other      { background: var(--surface-sunken); color: var(--text-default); }
+        .row-actions { display: flex; gap: 0.25rem; justify-content: flex-end; }
+        .row-actions button, .row-actions a {
+            width: 30px; height: 30px; border-radius: 8px;
+            display: grid; place-items: center;
+            background: var(--surface-card);
+            border: 1px solid var(--border-default);
+            color: var(--text-muted); cursor: pointer;
+            transition: all 120ms ease;
+            text-decoration: none;
+        }
+        .row-actions button:hover, .row-actions a:hover {
+            background: var(--brand-soft); border-color: var(--brand);
+            color: var(--brand); transform: translateY(-1px);
+        }
+        .row-actions button.row-danger:hover {
+            background: var(--danger-soft); border-color: var(--danger); color: var(--danger);
+        }
+        .name-wrap { font-weight: 600; color: var(--text-strong); overflow: hidden;
+                     text-overflow: ellipsis; white-space: nowrap; max-width: 22ch; }
+        .col-role .cell-stack { max-width: 18ch; }
+        .col-role .cell-stack .top { font-weight: 600; color: var(--text-default);
+                                     overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .col-site { min-width: 110px; }
+        .col-ids  { min-width: 200px; }
+        @media (max-width: 1400px) { .table-modern.t-compact .col-hide-lg { display: none; } }
+    </style>
+    <div>
+        <table class="table-modern t-compact" style="table-layout: auto;">
             <thead>
                 <tr>
-                    <th class="ps-4" style="width: 40px;">
+                    <th style="width: 36px; padding-left: 1.25rem;">
                         <input type="checkbox" class="form-check-input" id="selectAll" onclick="toggleSelectAll(this)">
                     </th>
                     <th>Employee</th>
-                    <th>Badge ID</th>
-                    <th>Category</th>
-                    <th>Department</th>
-                    <th>Position</th>
-                    <th>Site</th>
-                    <th>Nationality</th>
-                    <th>Passport</th>
-                    <th>Labour Card</th>
-                    <th>MOL ID</th>
+                    <th class="col-role">Role · Dept</th>
+                    <th class="col-site">Site · Country</th>
+                    <th class="col-ids col-hide-lg">Identification</th>
                     <th>Status</th>
-                    <th class="text-end pe-4">Actions</th>
+                    <th style="text-align: right; padding-right: 1.25rem;">Actions</th>
                 </tr>
             </thead>
             <tbody id="employeeTableBody">
@@ -608,17 +565,15 @@
         </table>
     </div>
 
-    <div class="card-footer bg-white py-4 px-4 border-top">
-        <div class="d-flex justify-content-between align-items-center">
-            <span class="text-secondary small fw-medium" id="paginationInfo">Showing 0-0 of 0</span>
-            <div class="btn-group gap-2">
-                <button class="btn btn-light border btn-sm px-3 rounded-3" onclick="changePage(-1)" id="prevBtn">
-                    <i class="ri-arrow-left-s-line"></i> Previous
-                </button>
-                <button class="btn btn-light border btn-sm px-3 rounded-3" onclick="changePage(1)" id="nextBtn">
-                    Next <i class="ri-arrow-right-s-line"></i>
-                </button>
-            </div>
+    <div style="display:flex; justify-content: space-between; align-items: center; padding: 0.875rem 1.25rem; border-top: 1px solid var(--border-default);">
+        <span class="small" style="color: var(--text-muted);" id="paginationInfo">Showing 0-0 of 0</span>
+        <div style="display: flex; gap: 0.5rem;">
+            <button class="btn-modern btn-modern--ghost" style="padding: 0.35rem 0.75rem; font-size: 0.8rem;" onclick="changePage(-1)" id="prevBtn">
+                <i class="ri-arrow-left-s-line"></i> Previous
+            </button>
+            <button class="btn-modern btn-modern--ghost" style="padding: 0.35rem 0.75rem; font-size: 0.8rem;" onclick="changePage(1)" id="nextBtn">
+                Next <i class="ri-arrow-right-s-line"></i>
+            </button>
         </div>
     </div>
 </div>
@@ -1418,6 +1373,11 @@
         loadStats();
         loadEmployees();
         loadAlerts();
+        loadExecSummary();              // Daily executive summary card
+        loadSiteActivity();             // Per-site activity panel
+        // Auto-refresh every 60s so the dashboard stays live without manual reload
+        setInterval(loadSiteActivity, 60000);
+        setInterval(loadStats,         60000);
         populateCategoryDatalist();     // modal Position dropdown
         populateDepartmentDatalist();   // modal Department dropdown
         populateDepartmentDropdown();   // top-bar Department filter
@@ -1426,6 +1386,135 @@
         viewModal = new bootstrap.Modal(document.getElementById('viewModal'));
         // (Assuming other modals are triggered correctly)
     });
+
+    // ----- Site Activity Report -----
+    // Per-site live activity: today's attendance, last check-in time, 7-day
+    // trend, plus a callout for sites that haven't recorded attendance
+    // recently. Auto-refreshes every 60s (set in DOMContentLoaded).
+    async function loadSiteActivity() {
+        const meta = document.getElementById('siteActivityMeta');
+        const grid = document.getElementById('siteActivityGrid');
+        const summary = document.getElementById('siteActivitySummary');
+        const callout = document.getElementById('siteActivityCallout');
+        if (!grid) return;
+        try {
+            const res = await fetch('/api/attendance/analytics/site-activity/');
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Failed');
+            const totals = data.totals || {};
+            // Header summary pills
+            summary.innerHTML = `
+                <span class="pill pill--success" title="Sites that recorded attendance in the last ${data.idle_hours || 24}h">
+                    <i class="ri-pulse-line"></i> Active ${totals.sites_active ?? 0}
+                </span>
+                <span class="pill pill--warning" title="Last attendance 1-${data.inactive_days || 7} days ago">
+                    <i class="ri-time-line"></i> Idle ${totals.sites_idle ?? 0}
+                </span>
+                <span class="pill pill--danger" title="No attendance for over ${data.inactive_days || 7} days">
+                    <i class="ri-error-warning-line"></i> Inactive ${totals.sites_inactive ?? 0}
+                </span>
+                ${totals.sites_never_used ? `<span class="pill" style="background:#1f2937;color:#fff;"><i class="ri-radio-button-line"></i> Never used ${totals.sites_never_used}</span>` : ''}`;
+            meta.textContent = ` · As of ${data.as_of} · ${totals.present_today ?? 0}/${totals.active_employees ?? 0} present (${totals.overall_present_rate ?? 0}%)`;
+
+            // Inactive-sites callout
+            const inactive = data.inactive_sites || [];
+            if (inactive.length) {
+                callout.innerHTML = `<div class="inactive-callout">
+                    <i class="ri-error-warning-fill"></i>
+                    <div>
+                        <div class="title">${inactive.length} site${inactive.length === 1 ? '' : 's'} not using the system</div>
+                        <div class="body">${inactive.map(s => `<strong>${_esc(s.site_name)}</strong> (${s.active_employees} employees, ${_lastSeen(s)})`).join(' · ')}</div>
+                    </div>
+                </div>`;
+            } else {
+                callout.innerHTML = '';
+            }
+
+            // Site cards
+            const rows = data.sites || [];
+            if (!rows.length) {
+                grid.innerHTML = `<div class="text-secondary small">No sites configured yet.</div>`;
+                return;
+            }
+            grid.innerHTML = rows.map(r => {
+                const sparkMax = Math.max(...r.trend_7d, 1);
+                const spark = r.trend_7d.map((v, i) => {
+                    const h = Math.max(2, Math.round(v / sparkMax * 18));
+                    const isPeak = i === 6;
+                    return `<span class="${isPeak ? 'peak' : ''}" style="height:${h}px;"></span>`;
+                }).join('');
+                const deltaTxt = r.delta_vs_avg > 0 ? `+${r.delta_vs_avg} vs avg`
+                                : r.delta_vs_avg < 0 ? `${r.delta_vs_avg} vs avg`
+                                : 'flat';
+                return `<div class="site-card is-${r.activity_status}" onclick="filterSite('${r.site_id}', '${_esc(r.site_name).replace(/'/g, "\\'")}')">
+                    <div class="sc-head">
+                        <div class="sc-name" title="${_esc(r.site_name)}">${_esc(r.site_name)}</div>
+                        <span class="badge-status s-${r.activity_status}">${r.activity_status.replace('_', ' ')}</span>
+                    </div>
+                    <div class="sc-stat">
+                        <div>
+                            <div class="v">${r.present_today}</div>
+                            <div class="l">Present</div>
+                        </div>
+                        <div>
+                            <div class="v" style="color: var(--text-muted);">${r.active_employees}</div>
+                            <div class="l">Assigned</div>
+                        </div>
+                        <div>
+                            <div class="v" style="color: var(--brand);">${r.present_rate}%</div>
+                            <div class="l">Rate</div>
+                        </div>
+                    </div>
+                    <div class="sc-foot">
+                        <span>${_lastSeen(r)} · ${deltaTxt}</span>
+                        <div class="sc-spark" title="7-day attendance trend">${spark}</div>
+                    </div>
+                </div>`;
+            }).join('');
+        } catch (e) {
+            grid.innerHTML = `<div class="text-danger small">Failed to load site activity.</div>`;
+        }
+    }
+
+    function _esc(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+    function _lastSeen(r) {
+        if (r.activity_status === 'never_used' || r.hours_since_last == null) return 'never used';
+        const h = r.hours_since_last;
+        if (h < 1) return 'just now';
+        if (h < 24) return `last check-in ${Math.round(h)}h ago`;
+        const days = Math.round(h / 24);
+        return `last check-in ${days}d ago`;
+    }
+
+    // ----- Executive summary card (auto-NL bullets) -----
+    async function loadExecSummary() {
+        const list = document.getElementById('execSummaryList');
+        if (!list) return;
+        const period = document.getElementById('execPeriod')?.value || 'daily';
+        const ai = document.getElementById('execAi')?.checked ? 'true' : '';
+        list.innerHTML = `<div class="text-secondary py-2"><div class="spinner-border spinner-border-sm me-1"></div> ${ai ? 'Asking GPT-4o-mini…' : 'Composing…'}</div>`;
+        try {
+            const res = await fetch(`/api/attendance/analytics/executive-summary/?period=${period}${ai ? '&ai=true' : ''}`);
+            const data = await res.json();
+            const sevColor = { good: '#15803d', neutral: '#475569', warn: '#b45309', bad: '#b91c1c' };
+            const rows = (data.bullets || []).map(b => {
+                const color = sevColor[b.severity] || '#475569';
+                return `<div class="d-flex align-items-start gap-2 py-1">
+                    <div style="font-size:1.1rem; line-height:1.2;">${b.icon || '•'}</div>
+                    <div class="flex-grow-1" style="color:${color};">${b.text || ''}</div>
+                </div>`;
+            }).join('');
+            const enginePill = data.engine === 'llm'
+                ? `<div class="small mt-1" style="color:var(--brand);"><i class="ri-sparkling-2-line"></i> Polished by gpt-4o-mini</div>`
+                : '';
+            list.innerHTML = (rows || `<div class="text-secondary">No insights available.</div>`) + enginePill;
+        } catch (e) {
+            list.innerHTML = `<div class="text-danger small">Failed to load summary.</div>`;
+        }
+    }
 
     async function loadStats() {
         try {
@@ -1726,46 +1815,82 @@
     async function loadEmployees() {
         const query = document.getElementById('tableSearch').value;
         const tbody = document.getElementById('employeeTableBody');
-        tbody.innerHTML = '<tr><td colspan="13" class="text-center py-5"><div class="spinner-border spinner-border-sm text-primary"></div></td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center py-5"><div class="spinner-border spinner-border-sm text-primary"></div></td></tr>';
 
         try {
             const res = await fetch(`/api/attendance/employees/?page=${currentPage}&site=${currentSiteId}&status=${currentStatus}&position=${encodeURIComponent(currentPosition)}&department=${encodeURIComponent(currentDepartment)}&category=${currentCategory}&employer=${currentEmployer}&search=${query}&per_page=${rowsPerPage}&attendance_filter=${currentAttendanceFilter}`);
             const data = await res.json();
             const results = data.results || [];
             if (results.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="13" class="text-center py-5 text-muted">No matching records found.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center py-5 text-muted">No matching records found.</td></tr>';
                 return;
             }
 
+            const _esc = (s) => String(s == null ? '' : s)
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+            const idField = (label, val) =>
+                `<span class="lbl">${label}</span><span class="val ${val ? '' : 'empty'}">${val ? _esc(val) : '—'}</span>`;
+            const statusClass = (s) => {
+                const k = (s || 'active').toLowerCase();
+                if (k.includes('active'))     return 's-active';
+                if (k.includes('leave'))      return 's-leave';
+                if (k.includes('resign'))     return 's-resigned';
+                if (k.includes('terminat'))   return 's-terminated';
+                return 's-other';
+            };
+
             tbody.innerHTML = results.map(emp => `
                 <tr>
-                    <td class="ps-4">
+                    <td style="padding-left: 1.25rem;">
                         <input type="checkbox" class="form-check-input emp-checkbox" value="${emp.id}" onclick="updateBulkUI()">
                     </td>
                     <td>
-                        <div class="d-flex align-items-center gap-3">
+                        <div style="display:flex; align-items:center; gap:0.75rem; min-width:0;">
                             <div class="avatar-circle">
-                                ${emp.profile_picture_url ? `<img src="${emp.profile_picture_url}" alt="${emp.name}">` : emp.name.charAt(0)}
+                                ${emp.profile_picture_url ? `<img src="${_esc(emp.profile_picture_url)}" alt="${_esc(emp.name)}">` : _esc((emp.name||'?').charAt(0))}
                             </div>
-                            <div><div class="fw-bold text-dark">${emp.name}</div><div class="small text-secondary">${emp.email || '-'}</div></div>
+                            <div class="cell-stack" style="min-width:0;">
+                                <span class="name-wrap" title="${_esc(emp.name)}">${_esc(emp.name)}</span>
+                                <span class="sub">
+                                    <span class="badge-id">${_esc(emp.badge_number || '—')}</span>
+                                    ${emp.email ? '<span style="margin-left:6px;">' + _esc(emp.email) + '</span>' : ''}
+                                </span>
+                            </div>
                         </div>
                     </td>
-                    <td><span class="badge bg-light text-dark border font-monospace px-2">${emp.badge_number || '-'}</span></td>
-                    <td>${emp.salary_grade || '-'}</td>
-                    <td>${emp.department || '-'}</td>
-                    <td>${emp.position || '-'}</td>
-                    <td><i class="ri-map-pin-line text-secondary me-1"></i>${emp.site_name || '-'}</td>
-                    <td>${emp.nationality || '-'}</td>
-                    <td>${emp.passport_number || '-'}</td>
-                    <td>${emp.labor_card_number || '-'}</td>
-                    <td>${emp.mol_id || '-'}</td>
-                    <td><span class="badge bg-success bg-opacity-10 text-success px-3 py-2 rounded-pill">${emp.status || 'Active'}</span></td>
-                    <td class="text-end pe-4">
-                        <div class="d-flex justify-content-end gap-2">
-                             <button onclick="editEmployee(${emp.id})" class="btn btn-sm btn-light border rounded-3" title="Edit Employee"><i class="ri-edit-line"></i></button>
-                             <a href="/api/attendance/dashboard/user/${emp.id}/" class="btn btn-sm btn-light border rounded-3" title="View Report"><i class="ri-file-chart-line"></i></a>
-                             <button onclick="viewEmployee(${emp.id})" class="btn btn-sm btn-light border rounded-3" title="Quick View"><i class="ri-eye-line"></i></button>
-                             <button onclick="deleteSingle(${emp.id}, '${emp.name}')" class="btn btn-sm btn-light border rounded-3 text-danger" title="Delete Employee"><i class="ri-delete-bin-line"></i></button>
+                    <td class="col-role">
+                        <div class="cell-stack">
+                            <span class="top" title="${_esc(emp.position || '—')}">${_esc(emp.position || '—')}</span>
+                            <span class="sub" title="${_esc((emp.department || '') + ' · ' + (emp.salary_grade || ''))}">
+                                ${_esc(emp.department || '—')}${emp.salary_grade ? ' · ' + _esc(emp.salary_grade) : ''}
+                            </span>
+                        </div>
+                    </td>
+                    <td class="col-site">
+                        <div class="cell-stack">
+                            <span style="display:inline-flex; align-items:center; gap:0.3rem;">
+                                <i class="ri-map-pin-line" style="color: var(--text-muted);"></i>
+                                <span style="font-weight:500;">${_esc(emp.site_name || '—')}</span>
+                            </span>
+                            <span class="sub">${_esc(emp.nationality || '—')}</span>
+                        </div>
+                    </td>
+                    <td class="col-ids col-hide-lg">
+                        <div class="id-grid">
+                            ${idField('Passport', emp.passport_number)}
+                            ${idField('Labour', emp.labor_card_number)}
+                            ${idField('MOL', emp.mol_id)}
+                        </div>
+                    </td>
+                    <td>
+                        <span class="status-tag ${statusClass(emp.status)}">${_esc(emp.status || 'Active')}</span>
+                    </td>
+                    <td style="text-align: right; padding-right: 1.25rem;">
+                        <div class="row-actions">
+                            <button onclick="editEmployee(${emp.id})" title="Edit"><i class="ri-edit-line"></i></button>
+                            <a href="/api/attendance/dashboard/user/${emp.id}/" title="Report"><i class="ri-file-chart-line"></i></a>
+                            <button onclick="viewEmployee(${emp.id})" title="Quick View"><i class="ri-eye-line"></i></button>
+                            <button class="row-danger" onclick="deleteSingle(${emp.id}, '${_esc(emp.name).replace(/'/g,"\\'")}')" title="Delete"><i class="ri-delete-bin-line"></i></button>
                         </div>
                     </td>
                 </tr>`).join('');
@@ -1775,7 +1900,7 @@
             document.getElementById('paginationInfo').textContent = `Page ${currentPage} of ${Math.ceil(data.count / rowsPerPage) || 1}`;
             document.getElementById('prevBtn').disabled = !data.previous;
             document.getElementById('nextBtn').disabled = !data.next;
-        } catch (e) { tbody.innerHTML = '<tr><td colspan="13" class="text-center py-4 text-danger">Failed to sync data.</td></tr>'; }
+        } catch (e) { tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-danger">Failed to sync data.</td></tr>'; }
     }
 
     // --- Helper Functions (Search, Paging, Filter) ---

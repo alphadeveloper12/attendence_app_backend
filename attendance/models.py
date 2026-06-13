@@ -3,12 +3,6 @@ from datetime import datetime, time
 from django.utils import timezone
 from django.contrib.auth.models import User
 
-class Department(models.Model):
-    name = models.CharField(max_length=100, unique=True)
-
-    def __str__(self):
-        return self.name
-
 class Site(models.Model):
     name = models.CharField(max_length=100, unique=True)
     coordinates = models.JSONField(null=True, blank=True)  # Store extracted coordinates

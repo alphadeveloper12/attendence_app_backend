@@ -1,0 +1,122 @@
+{% extends 'base.html' %}
+
+{% block title %}Ask the Data - Admin Dashboard{% endblock %}
+
+{% block content %}
+<link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+
+<style>
+    .ask-box { display: flex; align-items: center; gap: 12px; padding: 6px 16px 6px 20px; border: 2px solid #2563eb; border-radius: 14px; background: #fff; box-shadow: 0 4px 14px rgba(37,99,235,0.08); }
+    .ask-box input { border: 0; flex-grow: 1; padding: 14px 0; outline: none; font-size: 1.05rem; }
+    .ask-box button { border: 0; background: #2563eb; color: #fff; border-radius: 10px; padding: 10px 18px; font-weight: 600; }
+    .ask-box button:hover { background: #1d4ed8; }
+    .ask-suggestion { display: inline-block; padding: 6px 14px; border-radius: 999px; background: #f1f5f9; color: #475569; font-size: 0.85rem; margin: 4px; cursor: pointer; transition: all 120ms ease; }
+    .ask-suggestion:hover { background: #e2e8f0; color: #2563eb; }
+    .answer-card { background: linear-gradient(135deg, #f0f9ff 0%, #ede9fe 100%); border: 1px solid #c7d2fe; border-radius: 14px; padding: 22px 26px; }
+    .as-understood { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+    .as-understood .chip { background: #fff; border: 1px solid #c7d2fe; color: #4338ca; padding: 3px 10px; border-radius: 999px; font-size: 0.75rem; font-weight: 600; }
+    .as-understood .chip .lbl { color: #94a3b8; font-weight: 500; margin-right: 4px; }
+    .result-table th { font-size: 0.7rem; text-transform: uppercase; color: #64748b; letter-spacing: 0.04em; background: #f8fafc; }
+    .result-table td { font-size: 0.85rem; vertical-align: middle; }
+</style>
+
+<div class="mb-3">
+    <h2 class="fw-bold mb-1">Ask the Data</h2>
+    <div class="small text-secondary">Type a question in plain English — answers come from your live employee + attendance data.</div>
+</div>
+
+<div class="ask-box mb-3">
+    <i class="ri-search-line text-primary" style="font-size:1.4rem;"></i>
+    <input type="text" id="askInput" placeholder="e.g. how many electricians are on leave at Vida this week?"
+           onkeydown="if(event.key === 'Enter') askQuestion()">
+    <button onclick="askQuestion()" id="askBtn"><i class="ri-send-plane-line"></i> Ask</button>
+</div>
+
+<div class="mb-4">
+    <div class="small text-secondary fw-bold mb-1">Try one of these</div>
+    <span class="ask-suggestion" onclick="setQuestion('How many active employees at Vida?')">How many active employees at Vida?</span>
+    <span class="ask-suggestion" onclick="setQuestion('Show me all carpenters on leave')">Show me all carpenters on leave</span>
+    <span class="ask-suggestion" onclick="setQuestion('How many absent today?')">How many absent today?</span>
+    <span class="ask-suggestion" onclick="setQuestion('Count of resigned employees')">Count of resigned employees</span>
+    <span class="ask-suggestion" onclick="setQuestion('List active employees in M.E.P. Department')">List active in M.E.P. Department</span>
+</div>
+
+<div id="answerArea"></div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function _csrf() {
+        return document.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
+    }
+    function setQuestion(q) {
+        document.getElementById('askInput').value = q;
+        askQuestion();
+    }
+    function _esc(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+    async function askQuestion() {
+        const q = (document.getElementById('askInput').value || '').trim();
+        if (!q) return;
+        const btn = document.getElementById('askBtn');
+        btn.disabled = true;
+        const area = document.getElementById('answerArea');
+        area.innerHTML = `<div class="text-center text-muted py-4"><div class="spinner-border spinner-border-sm"></div> Thinking…</div>`;
+        try {
+            const res = await fetch('/api/attendance/analytics/ask/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': _csrf() },
+                body: JSON.stringify({ q }),
+            });
+            const data = await res.json();
+            if (!res.ok) { area.innerHTML = `<div class="text-danger">${_esc(data.error || 'Failed')}</div>`; return; }
+
+            // As-understood chips
+            const u = data.as_understood || {};
+            const chips = [];
+            if (u.intent)     chips.push(`<span class="chip"><span class="lbl">intent:</span>${_esc(u.intent)}</span>`);
+            if (u.status)     chips.push(`<span class="chip"><span class="lbl">status:</span>${_esc(u.status)}</span>`);
+            if (u.attendance) chips.push(`<span class="chip"><span class="lbl">attendance:</span>${_esc(u.attendance)}</span>`);
+            if (u.position)   chips.push(`<span class="chip"><span class="lbl">position:</span>${_esc(u.position)}</span>`);
+            if (u.department) chips.push(`<span class="chip"><span class="lbl">department:</span>${_esc(u.department)}</span>`);
+            if (u.site)       chips.push(`<span class="chip"><span class="lbl">site:</span>${_esc(u.site)}</span>`);
+            if (u.window)     chips.push(`<span class="chip"><span class="lbl">window:</span>${_esc(u.window)}</span>`);
+
+            const engineBadge = data.engine === 'llm'
+                ? `<span class="chip" style="background:linear-gradient(135deg,#4f46e5,#7c3aed); color:#fff; border-color:transparent;"><span class="lbl" style="color:rgba(255,255,255,0.7);">parsed by:</span>gpt-4o-mini</span>`
+                : `<span class="chip"><span class="lbl">parsed by:</span>keyword parser</span>`;
+
+            let html = `<div class="answer-card">
+                <div class="small text-secondary fw-bold">Answer</div>
+                <div class="fw-bold" style="font-size:1.4rem; color:#1f2937;">${_esc(data.answer)}</div>
+                <div class="as-understood">${engineBadge}${chips.join('')}</div>
+            </div>`;
+
+            if ((data.results || []).length) {
+                html += `<div class="card border-0 shadow-sm mt-3"><div class="card-body p-0"><div style="overflow-x:auto;">
+                    <table class="result-table table table-hover mb-0">
+                        <thead><tr><th>Name</th><th>Badge</th><th>Department</th><th>Position</th><th>Site</th><th>Status</th></tr></thead>
+                        <tbody>
+                            ${data.results.map(r => `<tr onclick="window.location='/api/attendance/dashboard/user/${r.employee_id}/'" style="cursor:pointer;">
+                                <td class="fw-bold">${_esc(r.name)}</td>
+                                <td><span class="small text-secondary">${_esc(r.badge)}</span></td>
+                                <td>${_esc(r.department)}</td>
+                                <td>${_esc(r.position)}</td>
+                                <td>${_esc(r.site)}</td>
+                                <td><span class="small">${_esc(r.status)}</span></td>
+                            </tr>`).join('')}
+                        </tbody>
+                    </table>
+                </div></div></div>`;
+            }
+
+            area.innerHTML = html;
+        } catch (e) {
+            area.innerHTML = `<div class="text-danger">Network error.</div>`;
+        } finally { btn.disabled = false; }
+    }
+</script>
+{% endblock %}

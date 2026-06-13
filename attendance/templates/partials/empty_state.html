@@ -1,0 +1,10 @@
+{% comment %}
+Empty state.
+Usage:
+    {% include 'partials/empty_state.html' with icon="🎯" title="No alerts today" message="Everyone is within bounds." %}
+{% endcomment %}
+<div class="empty-state">
+    {% if icon %}<div class="empty-icon">{{ icon }}</div>{% endif %}
+    <h3>{{ title|default:"Nothing to show" }}</h3>
+    {% if message %}<p>{{ message }}</p>{% endif %}
+</div>

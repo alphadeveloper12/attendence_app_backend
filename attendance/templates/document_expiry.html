@@ -1,0 +1,167 @@
+{% extends 'base.html' %}
+
+{% block title %}Document Expiry - Admin Dashboard{% endblock %}
+
+{% block content %}
+<link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+
+<style>
+    .expiry-table th { background: #f8fafc; font-size: 0.7rem; text-transform: uppercase; color: #64748b; letter-spacing: 0.04em; }
+    .expiry-table td { vertical-align: middle; font-size: 0.85rem; }
+    .doc-chip { display: inline-block; padding: 4px 10px; border-radius: 999px; font-size: 0.72rem; font-weight: 700; margin: 1px 2px; font-variant-numeric: tabular-nums; }
+    .bucket-expired  { background: #1f2937; color: #fff; }
+    .bucket-critical { background: #dc2626; color: #fff; }
+    .bucket-urgent   { background: #d97706; color: #fff; }
+    .bucket-soon     { background: #2563eb; color: #fff; }
+    .band-card { border: 1px solid #e5e7eb; border-radius: 14px; padding: 14px 18px; cursor: pointer; transition: all 120ms ease; min-width: 150px; }
+    .band-card:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(0,0,0,0.06); }
+    .band-card.active { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,0.10); }
+</style>
+
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+        <h2 class="fw-bold mb-1">Document Expiry</h2>
+        <div class="small text-secondary" id="docSubtitle">Loading…</div>
+    </div>
+    <div class="d-flex gap-2 align-items-end flex-wrap">
+        <div>
+            <label class="form-label small fw-bold text-uppercase mb-0" style="font-size:0.6rem;">Site</label>
+            <select id="siteFilter" class="form-select form-select-sm" onchange="loadData()">
+                <option value="all">All Sites</option>
+            </select>
+        </div>
+    </div>
+</div>
+
+<div class="d-flex gap-3 mb-3 flex-wrap">
+    <div class="band-card active" data-bucket="all" onclick="filterBucket('all')">
+        <div class="text-secondary small fw-bold text-uppercase" style="font-size:0.65rem;">All</div>
+        <div class="fw-bold" style="font-size:1.6rem;" id="bandAll">—</div>
+    </div>
+    <div class="band-card" data-bucket="expired" onclick="filterBucket('expired')" style="border-left: 4px solid #1f2937;">
+        <div class="text-secondary small fw-bold text-uppercase" style="font-size:0.65rem;">Expired</div>
+        <div class="fw-bold" style="font-size:1.6rem; color:#1f2937;" id="bandExpired">—</div>
+    </div>
+    <div class="band-card" data-bucket="critical" onclick="filterBucket('critical')" style="border-left: 4px solid #dc2626;">
+        <div class="text-secondary small fw-bold text-uppercase" style="font-size:0.65rem;">&lt; 14 days</div>
+        <div class="fw-bold text-danger" style="font-size:1.6rem;" id="bandCritical">—</div>
+    </div>
+    <div class="band-card" data-bucket="urgent" onclick="filterBucket('urgent')" style="border-left: 4px solid #d97706;">
+        <div class="text-secondary small fw-bold text-uppercase" style="font-size:0.65rem;">&lt; 30 days</div>
+        <div class="fw-bold" style="font-size:1.6rem;color:#b45309;" id="bandUrgent">—</div>
+    </div>
+    <div class="band-card" data-bucket="soon" onclick="filterBucket('soon')" style="border-left: 4px solid #2563eb;">
+        <div class="text-secondary small fw-bold text-uppercase" style="font-size:0.65rem;">&lt; 90 days</div>
+        <div class="fw-bold text-primary" style="font-size:1.6rem;" id="bandSoon">—</div>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm">
+    <div class="card-body p-0">
+        <div id="tableContainer" style="overflow-x: auto;">
+            <div class="text-center text-muted py-5"><div class="spinner-border spinner-border-sm"></div> Loading…</div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let _rows = [];
+    let _bucketFilter = 'all';
+
+    document.addEventListener('DOMContentLoaded', () => {
+        loadSites();
+        loadData();
+    });
+
+    async function loadSites() {
+        try {
+            const res = await fetch('/api/attendance/stats/');
+            const data = await res.json();
+            const sel = document.getElementById('siteFilter');
+            (data.sites || []).forEach(s => {
+                const opt = document.createElement('option');
+                opt.value = s.id; opt.textContent = s.name;
+                sel.appendChild(opt);
+            });
+        } catch (e) {}
+    }
+
+    async function loadData() {
+        const site = document.getElementById('siteFilter').value;
+        const c = document.getElementById('tableContainer');
+        c.innerHTML = `<div class="text-center text-muted py-5"><div class="spinner-border spinner-border-sm"></div> Loading…</div>`;
+        try {
+            const res = await fetch(`/api/attendance/analytics/document-expiry/?site=${site}`);
+            const data = await res.json();
+            _rows = data.rows || [];
+            document.getElementById('docSubtitle').textContent =
+                `${data.count} employees with documents expiring (as of ${data.as_of})`;
+            document.getElementById('bandAll').textContent = data.count;
+            document.getElementById('bandExpired').textContent  = data.buckets?.expired  ?? 0;
+            document.getElementById('bandCritical').textContent = data.buckets?.critical ?? 0;
+            document.getElementById('bandUrgent').textContent   = data.buckets?.urgent   ?? 0;
+            document.getElementById('bandSoon').textContent     = data.buckets?.soon     ?? 0;
+            render();
+        } catch (e) {
+            c.innerHTML = `<div class="text-danger small text-center py-5">Failed to load document expiry data.</div>`;
+        }
+    }
+
+    function filterBucket(bucket) {
+        _bucketFilter = bucket;
+        document.querySelectorAll('.band-card').forEach(c => c.classList.toggle('active', c.dataset.bucket === bucket));
+        render();
+    }
+
+    function _esc(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    function _docLabel(d) {
+        if (d.days == null) return '—';
+        if (d.days < 0)  return `${d.type} expired ${Math.abs(d.days)}d ago`;
+        if (d.days === 0) return `${d.type} expires today`;
+        return `${d.type} in ${d.days}d`;
+    }
+
+    function render() {
+        const c = document.getElementById('tableContainer');
+        const rows = _bucketFilter === 'all' ? _rows : _rows.filter(r => r.worst_bucket === _bucketFilter);
+        if (!rows.length) {
+            c.innerHTML = `<div class="text-center text-muted py-5"><div style="font-size:2.5rem;opacity:0.3;">✅</div><h6 class="fw-bold text-secondary mt-3">No employees match this filter</h6></div>`;
+            return;
+        }
+        let html = `<table class="expiry-table table table-hover mb-0">
+            <thead><tr>
+                <th style="width:40px;">#</th>
+                <th>Employee</th>
+                <th>Site</th>
+                <th>Department</th>
+                <th>Document(s)</th>
+            </tr></thead><tbody>`;
+        rows.forEach((r, i) => {
+            html += `<tr onclick="window.location='/api/attendance/dashboard/user/${r.employee_id}/'" style="cursor:pointer;">
+                <td class="fw-bold text-secondary">${i + 1}</td>
+                <td>
+                    <div class="fw-bold">${_esc(r.name)}</div>
+                    <div class="small text-secondary">${_esc(r.badge_number)}</div>
+                </td>
+                <td>${_esc(r.site || '—')}</td>
+                <td>${_esc(r.department || '—')}</td>
+                <td>
+                    ${(r.docs || []).filter(d => d.bucket && d.bucket !== 'ok').map(d => `
+                        <span class="doc-chip bucket-${d.bucket}">${_docLabel(d)}</span>
+                        <span class="small text-secondary ms-1">(${d.date})</span>
+                    `).join('<br>')}
+                </td>
+            </tr>`;
+        });
+        html += '</tbody></table>';
+        c.innerHTML = html;
+    }
+</script>
+{% endblock %}

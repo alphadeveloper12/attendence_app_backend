@@ -1,0 +1,172 @@
+{% extends 'base.html' %}
+
+{% block title %}Attrition Risk - Admin Dashboard{% endblock %}
+
+{% block content %}
+<link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+
+<style>
+    .risk-table th { background: #f8fafc; font-size: 0.7rem; text-transform: uppercase; color: #64748b; letter-spacing: 0.04em; }
+    .risk-table td { vertical-align: middle; font-size: 0.85rem; }
+    .score-pill { font-weight: 700; padding: 4px 10px; border-radius: 999px; min-width: 60px; display: inline-block; text-align: center; font-variant-numeric: tabular-nums; }
+    .score-high   { background: rgba(220,38,38,0.12); color: #b91c1c; }
+    .score-medium { background: rgba(217,119,6,0.12); color: #b45309; }
+    .score-low    { background: rgba(34,197,94,0.12); color: #15803d; }
+    .factor-chip { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 0.7rem; font-weight: 600; margin: 1px 2px; }
+    .factor-high { background: rgba(220,38,38,0.10); color: #b91c1c; }
+    .factor-med  { background: rgba(217,119,6,0.10); color: #b45309; }
+    .factor-low  { background: rgba(59,130,246,0.10); color: #1d4ed8; }
+    .band-card { border: 1px solid #e5e7eb; border-radius: 14px; padding: 14px 18px; cursor: pointer; transition: all 120ms ease; min-width: 150px; }
+    .band-card:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(0,0,0,0.06); }
+    .band-card.active { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,0.10); }
+</style>
+
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+        <h2 class="fw-bold mb-1">Attrition Risk</h2>
+        <div class="small text-secondary" id="riskSubtitle">Loading…</div>
+    </div>
+    <div class="d-flex gap-2 align-items-end flex-wrap">
+        <div>
+            <label class="form-label small fw-bold text-uppercase mb-0" style="font-size:0.6rem;">Site</label>
+            <select id="siteFilter" class="form-select form-select-sm" onchange="loadData()">
+                <option value="all">All Sites</option>
+            </select>
+        </div>
+        <div>
+            <label class="form-label small fw-bold text-uppercase mb-0" style="font-size:0.6rem;">Min Score</label>
+            <select id="minScore" class="form-select form-select-sm" onchange="loadData()">
+                <option value="0">Any</option>
+                <option value="25">≥ 25 (med+)</option>
+                <option value="50" selected>≥ 50 (high)</option>
+                <option value="75">≥ 75 (severe)</option>
+            </select>
+        </div>
+    </div>
+</div>
+
+<!-- Band summary -->
+<div class="d-flex gap-3 mb-3 flex-wrap">
+    <div class="band-card" data-band="all" onclick="filterBand('all')">
+        <div class="text-secondary small fw-bold text-uppercase" style="font-size:0.65rem;">Total at risk</div>
+        <div class="fw-bold" style="font-size:1.6rem;" id="bandTotal">—</div>
+    </div>
+    <div class="band-card" data-band="high" onclick="filterBand('high')" style="border-left: 4px solid #dc2626;">
+        <div class="text-secondary small fw-bold text-uppercase" style="font-size:0.65rem;">High (≥50)</div>
+        <div class="fw-bold text-danger" style="font-size:1.6rem;" id="bandHigh">—</div>
+    </div>
+    <div class="band-card" data-band="medium" onclick="filterBand('medium')" style="border-left: 4px solid #d97706;">
+        <div class="text-secondary small fw-bold text-uppercase" style="font-size:0.65rem;">Medium (25-49)</div>
+        <div class="fw-bold" style="font-size:1.6rem; color:#b45309;" id="bandMedium">—</div>
+    </div>
+    <div class="band-card" data-band="low" onclick="filterBand('low')" style="border-left: 4px solid #16a34a;">
+        <div class="text-secondary small fw-bold text-uppercase" style="font-size:0.65rem;">Low (&lt;25)</div>
+        <div class="fw-bold text-success" style="font-size:1.6rem;" id="bandLow">—</div>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm">
+    <div class="card-body p-0">
+        <div id="tableContainer" style="overflow-x: auto;">
+            <div class="text-center text-muted py-5"><div class="spinner-border spinner-border-sm"></div> Loading…</div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let _rows = [];
+    let _bandFilter = 'all';
+
+    document.addEventListener('DOMContentLoaded', () => {
+        loadSites();
+        loadData();
+    });
+
+    async function loadSites() {
+        try {
+            const res = await fetch('/api/attendance/stats/');
+            const data = await res.json();
+            const sel = document.getElementById('siteFilter');
+            (data.sites || []).forEach(s => {
+                const opt = document.createElement('option');
+                opt.value = s.id; opt.textContent = s.name;
+                sel.appendChild(opt);
+            });
+        } catch (e) { /* leave dropdown empty */ }
+    }
+
+    async function loadData() {
+        const site = document.getElementById('siteFilter').value;
+        const minScore = document.getElementById('minScore').value;
+        const c = document.getElementById('tableContainer');
+        c.innerHTML = `<div class="text-center text-muted py-5"><div class="spinner-border spinner-border-sm"></div> Loading…</div>`;
+        try {
+            const res = await fetch(`/api/attendance/analytics/attrition-risk/?site=${site}&min_score=${minScore}`);
+            const data = await res.json();
+            _rows = data.rows || [];
+            document.getElementById('riskSubtitle').textContent =
+                `${data.count} employees scored (as of ${data.as_of}) — weights: attendance 30, sick 20, geofence 15, salary 20, tenure 15`;
+            document.getElementById('bandTotal').textContent  = data.count;
+            document.getElementById('bandHigh').textContent   = data.bands?.high   ?? 0;
+            document.getElementById('bandMedium').textContent = data.bands?.medium ?? 0;
+            document.getElementById('bandLow').textContent    = data.bands?.low    ?? 0;
+            render();
+        } catch (e) {
+            c.innerHTML = `<div class="text-danger small text-center py-5">Failed to load attrition data.</div>`;
+        }
+    }
+
+    function filterBand(band) {
+        _bandFilter = band;
+        document.querySelectorAll('.band-card').forEach(c => c.classList.toggle('active', c.dataset.band === band));
+        render();
+    }
+
+    function _esc(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    function render() {
+        const c = document.getElementById('tableContainer');
+        const rows = _bandFilter === 'all' ? _rows : _rows.filter(r => r.band === _bandFilter);
+        if (!rows.length) {
+            c.innerHTML = `<div class="text-center text-muted py-5"><div style="font-size:2.5rem;opacity:0.3;">✅</div><h6 class="fw-bold text-secondary mt-3">No employees match this filter</h6></div>`;
+            return;
+        }
+        let html = `<table class="risk-table table table-hover mb-0">
+            <thead><tr>
+                <th style="width:60px;">Rank</th>
+                <th style="width:90px;">Score</th>
+                <th>Employee</th>
+                <th>Site</th>
+                <th>Department · Position</th>
+                <th>Why</th>
+            </tr></thead><tbody>`;
+        rows.forEach((r, i) => {
+            const band = r.band || 'low';
+            html += `<tr onclick="window.location='/api/attendance/dashboard/user/${r.employee_id}/'" style="cursor:pointer;">
+                <td class="fw-bold text-secondary">#${i + 1}</td>
+                <td><span class="score-pill score-${band}">${r.score}</span></td>
+                <td>
+                    <div class="fw-bold">${_esc(r.name)}</div>
+                    <div class="small text-secondary">${_esc(r.badge_number)}</div>
+                </td>
+                <td>${_esc(r.site || '—')}</td>
+                <td>
+                    <div>${_esc(r.department || '—')}</div>
+                    <div class="small text-secondary">${_esc(r.position || '')}</div>
+                </td>
+                <td>
+                    ${(r.factors || []).map(f => `<span class="factor-chip factor-${f.severity || 'low'}">+${f.points} ${_esc(f.label)}</span>`).join('') || '<span class="text-secondary small">—</span>'}
+                </td>
+            </tr>`;
+        });
+        html += '</tbody></table>';
+        c.innerHTML = html;
+    }
+</script>
+{% endblock %}
