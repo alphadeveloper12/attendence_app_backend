@@ -210,3 +210,17 @@ LOGGING = {
     },
 }
 os.environ.setdefault("OMP_WAIT_POLICY", "ACTIVE")
+
+# ── AI / OpenAI configuration ──────────────────────────────────────────────
+# Set these in your shell or .env before starting the server:
+#   export OPENAI_API_KEY=sk-...        (required when AI_ENABLED=true)
+#   export AI_ENABLED=true              (kill-switch; defaults to false)
+#   export AI_MODEL=gpt-4o-mini         (optional; default is gpt-4o-mini)
+#   export AI_MAX_TOKENS=400            (optional; per-call cap, default 400)
+# NEVER commit a real key to git. The wrapper logs a warning + falls back to
+# the heuristic engines when the key is missing.
+AI_ENABLED       = (os.environ.get("AI_ENABLED", "false").lower() == "true")
+OPENAI_API_KEY   = os.environ.get("OPENAI_API_KEY", "")
+AI_MODEL         = os.environ.get("AI_MODEL", "gpt-4o-mini")
+AI_MAX_TOKENS    = int(os.environ.get("AI_MAX_TOKENS", "400"))
+AI_REQUEST_TIMEOUT = int(os.environ.get("AI_REQUEST_TIMEOUT", "12"))   # seconds
