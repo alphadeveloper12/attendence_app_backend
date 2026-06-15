@@ -5748,10 +5748,317 @@ import pandas as pd
 import calendar
 from .models import Employee, Attendance, Site, AdminProfile
 
+# ────────────────────────────────────────────────────────────────────────────
+# Monthly attendance report — analytics helpers
+# ────────────────────────────────────────────────────────────────────────────
+
+def _month_dates(year, month):
+    n = calendar.monthrange(year, month)[1]
+    return [datetime(year, month, d).date() for d in range(1, n + 1)]
+
+
+def _prev_month(year, month):
+    if month == 1:
+        return year - 1, 12
+    return year, month - 1
+
+
+def _attendance_band(pct):
+    if pct >= 95: return 'champion'
+    if pct >= 85: return 'steady'
+    if pct >= 70: return 'at_risk'
+    return 'critical'
+
+
+def _working_days_for(emp, dates_in_month, num_days):
+    """Working days in the month for a given employee, honouring the weekly
+    day-off on their site (different default for staff vs worker)."""
+    if not emp.site:
+        return num_days
+    is_staff = (emp.category or '').lower() == 'staff'
+    raw_off = emp.site.office_day_off if is_staff else emp.site.worker_day_off
+    day_off = (raw_off or '').strip().lower()
+    if not day_off:
+        return num_days
+    wd = sum(1 for d in dates_in_month
+             if d.strftime('%A').lower() != day_off)
+    return wd or num_days
+
+
+def _build_monthly_analytics(employees, attendance_records, year, month):
+    """Single-pass analytics builder used by both the JSON endpoint and the
+    AI executive-summary endpoint."""
+
+    num_days = calendar.monthrange(year, month)[1]
+    dates_in_month = _month_dates(year, month)
+    emp_count = len(employees)
+
+    emp_site = {e.id: e.site_id for e in employees}
+    emp_dept = {e.id: ((e.department or 'Unassigned').strip() or 'Unassigned')
+                for e in employees}
+    site_name = {}
+    site_emps = defaultdict(list)
+    dept_emps = defaultdict(list)
+    for e in employees:
+        if e.site_id:
+            site_name[e.site_id] = e.site.name if e.site else '-'
+            site_emps[e.site_id].append(e)
+        dept_emps[emp_dept[e.id]].append(e)
+
+    rec_by_user = defaultdict(list)
+    trend_p = defaultdict(int)
+    trend_l = defaultdict(int)
+    site_p = defaultdict(lambda: defaultdict(int))
+    dept_p = defaultdict(int)
+    dept_l = defaultdict(int)
+
+    for r in attendance_records:
+        rec_by_user[r.user_id].append(r)
+        if r.check_in_time:
+            trend_p[r.date] += 1
+            sid = emp_site.get(r.user_id)
+            if sid:
+                site_p[sid][r.date] += 1
+            dept_p[emp_dept.get(r.user_id, 'Unassigned')] += 1
+        if r.late_minutes and r.late_minutes > 0:
+            trend_l[r.date] += 1
+            dept_l[emp_dept.get(r.user_id, 'Unassigned')] += 1
+
+    employee_rows = []
+    bands = {'champion': 0, 'steady': 0, 'at_risk': 0, 'critical': 0}
+    total_present = 0
+    total_late = 0
+    total_ot = 0.0
+    zero_attendees = []
+
+    for e in employees:
+        recs = rec_by_user.get(e.id, [])
+        days_present = sum(1 for r in recs if r.check_in_time)
+        late_count = sum(1 for r in recs if r.late_minutes and r.late_minutes > 0)
+        ot_hours = sum(float(r.normal_ot_hours or 0) + float(r.special_ot_hours or 0)
+                       for r in recs)
+
+        working_days = _working_days_for(e, dates_in_month, num_days)
+        raw_pct = (days_present / num_days * 100) if num_days else 0
+        eff_pct = min((days_present / working_days * 100) if working_days else 0, 100.0)
+
+        bands[_attendance_band(eff_pct)] += 1
+        if days_present == 0:
+            zero_attendees.append(e)
+
+        total_present += days_present
+        total_late += late_count
+        total_ot += ot_hours
+
+        employee_rows.append({
+            'id': e.id,
+            'name': e.name,
+            'badge_number': e.badge_number,
+            'department': e.department or '-',
+            'profile_picture': e.profile_picture.url if e.profile_picture else None,
+            'site_id': e.site_id,
+            'site': e.site.name if e.site else '-',
+            'category': e.category or '',
+            'days_present': days_present,
+            'days_absent': num_days - days_present,
+            'working_days': working_days,
+            'late_count': late_count,
+            'overtime_hours': round(ot_hours, 2),
+            'attendance_percentage': round(eff_pct, 2),
+            'attendance_percentage_raw': round(raw_pct, 2),
+        })
+
+    trend = []
+    for d in dates_in_month:
+        p = trend_p.get(d, 0)
+        l = trend_l.get(d, 0)
+        trend.append({
+            'date': d.isoformat(),
+            'day': d.day,
+            'weekday': d.strftime('%a'),
+            'present': p,
+            'absent': max(0, emp_count - p),
+            'late': l,
+        })
+
+    wk_buckets = defaultdict(lambda: {'present': 0, 'late': 0, 'days': 0})
+    for t in trend:
+        b = wk_buckets[t['weekday']]
+        b['present'] += t['present']
+        b['late'] += t['late']
+        b['days'] += 1
+    weekday_split = []
+    for wd in ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']:
+        b = wk_buckets.get(wd, {'present': 0, 'late': 0, 'days': 0})
+        avg_pct = (b['present'] / b['days'] / emp_count * 100) if (b['days'] and emp_count) else 0
+        weekday_split.append({
+            'weekday': wd,
+            'avg_present': round(b['present'] / b['days'] if b['days'] else 0, 1),
+            'avg_present_pct': round(avg_pct, 1),
+            'total_late': b['late'],
+            'days_in_month': b['days'],
+        })
+
+    heatmap = []
+    site_avgs = []
+    for sid, emps in site_emps.items():
+        cells = []
+        site_total_present = 0
+        for d in dates_in_month:
+            p = site_p[sid].get(d, 0)
+            pct = (p / len(emps) * 100) if emps else 0
+            cells.append({'day': d.day, 'present': p, 'pct': round(pct, 1)})
+            site_total_present += p
+        avg_pct = (site_total_present / (len(emps) * num_days) * 100) if (emps and num_days) else 0
+        heatmap.append({
+            'site_id': sid,
+            'site': site_name.get(sid, '-'),
+            'employee_count': len(emps),
+            'days': cells,
+            'avg_pct': round(avg_pct, 1),
+        })
+        site_avgs.append({
+            'site_id': sid,
+            'site': site_name.get(sid, '-'),
+            'avg_pct': round(avg_pct, 1),
+            'employee_count': len(emps),
+        })
+    heatmap.sort(key=lambda r: -r['avg_pct'])
+    site_avgs.sort(key=lambda r: -r['avg_pct'])
+
+    department_breakdown = []
+    for dept, emps in dept_emps.items():
+        d_p = dept_p.get(dept, 0)
+        avg = (d_p / (len(emps) * num_days) * 100) if (emps and num_days) else 0
+        department_breakdown.append({
+            'department': dept,
+            'employee_count': len(emps),
+            'avg_pct': round(avg, 1),
+            'total_late': dept_l.get(dept, 0),
+        })
+    department_breakdown.sort(key=lambda r: -r['avg_pct'])
+
+    sorted_by_pct = sorted(employee_rows, key=lambda r: -r['attendance_percentage'])
+    top10 = sorted_by_pct[:10]
+    bottom_eligible = [r for r in sorted_by_pct if r['days_present'] > 0]
+    bottom10 = sorted(bottom_eligible, key=lambda r: r['attendance_percentage'])[:10]
+
+    anomalies = []
+    for row in heatmap:
+        streak = 0
+        max_streak = 0
+        for d in row['days']:
+            if d['present'] == 0:
+                streak += 1
+                if streak > max_streak:
+                    max_streak = streak
+            else:
+                streak = 0
+        if max_streak >= 3:
+            anomalies.append({
+                'severity': 'warning',
+                'icon': 'ri-error-warning-line',
+                'title': 'Inactive site',
+                'message': f"{row['site']} had 0 check-ins for {max_streak} consecutive days",
+            })
+
+    if zero_attendees:
+        anomalies.append({
+            'severity': 'danger',
+            'icon': 'ri-user-unfollow-line',
+            'title': 'Possible ghosts',
+            'message': f"{len(zero_attendees)} employees logged 0 attendance this month — review for offboarding",
+        })
+
+    nz_wk = [w for w in weekday_split if w['days_in_month'] > 0]
+    avg_late_per_wk = sum(w['total_late'] for w in nz_wk) / len(nz_wk) if nz_wk else 0
+    if avg_late_per_wk > 0:
+        for w in nz_wk:
+            if w['total_late'] > 2 * avg_late_per_wk and w['total_late'] >= 30:
+                ratio = int(w['total_late'] / avg_late_per_wk * 100)
+                anomalies.append({
+                    'severity': 'info',
+                    'icon': 'ri-time-line',
+                    'title': 'Late spike',
+                    'message': f"Lates spike on {w['weekday']}: {w['total_late']} late arrivals ({ratio}% of weekday avg)",
+                })
+
+    if emp_count and bands['critical'] / emp_count * 100 >= 10 and bands['critical'] >= 5:
+        anomalies.append({
+            'severity': 'danger',
+            'icon': 'ri-alarm-warning-line',
+            'title': 'Critical band high',
+            'message': f"{bands['critical']} employees ({bands['critical']/emp_count*100:.0f}%) are below 70% attendance",
+        })
+
+    return {
+        'rows': employee_rows,
+        'trend': trend,
+        'heatmap': heatmap,
+        'weekday_split': weekday_split,
+        'department_breakdown': department_breakdown,
+        'site_leaderboard': {
+            'top': site_avgs[:5],
+            'bottom': list(reversed(site_avgs[-5:])) if len(site_avgs) >= 5 else list(reversed(site_avgs)),
+        },
+        'employee_leaderboard': {
+            'top': top10,
+            'bottom': bottom10,
+        },
+        'bands': bands,
+        'anomalies': anomalies,
+        'totals': {
+            'present': total_present,
+            'late': total_late,
+            'overtime_hours': round(total_ot, 1),
+            'employees_with_zero_attendance': len(zero_attendees),
+        },
+    }
+
+
+def _prev_month_summary(employees_qs, year, month):
+    """Light comparison summary for the previous month — totals only, no
+    per-employee or per-site detail. Used for MoM deltas on the KPI tiles."""
+    pm_year, pm_month = _prev_month(year, month)
+    pm_days = calendar.monthrange(pm_year, pm_month)[1]
+    pm_start = datetime(pm_year, pm_month, 1).date()
+    pm_end = datetime(pm_year, pm_month, pm_days).date()
+
+    qs = Attendance.objects.filter(
+        date__gte=pm_start,
+        date__lte=pm_end,
+        user__in=employees_qs,
+    )
+    pm_present = qs.filter(check_in_time__isnull=False).count()
+    pm_late = qs.filter(late_minutes__gt=0).count()
+
+    agg = qs.aggregate(ot=Sum('normal_ot_hours'), sot=Sum('special_ot_hours'))
+    pm_ot = float(agg.get('ot') or 0) + float(agg.get('sot') or 0)
+
+    emp_count = employees_qs.count()
+    pm_avg = round(pm_present / (emp_count * pm_days) * 100, 2) if (emp_count and pm_days) else 0
+
+    return {
+        'month': calendar.month_name[pm_month],
+        'month_num': pm_month,
+        'year': pm_year,
+        'num_days': pm_days,
+        'avg_attendance': pm_avg,
+        'total_present': pm_present,
+        'total_late': pm_late,
+        'overtime_hours': round(pm_ot, 1),
+    }
+
+
 @login_required
 def monthly_report_view(request):
-    """Display monthly attendance report for selected site"""
-    # Permission Check
+    """Monthly attendance report — page render + JSON endpoint.
+
+    JSON response shape:
+        summary, comparison, trend, heatmap, weekday_split,
+        department_breakdown, site_leaderboard, employee_leaderboard,
+        bands, anomalies, results (paginated rows), pagination.
+    """
     is_superuser = request.user.is_superuser
     try:
         admin_profile = request.user.admin_profile
@@ -5763,149 +6070,306 @@ def monthly_report_view(request):
     if not is_superuser and not admin_profile:
         return render(request, 'dashboard.html', {'error': 'Permission Denied'})
 
-    # Handle AJAX Request
-    if request.headers.get('x-requested-with') == 'XMLHttpRequest':
-        # Get parameters
+    is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest'
+
+    if not is_ajax:
+        now = datetime.now()
+        months = [(i, calendar.month_name[i]) for i in range(1, 13)]
+        years = list(range(now.year - 2, now.year + 1))
+        sites = list(Site.objects.all().values('id', 'name')) if is_superuser else []
+        return render(request, 'monthly_report.html', {
+            'months': months,
+            'years': years,
+            'sites': sites,
+            'is_superuser': is_superuser,
+            'current_month': now.month,
+            'current_year': now.year,
+        })
+
+    try:
         month = int(request.GET.get('month', datetime.now().month))
         year = int(request.GET.get('year', datetime.now().year))
-        site_id = request.GET.get('site')
-        employer_filter = request.GET.get('employer')
-        search_query = request.GET.get('search', '').strip()
-        page_num = request.GET.get('page', 1)
+    except (TypeError, ValueError):
+        month, year = datetime.now().month, datetime.now().year
+    site_id = request.GET.get('site')
+    employer_filter = request.GET.get('employer')
+    search_query = request.GET.get('search', '').strip()
+    page_num = request.GET.get('page', 1)
+    try:
         per_page = int(request.GET.get('per_page', 20))
-        
-        selected_site = None
-        if is_superuser:
-            if site_id and site_id != 'all':
-                try:
-                    selected_site = Site.objects.get(id=site_id)
-                except Site.DoesNotExist:
-                    pass
-        elif site_admin_sites.exists():
-            employees = employees.filter(site__in=site_admin_sites)
-        
-        # Get employees for selected site
-        employees = Employee.objects.all()
-        if selected_site:
-            employees = employees.filter(site=selected_site)
-            
-        # Search Filter
-        if search_query:
-            employees = employees.filter(
-                Q(name__icontains=search_query) |
-                Q(badge_number__icontains=search_query) |
-                Q(email__icontains=search_query) |
-                Q(phone__icontains=search_query)
-            )
+    except (TypeError, ValueError):
+        per_page = 20
 
-        # Employer Filter (parent company)
-        if employer_filter and employer_filter != 'all':
-            employees = employees.filter(employer__iexact=employer_filter)
-
-        # Calculate date range for the month
-        num_days = calendar.monthrange(year, month)[1]
-        start_date = datetime(year, month, 1).date()
-        end_date = datetime(year, month, num_days).date()
-        
-        # Get all attendance records for the month
-        attendance_records = Attendance.objects.filter(
-            date__gte=start_date,
-            date__lte=end_date,
-            user__in=employees
-        ).select_related('user')
-        
-        attendance_map = {} # user_id -> list of records
-        attendance_map = {} # user_id -> list of records
-        for record in attendance_records:
-            if record.user_id not in attendance_map:
-                attendance_map[record.user_id] = []
-            attendance_map[record.user_id].append(record)
-            
-        employee_data = []
-        total_present_all = 0
-        total_late_all = 0
-        
-        for emp in employees:
-            emp_recs = attendance_map.get(emp.id, [])
-            days_present = len([r for r in emp_recs if r.check_in_time])
-            days_absent = num_days - days_present
-            late_count = len([r for r in emp_recs if r.late_minutes > 0])
-            
-            attendance_percentage = (days_present / num_days * 100) if num_days > 0 else 0
-            
-            employee_data.append({
-                'id': emp.id,
-                'name': emp.name,
-                'badge_number': emp.badge_number,
-                'department': emp.department,
-                'profile_picture': emp.profile_picture.url if emp.profile_picture else None,
-                'site': emp.site.name if emp.site else '-',
-                'days_present': days_present,
-                'days_absent': days_absent,
-                'late_count': late_count,
-                'attendance_percentage': round(attendance_percentage, 2)
-            })
-            
-            total_present_all += days_present
-            total_late_all += late_count
-        
-        # Calculate summary statistics
-        total_employees = employees.count()
-        avg_attendance = (total_present_all / (total_employees * num_days) * 100) if (total_employees * num_days) > 0 else 0
-        
-        # Paginate results
-        paginator = Paginator(employee_data, per_page)
+    employees = Employee.objects.select_related('site').all()
+    if not is_superuser and site_admin_sites.exists():
+        employees = employees.filter(site__in=site_admin_sites)
+    if is_superuser and site_id and site_id != 'all':
         try:
-            page_obj = paginator.page(page_num)
-        except (PageNotAnInteger, EmptyPage):
-            page_obj = paginator.page(1)
+            employees = employees.filter(site_id=int(site_id))
+        except (ValueError, TypeError):
+            pass
+    if employer_filter and employer_filter != 'all':
+        employees = employees.filter(employer__iexact=employer_filter)
 
-        data = {
-            'results': list(page_obj),
-            'summary': {
-                'total_days': num_days,
-                'total_employees': total_employees,
-                'avg_attendance': round(avg_attendance, 2),
-                'total_present': total_present_all,
-                'total_late': total_late_all,
-                'month_name': calendar.month_name[month],
-                'year': year
-            },
-            'pagination': {
-                'current_page': page_obj.number,
-                'num_pages': paginator.num_pages,
-                'has_next': page_obj.has_next(),
-                'has_previous': page_obj.has_previous(),
-                'total_items': paginator.count,
-                'start_index': page_obj.start_index(),
-                'end_index': page_obj.end_index(),
-            },
-            'sites': list(Site.objects.all().values('id', 'name')) if is_superuser else [],
-            'employers': list(EMPLOYER_CHOICES),
-            'sponsors': list(SPONSOR_CHOICES),
-            'permissions': {
-                'is_superuser': is_superuser
-            }
-        }
-        return JsonResponse(data)
+    analytics_employees = list(employees)
 
-    # Initial Page Load (Skeleton)
-    now = datetime.now()
-    months = [(i, calendar.month_name[i]) for i in range(1, 13)]
-    years = list(range(now.year - 2, now.year + 1))
-    sites = []
-    if is_superuser:
-        sites = list(Site.objects.all().values('id', 'name'))
-        
-    context = {
-        'months': months,
-        'years': years,
-        'sites': sites,
-        'is_superuser': is_superuser,
-        'current_month': now.month,
-        'current_year': now.year
-    }
-    return render(request, 'monthly_report.html', context)
+    if search_query:
+        rows_qs = employees.filter(
+            Q(name__icontains=search_query) |
+            Q(badge_number__icontains=search_query) |
+            Q(email__icontains=search_query) |
+            Q(phone__icontains=search_query)
+        )
+        row_id_filter = {e.id for e in rows_qs}
+    else:
+        row_id_filter = None
+
+    num_days = calendar.monthrange(year, month)[1]
+    dates_in_month = _month_dates(year, month)
+    start_date = dates_in_month[0]
+    end_date = dates_in_month[-1]
+
+    attendance_records = list(Attendance.objects.filter(
+        date__gte=start_date,
+        date__lte=end_date,
+        user__in=analytics_employees,
+    ))
+
+    analytics = _build_monthly_analytics(
+        analytics_employees, attendance_records, year, month
+    )
+
+    rows = (analytics['rows'] if row_id_filter is None
+            else [r for r in analytics['rows'] if r['id'] in row_id_filter])
+
+    emp_count = len(analytics_employees)
+    avg_pct_raw = (analytics['totals']['present'] / (emp_count * num_days) * 100
+                   if (emp_count and num_days) else 0)
+    if analytics['rows']:
+        avg_pct_eff = sum(r['attendance_percentage'] for r in analytics['rows']) / len(analytics['rows'])
+    else:
+        avg_pct_eff = 0
+
+    comparison = _prev_month_summary(employees, year, month)
+    delta_avg = round(avg_pct_raw - comparison['avg_attendance'], 1)
+    delta_present = analytics['totals']['present'] - comparison['total_present']
+    delta_late = analytics['totals']['late'] - comparison['total_late']
+    delta_ot = round(analytics['totals']['overtime_hours'] - comparison['overtime_hours'], 1)
+
+    paginator = Paginator(rows, per_page)
+    try:
+        page_obj = paginator.page(page_num)
+    except (PageNotAnInteger, EmptyPage):
+        page_obj = paginator.page(1)
+
+    return JsonResponse({
+        'results': list(page_obj),
+        'summary': {
+            'total_days': num_days,
+            'total_employees': emp_count,
+            'avg_attendance': round(avg_pct_raw, 2),
+            'avg_attendance_effective': round(avg_pct_eff, 2),
+            'total_present': analytics['totals']['present'],
+            'total_late': analytics['totals']['late'],
+            'total_overtime': analytics['totals']['overtime_hours'],
+            'employees_with_zero_attendance': analytics['totals']['employees_with_zero_attendance'],
+            'month_name': calendar.month_name[month],
+            'year': year,
+            'month_num': month,
+        },
+        'comparison': {
+            'previous': comparison,
+            'delta_avg_pct': delta_avg,
+            'delta_present': delta_present,
+            'delta_late': delta_late,
+            'delta_overtime': delta_ot,
+        },
+        'trend': analytics['trend'],
+        'heatmap': analytics['heatmap'],
+        'weekday_split': analytics['weekday_split'],
+        'department_breakdown': analytics['department_breakdown'],
+        'site_leaderboard': analytics['site_leaderboard'],
+        'employee_leaderboard': analytics['employee_leaderboard'],
+        'bands': analytics['bands'],
+        'anomalies': analytics['anomalies'],
+        'pagination': {
+            'current_page': page_obj.number,
+            'num_pages': paginator.num_pages,
+            'has_next': page_obj.has_next(),
+            'has_previous': page_obj.has_previous(),
+            'total_items': paginator.count,
+            'start_index': page_obj.start_index(),
+            'end_index': page_obj.end_index(),
+        },
+        'sites': list(Site.objects.all().values('id', 'name')) if is_superuser else [],
+        'employers': list(EMPLOYER_CHOICES),
+        'sponsors': list(SPONSOR_CHOICES),
+        'permissions': {
+            'is_superuser': is_superuser,
+        },
+    })
+
+
+@login_required
+def monthly_report_employee_calendar(request, employee_id):
+    """Returns one employee's daily attendance for a given month in a flat
+    list ready for the mini-calendar modal."""
+    try:
+        emp = Employee.objects.select_related('site').get(id=employee_id)
+    except Employee.DoesNotExist:
+        return JsonResponse({'error': 'Employee not found'}, status=404)
+
+    if not request.user.is_superuser:
+        try:
+            profile = AdminProfile.objects.get(user=request.user)
+            if profile.sites.exists() and emp.site not in profile.sites.all():
+                return JsonResponse({'error': 'Permission denied'}, status=403)
+        except AdminProfile.DoesNotExist:
+            return JsonResponse({'error': 'Permission denied'}, status=403)
+
+    try:
+        month = int(request.GET.get('month', datetime.now().month))
+        year = int(request.GET.get('year', datetime.now().year))
+    except (TypeError, ValueError):
+        month, year = datetime.now().month, datetime.now().year
+
+    num_days = calendar.monthrange(year, month)[1]
+    start_date = datetime(year, month, 1).date()
+    end_date = datetime(year, month, num_days).date()
+
+    recs = Attendance.objects.filter(
+        user=emp, date__gte=start_date, date__lte=end_date,
+    ).order_by('date')
+
+    rows = []
+    for r in recs:
+        rows.append({
+            'date': r.date.isoformat(),
+            'check_in_time': r.check_in_time.isoformat() if r.check_in_time else None,
+            'check_out_time': r.check_out_time.isoformat() if r.check_out_time else None,
+            'late_minutes': r.late_minutes or 0,
+            'overtime_hours': float((r.normal_ot_hours or 0) + (r.special_ot_hours or 0)),
+            'status': r.status,
+        })
+
+    return JsonResponse({
+        'employee': {
+            'id': emp.id,
+            'name': emp.name,
+            'badge_number': emp.badge_number,
+            'department': emp.department or '',
+            'site': emp.site.name if emp.site else '',
+        },
+        'month': month,
+        'year': year,
+        'month_name': calendar.month_name[month],
+        'num_days': num_days,
+        'attendance': rows,
+    })
+
+
+@login_required
+def monthly_report_exec_summary(request):
+    """AI-polished executive summary for the selected month. Falls back to
+    heuristic bullets when AI is disabled or the call fails."""
+    is_superuser = request.user.is_superuser
+    try:
+        admin_profile = request.user.admin_profile
+        site_admin_sites = admin_profile.sites.all()
+    except AdminProfile.DoesNotExist:
+        admin_profile = None
+        site_admin_sites = Site.objects.none()
+
+    if not is_superuser and not admin_profile:
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+
+    try:
+        month = int(request.GET.get('month', datetime.now().month))
+        year = int(request.GET.get('year', datetime.now().year))
+    except (TypeError, ValueError):
+        month, year = datetime.now().month, datetime.now().year
+    site_id = request.GET.get('site')
+    employer_filter = request.GET.get('employer')
+
+    employees = Employee.objects.select_related('site').all()
+    if not is_superuser and site_admin_sites.exists():
+        employees = employees.filter(site__in=site_admin_sites)
+    if is_superuser and site_id and site_id != 'all':
+        try:
+            employees = employees.filter(site_id=int(site_id))
+        except (ValueError, TypeError):
+            pass
+    if employer_filter and employer_filter != 'all':
+        employees = employees.filter(employer__iexact=employer_filter)
+
+    emp_list = list(employees)
+    dates_in_month = _month_dates(year, month)
+    start_date = dates_in_month[0]
+    end_date = dates_in_month[-1]
+    attendance_records = list(Attendance.objects.filter(
+        date__gte=start_date, date__lte=end_date, user__in=emp_list,
+    ))
+
+    analytics = _build_monthly_analytics(emp_list, attendance_records, year, month)
+    prev = _prev_month_summary(employees, year, month)
+
+    num_days = calendar.monthrange(year, month)[1]
+    emp_count = len(emp_list)
+    total_present = analytics['totals']['present']
+    total_late = analytics['totals']['late']
+    overtime = analytics['totals']['overtime_hours']
+    bands = analytics['bands']
+    avg_pct = round(total_present / (emp_count * num_days) * 100, 2) if (emp_count and num_days) else 0
+
+    delta = round(avg_pct - prev['avg_attendance'], 1)
+    direction = 'up' if delta > 0 else ('down' if delta < 0 else 'flat')
+
+    top_dept = analytics['department_breakdown'][0] if analytics['department_breakdown'] else None
+    worst_dept = analytics['department_breakdown'][-1] if analytics['department_breakdown'] else None
+    worst_site = analytics['site_leaderboard']['bottom'][0] if analytics['site_leaderboard']['bottom'] else None
+
+    bullets = [
+        {'icon': 'ri-line-chart-line', 'severity': 'info',
+         'text': f"Average attendance was {avg_pct}% — {direction} {abs(delta)}pp vs {prev['month']} {prev['year']} ({prev['avg_attendance']}%)."},
+        {'icon': 'ri-group-line', 'severity': 'info',
+         'text': f"{emp_count:,} active employees logged {total_present:,} present-days, {total_late:,} late arrivals and {overtime:,.0f} overtime hours."},
+        {'icon': 'ri-bar-chart-grouped-line', 'severity': 'info',
+         'text': f"Bands: {bands['champion']} champions (≥95%), {bands['steady']} steady (85–95%), {bands['at_risk']} at risk (70–85%), {bands['critical']} critical (<70%)."},
+    ]
+    if top_dept and worst_dept and top_dept['department'] != worst_dept['department']:
+        bullets.append({
+            'icon': 'ri-building-line', 'severity': 'info',
+            'text': f"Best department: {top_dept['department']} at {top_dept['avg_pct']}%. Bottom: {worst_dept['department']} at {worst_dept['avg_pct']}%.",
+        })
+    if worst_site:
+        bullets.append({
+            'icon': 'ri-map-pin-line', 'severity': 'warning',
+            'text': f"Site needing attention: {worst_site['site']} at {worst_site['avg_pct']}% avg attendance ({worst_site['employee_count']} employees).",
+        })
+    for a in analytics['anomalies'][:2]:
+        bullets.append({
+            'icon': a.get('icon', 'ri-error-warning-line'),
+            'severity': a.get('severity', 'warning'),
+            'text': a['message'],
+        })
+
+    ai_polished = None
+    ai_used = False
+    try:
+        from attendance.services import llm as _llm
+        if _llm.ai_is_enabled():
+            ai_polished = _llm.polish_summary(bullets)
+            ai_used = bool(ai_polished)
+    except Exception:
+        ai_polished = None
+
+    return JsonResponse({
+        'narrative': ai_polished or bullets,
+        'ai_used': ai_used,
+        'heuristic_fallback': bullets,
+        'month_name': calendar.month_name[month],
+        'year': year,
+    })
 
 
 @login_required
@@ -6019,13 +6483,76 @@ def export_monthly_report(request):
     
     return response
 
+def _daily_baseline(emp_qs, selected_date):
+    """Cheap baseline counts for delta tiles.
+
+    Returns yesterday's present count + the avg present count across the last
+    4 same-weekdays. Heavy queries are aggregate-only — no per-row work."""
+    yesterday = selected_date - timedelta(days=1)
+    y_present = Attendance.objects.filter(
+        date=yesterday, user__in=emp_qs, check_in_time__isnull=False,
+    ).count()
+
+    same_wd_dates = []
+    for w in range(1, 5):
+        d = selected_date - timedelta(days=7 * w)
+        same_wd_dates.append(d)
+    base_present = Attendance.objects.filter(
+        date__in=same_wd_dates, user__in=emp_qs, check_in_time__isnull=False,
+    ).count()
+    base_avg = int(round(base_present / len(same_wd_dates))) if same_wd_dates else 0
+
+    return {
+        'yesterday_present': y_present,
+        'same_weekday_avg_present': base_avg,
+        'same_weekday_dates': [d.isoformat() for d in same_wd_dates],
+    }
+
+
+def _avg_checkin_time(records):
+    """Average check-in time (seconds since midnight, local TZ) across records
+    with a check_in_time. Returns None if no records."""
+    if not records:
+        return None
+    total = 0
+    n = 0
+    for r in records:
+        if not r.check_in_time:
+            continue
+        t = timezone.localtime(r.check_in_time)
+        total += t.hour * 3600 + t.minute * 60 + t.second
+        n += 1
+    return total // n if n else None
+
+
+def _fmt_seconds(s):
+    if s is None:
+        return None
+    h = s // 3600
+    m = (s % 3600) // 60
+    ampm = 'AM' if h < 12 else 'PM'
+    h12 = h % 12 or 12
+    return f"{h12}:{m:02d} {ampm}"
+
+
+def _seven_day_baseline_checkin(emp_qs, selected_date):
+    """Avg check-in time for these employees over the past 7 days."""
+    start = selected_date - timedelta(days=7)
+    end = selected_date - timedelta(days=1)
+    recs = list(Attendance.objects.filter(
+        date__gte=start, date__lte=end, user__in=emp_qs,
+        check_in_time__isnull=False,
+    ).only('check_in_time'))
+    return _avg_checkin_time(recs)
+
+
 class AttendanceReportDataView(APIView):
     permission_classes = [IsAdminUser | IsSiteAdmin]
 
     def get(self, request):
         is_superuser = request.user.is_superuser
         is_staff = request.user.is_staff
-        
+
         try:
             admin_profile = request.user.admin_profile
             permission_sites = admin_profile.sites.all()
@@ -6034,7 +6561,7 @@ class AttendanceReportDataView(APIView):
             permission_sites = Site.objects.none()
 
         if not is_superuser and not is_staff and not admin_profile:
-             return Response({'error': 'Permission Denied'}, status=403)
+            return Response({'error': 'Permission Denied'}, status=403)
 
         # Filters
         date_str = request.GET.get('date')
@@ -6042,12 +6569,16 @@ class AttendanceReportDataView(APIView):
         status_filter = request.GET.get('status')
         position_filter = request.GET.get('position')
         department_filter = request.GET.get('department')
-        category_filter = request.GET.get('category')  # Staff / Worker enum
+        category_filter = request.GET.get('category')
         employer_filter = request.GET.get('employer')
+        quick_filter = (request.GET.get('quick') or '').lower()
         page_num = request.GET.get('page', 1)
-        per_page = int(request.GET.get('per_page', 20))
+        try:
+            per_page = int(request.GET.get('per_page', 20))
+        except (TypeError, ValueError):
+            per_page = 20
 
-        # Date Logic
+        # Date logic
         if date_str:
             try:
                 selected_date = datetime.strptime(date_str, '%Y-%m-%d').date()
@@ -6056,18 +6587,9 @@ class AttendanceReportDataView(APIView):
         else:
             selected_date = timezone.localdate()
 
-        # Build Querysets
-        employees = Employee.objects.all()
+        # Build employee queryset
+        employees = Employee.objects.select_related('site').all()
         sites_list = []
-        raw_positions = Employee.objects.exclude(position__isnull=True).exclude(position='').values_list('position', flat=True)
-        unified_positions = {}
-        for p in raw_positions:
-            if not p: continue
-            p_strip = p.strip()
-            p_lower = p_strip.lower()
-            if p_lower not in unified_positions:
-                unified_positions[p_lower] = p_strip.capitalize()
-        positions_list = sorted(list(unified_positions.values()))
 
         if is_superuser or is_staff:
             sites_list = list(Site.objects.all().order_by('name').values('id', 'name'))
@@ -6079,56 +6601,146 @@ class AttendanceReportDataView(APIView):
                 employees = employees.filter(site_id=site_id)
             else:
                 employees = employees.filter(site__in=permission_sites)
-        
-        # Position filter (trade name) — Position first, salary_grade fallback
+
         if position_filter and position_filter != 'all':
             employees = employees.filter(
                 Q(position__iexact=position_filter) |
                 (Q(position__in=['', None]) & Q(salary_grade__iexact=position_filter))
             )
-        # Department filter
         if department_filter and department_filter != 'all':
             employees = employees.filter(department__iexact=department_filter)
-        # Category filter — Staff / Worker enum
         if category_filter and category_filter != 'all':
             employees = employees.filter(category__iexact=category_filter)
-
-        # Employer Filter (one of EMPLOYER_CHOICES)
         if employer_filter and employer_filter != 'all':
             employees = employees.filter(employer__iexact=employer_filter)
 
-        # Attendance Fetch
-        attendance_records = Attendance.objects.filter(
-            date=selected_date,
-            user__in=employees
-        ).select_related('user', 'user__site')
+        # Available choice lists
+        raw_positions = Employee.objects.exclude(position__isnull=True).exclude(position='').values_list('position', flat=True)
+        unified_positions = {}
+        for p in raw_positions:
+            if not p:
+                continue
+            p_strip = p.strip()
+            p_lower = p_strip.lower()
+            if p_lower not in unified_positions:
+                unified_positions[p_lower] = p_strip.capitalize()
+        positions_list = sorted(list(unified_positions.values()))
 
+        # Today's attendance records
+        attendance_records = list(Attendance.objects.filter(
+            date=selected_date, user__in=employees,
+        ).select_related('user', 'user__site'))
         attendance_map = {att.user_id: att for att in attendance_records}
 
-        # Process Results
+        # Aggregate collections
         all_results = []
-        stats = {'total': 0, 'present': 0, 'absent': 0, 'late': 0}
+        stats = {'total': 0, 'present': 0, 'absent': 0, 'late': 0,
+                 'missing_checkout': 0, 'geofence_violations': 0, 'checking_in_now': 0}
+        hourly = {h: 0 for h in range(24)}                 # check-in hour -> count
+        site_buckets = defaultdict(lambda: {'present': 0, 'total': 0, 'late': 0, 'name': '-'})
+        dept_buckets = defaultdict(lambda: {'present': 0, 'total': 0})
+        cat_buckets  = defaultdict(lambda: {'present': 0, 'total': 0})
+
+        late_list = []          # employees marked late, sorted by minutes desc
+        missing_checkout_list = []
+        geofence_violation_list = []
+
+        now_local = timezone.localtime()
+        five_min_ago = now_local - timedelta(minutes=5)
+        # Schedule lookup for "expected check-out" calc
+        eod_threshold = now_local - timedelta(hours=6)  # any check-in older than 6h with no check-out is "missing"
 
         for emp in employees:
             att = attendance_map.get(emp.id)
-            status = 'Absent'
+            site_name = emp.site.name if emp.site else '-'
+            site_key  = emp.site_id or 0
+            dept_name = (emp.department or 'Unassigned').strip() or 'Unassigned'
+            cat_name  = (emp.category or 'unspecified').strip().lower()
+
             check_in = '-'
             check_out = '-'
-            
-            if att:
+            late_min = 0
+            ot_hours = 0.0
+            is_geofence_violation = False
+            checked_in_at_iso = None
+            checked_out_at_iso = None
+
+            status = 'Absent'
+
+            if att and att.check_in_time:
                 status = 'Present'
-                check_in = timezone.localtime(att.check_in_time).strftime('%I:%M %p') if att.check_in_time else '-'
-                check_out = timezone.localtime(att.check_out_time).strftime('%I:%M %p') if att.check_out_time else '-'
-                if att.late_minutes > 0: stats['late'] += 1
+                in_local = timezone.localtime(att.check_in_time)
+                check_in = in_local.strftime('%I:%M %p')
+                checked_in_at_iso = in_local.isoformat()
+                hourly[in_local.hour] = hourly.get(in_local.hour, 0) + 1
+                if att.check_in_time >= five_min_ago:
+                    stats['checking_in_now'] += 1
+                if att.check_out_time:
+                    check_out = timezone.localtime(att.check_out_time).strftime('%I:%M %p')
+                    checked_out_at_iso = timezone.localtime(att.check_out_time).isoformat()
+                elif att.check_in_time and att.check_in_time < eod_threshold:
+                    # Checked in but never checked out, ≥6h ago
+                    stats['missing_checkout'] += 1
+                    missing_checkout_list.append({
+                        'id': emp.id, 'name': emp.name, 'site': site_name,
+                        'check_in': check_in, 'department': dept_name,
+                        'badge_number': emp.badge_number,
+                        'profile_picture': emp.profile_picture.url if emp.profile_picture else None,
+                    })
+                late_min = att.late_minutes or 0
+                if late_min > 0:
+                    stats['late'] += 1
+                    late_list.append({
+                        'id': emp.id, 'name': emp.name, 'site': site_name,
+                        'check_in': check_in, 'late_minutes': late_min,
+                        'department': dept_name, 'badge_number': emp.badge_number,
+                        'profile_picture': emp.profile_picture.url if emp.profile_picture else None,
+                    })
+                ot_hours = float((att.normal_ot_hours or 0) + (att.special_ot_hours or 0))
+                if att.is_within_geofence is False:
+                    is_geofence_violation = True
+                    stats['geofence_violations'] += 1
+                    geofence_violation_list.append({
+                        'id': emp.id, 'name': emp.name, 'site': site_name,
+                        'check_in': check_in,
+                        'latitude': att.latitude, 'longitude': att.longitude,
+                        'badge_number': emp.badge_number,
+                        'profile_picture': emp.profile_picture.url if emp.profile_picture else None,
+                    })
 
             stats['total'] += 1
-            if status == 'Present': stats['present'] += 1
-            else: stats['absent'] += 1
+            site_buckets[site_key]['name'] = site_name
+            site_buckets[site_key]['total'] += 1
+            dept_buckets[dept_name]['total'] += 1
+            cat_buckets[cat_name]['total']  += 1
+            if status == 'Present':
+                stats['present'] += 1
+                site_buckets[site_key]['present'] += 1
+                dept_buckets[dept_name]['present'] += 1
+                cat_buckets[cat_name]['present']  += 1
+                if late_min > 0:
+                    site_buckets[site_key]['late'] += 1
+            else:
+                stats['absent'] += 1
 
-            # Status Filter Applied after stats calculation
+            # Quick filters narrow the rows but not the stats
+            include_row = True
             if status_filter:
-                if status_filter.lower() == 'present' and status != 'Present': continue
-                if status_filter.lower() == 'absent' and status != 'Absent': continue
+                if status_filter.lower() == 'present' and status != 'Present':
+                    include_row = False
+                if status_filter.lower() == 'absent' and status != 'Absent':
+                    include_row = False
+            if quick_filter == 'late' and not (att and att.late_minutes and att.late_minutes > 0):
+                include_row = False
+            elif quick_filter == 'missing_checkout' and not (att and att.check_in_time and not att.check_out_time and att.check_in_time < eod_threshold):
+                include_row = False
+            elif quick_filter == 'geofence' and not is_geofence_violation:
+                include_row = False
+            elif quick_filter == 'now' and not (att and att.check_in_time and att.check_in_time >= five_min_ago):
+                include_row = False
+
+            if not include_row:
+                continue
 
             all_results.append({
                 'id': emp.id,
@@ -6139,17 +6751,121 @@ class AttendanceReportDataView(APIView):
                 'department': emp.department,
                 'position': emp.position,
                 'profile_picture': emp.profile_picture.url if emp.profile_picture else None,
-                'site': emp.site.name if emp.site else '-',
+                'site': site_name,
                 'site_id': emp.site.id if emp.site else None,
                 'status': status,
                 'check_in': check_in,
                 'check_out': check_out,
+                'check_in_iso': checked_in_at_iso,
+                'check_out_iso': checked_out_at_iso,
+                'late_minutes': late_min,
+                'overtime_hours': round(ot_hours, 2),
+                'is_geofence_violation': is_geofence_violation,
                 'latitude': att.latitude if att else None,
-                'longitude': att.longitude if att else None
+                'longitude': att.longitude if att else None,
             })
 
-        # Sort: Present first
-        all_results.sort(key=lambda x: x['status'] != 'Present')
+        all_results.sort(key=lambda x: (x['status'] != 'Present',
+                                       -(x.get('late_minutes') or 0)))
+        late_list.sort(key=lambda x: -x['late_minutes'])
+        late_list = late_list[:50]
+        missing_checkout_list = missing_checkout_list[:50]
+        geofence_violation_list = geofence_violation_list[:50]
+
+        # Baseline + deltas
+        baseline = _daily_baseline(employees, selected_date)
+        delta_yesterday = stats['present'] - baseline['yesterday_present']
+        delta_baseline  = stats['present'] - baseline['same_weekday_avg_present']
+
+        # Avg check-in time today vs 7-day
+        today_recs = [r for r in attendance_records if r.check_in_time]
+        avg_checkin_today_s = _avg_checkin_time(today_recs)
+        avg_checkin_base_s  = _seven_day_baseline_checkin(employees, selected_date)
+        checkin_delta_min = None
+        if avg_checkin_today_s is not None and avg_checkin_base_s is not None:
+            checkin_delta_min = (avg_checkin_today_s - avg_checkin_base_s) // 60
+
+        # Site/dept summaries with pct
+        def with_pct(b):
+            t = b['total'] or 1
+            return {**b, 'pct': round(b['present'] / t * 100, 1)}
+
+        site_rows = [
+            with_pct({**v, 'site_id': k}) for k, v in site_buckets.items() if v['total'] > 0
+        ]
+        site_rows.sort(key=lambda r: -r['pct'])
+
+        dept_rows = [
+            {'department': k, **with_pct(v)} for k, v in dept_buckets.items() if v['total'] > 0
+        ]
+        dept_rows.sort(key=lambda r: -r['pct'])
+        dept_rows = dept_rows[:12]
+
+        category_rows = [
+            {'category': k, **with_pct(v)} for k, v in cat_buckets.items() if v['total'] > 0
+        ]
+
+        # Anomaly callouts
+        anomalies = []
+        silent_sites = [s for s in site_rows if s['present'] == 0 and s['total'] > 2]
+        for s in silent_sites[:5]:
+            anomalies.append({
+                'severity': 'warning', 'icon': 'ri-volume-mute-line', 'title': 'Silent site',
+                'message': f"{s['name']} has 0 check-ins today ({s['total']} employees assigned)",
+            })
+        if stats['geofence_violations'] > 0:
+            anomalies.append({
+                'severity': 'danger', 'icon': 'ri-map-pin-2-line', 'title': 'Geofence',
+                'message': f"{stats['geofence_violations']} check-ins outside their site geofence",
+            })
+        if stats['missing_checkout'] >= 5:
+            anomalies.append({
+                'severity': 'warning', 'icon': 'ri-logout-box-line', 'title': 'Missing check-outs',
+                'message': f"{stats['missing_checkout']} employees clocked in but never clocked out",
+            })
+        if checkin_delta_min is not None and checkin_delta_min >= 15:
+            anomalies.append({
+                'severity': 'info', 'icon': 'ri-time-line', 'title': 'Late start',
+                'message': f"Avg check-in is {checkin_delta_min} min later than the 7-day baseline",
+            })
+        if baseline['same_weekday_avg_present'] > 0:
+            ratio = stats['present'] / baseline['same_weekday_avg_present']
+            if ratio < 0.7 and selected_date == timezone.localdate():
+                anomalies.append({
+                    'severity': 'danger', 'icon': 'ri-pulse-line', 'title': 'Below baseline',
+                    'message': f"Present count ({stats['present']:,}) is {int((1 - ratio) * 100)}% below the same-weekday average ({baseline['same_weekday_avg_present']:,})",
+                })
+
+        # End-of-day projection
+        projection = None
+        if selected_date == timezone.localdate() and stats['present'] > 0:
+            hour_decimal = now_local.hour + now_local.minute / 60
+            # Assume 95% of daily check-ins occur before 11 AM; project from 11 AM curve
+            pivot = 11.0
+            if hour_decimal < pivot:
+                ratio = max(0.05, hour_decimal / pivot)
+                projected = int(stats['present'] / ratio)
+                projection = {
+                    'projected_present': projected,
+                    'hour_decimal': round(hour_decimal, 1),
+                    'pivot_hour': pivot,
+                    'method': 'morning-curve',
+                }
+            else:
+                projection = {
+                    'projected_present': stats['present'],
+                    'hour_decimal': round(hour_decimal, 1),
+                    'pivot_hour': pivot,
+                    'method': 'past-pivot',
+                }
+
+        # Categories list for dropdown
+        category_choices = sorted(list({
+            c.strip().capitalize(): c.strip().capitalize()
+            for c in (list(Employee.objects.exclude(category__isnull=True).exclude(category='').values_list('category', flat=True))
+                      + list(Employee.objects.exclude(salary_grade__isnull=True).exclude(salary_grade='').values_list('salary_grade', flat=True)))
+            if c and c.strip()
+        }.values()))
 
         # Paginate
         paginator = Paginator(all_results, per_page)
@@ -6161,21 +6877,153 @@ class AttendanceReportDataView(APIView):
         return Response({
             'results': list(page_obj),
             'stats': stats,
+            'comparison': {
+                'yesterday_present': baseline['yesterday_present'],
+                'delta_yesterday': delta_yesterday,
+                'same_weekday_avg_present': baseline['same_weekday_avg_present'],
+                'delta_baseline': delta_baseline,
+                'avg_checkin_today':    _fmt_seconds(avg_checkin_today_s),
+                'avg_checkin_baseline': _fmt_seconds(avg_checkin_base_s),
+                'avg_checkin_delta_min': checkin_delta_min,
+            },
+            'hourly_histogram': [{'hour': h, 'count': hourly.get(h, 0)} for h in range(24)],
+            'site_rows': site_rows,
+            'dept_rows': dept_rows,
+            'category_rows': category_rows,
+            'anomalies': anomalies,
+            'late_list': late_list,
+            'missing_checkout_list': missing_checkout_list,
+            'geofence_violation_list': geofence_violation_list,
+            'projection': projection,
             'sites': sites_list,
             'positions': positions_list,
-            'categories': sorted(list({c.strip().capitalize(): c.strip().capitalize() for c in (list(Employee.objects.exclude(category__isnull=True).exclude(category='').values_list('category', flat=True)) + list(Employee.objects.exclude(salary_grade__isnull=True).exclude(salary_grade='').values_list('salary_grade', flat=True))) if c and c.strip()}.values())),
+            'categories': category_choices,
             'employers': list(EMPLOYER_CHOICES),
             'sponsors': list(SPONSOR_CHOICES),
             'selected_site': site_id,
             'selected_date': selected_date.strftime('%Y-%m-%d'),
+            'server_now': now_local.isoformat(),
             'permissions': {'is_superuser': is_superuser},
             'pagination': {
                 'current_page': page_obj.number,
                 'num_pages': paginator.num_pages,
                 'has_next': page_obj.has_next(),
                 'has_previous': page_obj.has_previous(),
+                'total_items': paginator.count,
+                'start_index': page_obj.start_index(),
+                'end_index': page_obj.end_index(),
             }
         })
+
+
+@login_required
+def daily_report_exec_summary(request):
+    """AI-polished executive summary for a single day. Falls back to heuristic
+    bullets when AI is disabled or the call fails."""
+    is_superuser = request.user.is_superuser
+    is_staff = request.user.is_staff
+    try:
+        admin_profile = request.user.admin_profile
+        permission_sites = admin_profile.sites.all()
+    except AdminProfile.DoesNotExist:
+        admin_profile = None
+        permission_sites = Site.objects.none()
+
+    if not is_superuser and not is_staff and not admin_profile:
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+
+    date_str = request.GET.get('date')
+    site_id  = request.GET.get('site')
+    employer_filter = request.GET.get('employer')
+
+    if date_str:
+        try:
+            selected_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+        except ValueError:
+            selected_date = timezone.localdate()
+    else:
+        selected_date = timezone.localdate()
+
+    employees = Employee.objects.select_related('site').all()
+    if not (is_superuser or is_staff) and permission_sites.exists():
+        employees = employees.filter(site__in=permission_sites)
+    if (is_superuser or is_staff) and site_id and site_id != 'all':
+        try:
+            employees = employees.filter(site_id=int(site_id))
+        except (ValueError, TypeError):
+            pass
+    if employer_filter and employer_filter != 'all':
+        employees = employees.filter(employer__iexact=employer_filter)
+
+    total = employees.count()
+    today_recs = list(Attendance.objects.filter(
+        date=selected_date, user__in=employees,
+    ).select_related('user', 'user__site'))
+    present = sum(1 for r in today_recs if r.check_in_time)
+    late    = sum(1 for r in today_recs if r.late_minutes and r.late_minutes > 0)
+    missing_checkout = sum(1 for r in today_recs
+                           if r.check_in_time and not r.check_out_time)
+    geofence_violations = sum(1 for r in today_recs if r.is_within_geofence is False)
+
+    baseline = _daily_baseline(employees, selected_date)
+    avg_today = _avg_checkin_time([r for r in today_recs if r.check_in_time])
+    avg_base  = _seven_day_baseline_checkin(employees, selected_date)
+    delta_min = (avg_today - avg_base) // 60 if (avg_today is not None and avg_base is not None) else None
+
+    pct = round(present / total * 100, 1) if total else 0
+    delta_y  = present - baseline['yesterday_present']
+    delta_b  = present - baseline['same_weekday_avg_present']
+    direction_y = 'up' if delta_y > 0 else ('down' if delta_y < 0 else 'flat')
+
+    # Silent sites
+    silent = 0
+    site_present = defaultdict(int)
+    site_total   = defaultdict(int)
+    for e in employees:
+        site_total[e.site_id] += 1
+    for r in today_recs:
+        if r.check_in_time:
+            site_present[r.user.site_id if r.user else None] += 1
+    for sid, t in site_total.items():
+        if sid and t > 2 and site_present.get(sid, 0) == 0:
+            silent += 1
+
+    bullets = [
+        {'icon': 'ri-line-chart-line', 'severity': 'info',
+         'text': f"{present:,} of {total:,} present ({pct}%) on {selected_date.strftime('%a, %b %d')} — {direction_y} {abs(delta_y):,} vs yesterday ({baseline['yesterday_present']:,})."},
+        {'icon': 'ri-bar-chart-line', 'severity': 'info',
+         'text': f"Same-weekday baseline (4-week avg): {baseline['same_weekday_avg_present']:,} present. Today is {'+' if delta_b>=0 else ''}{delta_b:,} vs baseline."},
+        {'icon': 'ri-alarm-warning-line', 'severity': 'info',
+         'text': f"{late} late arrivals · {missing_checkout} missing check-outs · {geofence_violations} geofence violations."},
+    ]
+    if delta_min is not None:
+        bullets.append({
+            'icon': 'ri-time-line',
+            'severity': 'warning' if delta_min >= 15 else 'info',
+            'text': f"Avg check-in: {_fmt_seconds(avg_today)} — {abs(delta_min):.0f} min {'later' if delta_min > 0 else 'earlier'} than the 7-day baseline ({_fmt_seconds(avg_base)}).",
+        })
+    if silent:
+        bullets.append({
+            'icon': 'ri-volume-mute-line', 'severity': 'warning',
+            'text': f"{silent} site(s) had 0 check-ins today — investigate whether the site is closed, on holiday, or has an enrolment issue.",
+        })
+
+    ai_polished = None
+    ai_used = False
+    try:
+        from attendance.services import llm as _llm
+        if _llm.ai_is_enabled():
+            ai_polished = _llm.polish_summary(bullets)
+            ai_used = bool(ai_polished)
+    except Exception:
+        ai_polished = None
+
+    return JsonResponse({
+        'narrative': ai_polished or bullets,
+        'ai_used': ai_used,
+        'heuristic_fallback': bullets,
+        'date': selected_date.isoformat(),
+    })
 
 class EmployeeAttendanceHistoryView(APIView):
     permission_classes = [IsAdminUser | IsSiteAdmin]

@@ -3,230 +3,347 @@
 {% block title %}Monthly Attendance Report - Admin Dashboard{% endblock %}
 
 {% block content %}
-<!-- Remix Icons & Google Fonts -->
 <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
-<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 
 <style>
     :root {
         --font-family: 'Outfit', sans-serif;
-        --card-bg: #ffffff;
-        --text-primary: #1e293b;
-        --text-secondary: #64748b;
+        --c-bg:         #f8fafc;
+        --c-card:       #ffffff;
+        --c-border:     #e2e8f0;
+        --c-border-soft:#f1f5f9;
+        --c-text:       #0f172a;
+        --c-text-2:     #475569;
+        --c-text-3:     #94a3b8;
 
-        --grad-primary: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
-        --grad-success: linear-gradient(135deg, #10b981 0%, #059669 100%);
-        --grad-warning: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-        --grad-danger: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);
-        --grad-info: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+        --c-success:    #10b981;
+        --c-info:       #0ea5e9;
+        --c-warn:       #f59e0b;
+        --c-danger:     #ef4444;
+        --c-indigo:     #6366f1;
     }
 
-    body {
-        font-family: var(--font-family) !important;
-        background-color: #f8fafc;
+    body { font-family: var(--font-family) !important; background: var(--c-bg); }
+
+    .page-h1 { font-size: 1.75rem; font-weight: 700; letter-spacing: -0.02em; }
+    .page-sub { color: var(--c-text-3); font-size: 0.85rem; }
+    .ai-pill {
+        display: inline-flex; gap:.35rem; align-items:center;
+        font-size: .68rem; font-weight: 700; letter-spacing: .08em;
+        text-transform: uppercase; padding: .25rem .55rem; border-radius: 999px;
+        background: linear-gradient(120deg,#312e81,#4f46e5,#9333ea);
+        color: #fff;
     }
 
-    /* Header Styling */
-    .report-header {
-        margin-bottom: 2.5rem;
-    }
-
-    /* Stat Cards Styling - Professional Monochrome */
-    .stat-card {
-        background: white !important;
-        border: 1px solid black !important;
-        border-radius: 1.25rem;
-        transition: all 0.2s ease;
-        overflow: hidden;
-        position: relative;
-        height: 100%;
-        cursor: pointer;
-        box-shadow: none !important;
-        color: black !important;
-    }
-
-    .stat-card:hover {
-        transform: translateY(-4px);
-        background: #fbfbfb !important;
-    }
-
-    .stat-card .card-body {
-        padding: 1.75rem;
-        position: relative;
-        z-index: 2;
-    }
-
-    .stat-icon-wrapper {
-        width: 44px;
-        height: 44px;
-        border-radius: 12px;
-        background: #f1f5f9;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 1.5rem;
-        margin-bottom: 1rem;
-        color: black;
-        border: 1px solid #e2e8f0;
-    }
-
-    /* Filter Card */
+    /* ───── Filter card ────────────────────────────────────────────── */
     .filter-card {
-        background: white;
-        border-radius: 1.5rem;
-        padding: 1.75rem;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-        margin-bottom: 2.5rem;
-        border: 1px solid #f1f5f9;
+        background: var(--c-card); border-radius: 1.25rem; padding: 1.5rem 1.75rem;
+        border: 1px solid var(--c-border-soft); box-shadow: 0 1px 2px rgba(15,23,42,.04);
+        margin-bottom: 1.75rem;
     }
-
     .form-label-premium {
-        font-size: 0.75rem;
-        text-transform: uppercase;
-        font-weight: 700;
-        color: #94a3b8;
-        letter-spacing: 0.05em;
-        margin-bottom: 0.75rem;
-        display: block;
+        font-size: 0.7rem; text-transform: uppercase; font-weight: 700;
+        color: var(--c-text-3); letter-spacing: 0.08em; margin-bottom: 0.5rem; display: block;
     }
-
     .form-select-premium {
-        border: 1px solid #e2e8f0;
-        border-radius: 0.875rem;
-        padding: 0.75rem 1rem;
-        font-weight: 500;
-        transition: all 0.2s;
-        cursor: pointer;
+        border: 1px solid var(--c-border); border-radius: .875rem;
+        padding: .7rem 1rem; font-weight: 500; transition: all .2s; cursor: pointer; width:100%;
     }
-
     .form-select-premium:focus {
-        border-color: #6366f1;
-        box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
+        border-color: var(--c-indigo);
+        box-shadow: 0 0 0 4px rgba(99,102,241,.12); outline: none;
     }
 
-    /* Table Styling */
-    .modern-table-container {
-        background: white;
-        border-radius: 1.5rem;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-        border: 1px solid #f1f5f9;
-        overflow: hidden;
+    /* ───── KPI tiles ──────────────────────────────────────────────── */
+    .kpi-grid {
+        display: grid; gap: 1rem; grid-template-columns: repeat(6, minmax(0,1fr));
+        margin-bottom: 1.75rem;
     }
+    @media (max-width: 1200px) { .kpi-grid { grid-template-columns: repeat(3, 1fr); } }
+    @media (max-width: 700px)  { .kpi-grid { grid-template-columns: repeat(2, 1fr); } }
 
-    .table thead th {
-        background: #f8fafc;
-        padding: 1.25rem 1rem;
+    .kpi {
+        background: var(--c-card); border: 1px solid var(--c-border-soft);
+        border-radius: 1rem; padding: 1.1rem 1.2rem; position: relative; overflow: hidden;
+        transition: transform .15s ease, border-color .15s ease;
+    }
+    .kpi:hover { transform: translateY(-2px); border-color: var(--c-border); }
+    .kpi .icn {
+        width: 36px; height: 36px; border-radius: 10px;
+        display: flex; align-items: center; justify-content: center;
+        background: var(--c-border-soft); color: var(--c-text);
+        font-size: 1.15rem; margin-bottom: .65rem;
+    }
+    .kpi .lbl { font-size: .68rem; text-transform: uppercase; font-weight: 700;
+                color: var(--c-text-3); letter-spacing: .08em; }
+    .kpi .val { font-size: 1.55rem; font-weight: 700; color: var(--c-text); margin-top: .15rem; }
+    .delta {
+        display: inline-flex; gap:.2rem; align-items:center; font-size:.7rem;
+        font-weight: 700; padding: .15rem .5rem; border-radius: 999px; margin-top: .35rem;
+    }
+    .delta.up   { background: rgba(16,185,129,.12); color: var(--c-success); }
+    .delta.down { background: rgba(239,68,68,.12);  color: var(--c-danger); }
+    .delta.flat { background: var(--c-border-soft); color: var(--c-text-3); }
+
+    /* ───── Generic panel / chart card ─────────────────────────────── */
+    .panel {
+        background: var(--c-card); border: 1px solid var(--c-border-soft);
+        border-radius: 1.25rem; padding: 1.5rem 1.5rem 1.25rem;
+        box-shadow: 0 1px 2px rgba(15,23,42,.04);
+        margin-bottom: 1.5rem;
+    }
+    .panel-h {
+        display: flex; align-items: center; justify-content: space-between;
+        margin-bottom: 1rem; gap: .75rem; flex-wrap: wrap;
+    }
+    .panel-h h3 {
+        font-size: 1rem; font-weight: 700; color: var(--c-text);
+        margin: 0; display:flex; align-items: center; gap: .5rem;
+    }
+    .panel-h .sub { font-size: .8rem; color: var(--c-text-3); }
+    .panel-tabs { display: inline-flex; gap: .25rem; padding: .25rem;
+                  background: var(--c-border-soft); border-radius: .65rem; }
+    .panel-tab {
+        font-size: .75rem; font-weight: 600; padding: .35rem .7rem;
+        border: 0; background: transparent; border-radius: .45rem; cursor: pointer;
+        color: var(--c-text-2);
+    }
+    .panel-tab.active { background: var(--c-card); color: var(--c-text);
+                        box-shadow: 0 1px 2px rgba(15,23,42,.08); }
+
+    /* ───── Exec summary ───────────────────────────────────────────── */
+    .exec {
+        background: linear-gradient(135deg, #0f172a 0%, #312e81 60%, #581c87 100%);
+        border-radius: 1.25rem; padding: 1.6rem 1.75rem; color: #e2e8f0;
+        margin-bottom: 1.75rem; position: relative; overflow: hidden;
+    }
+    .exec::before {
+        content: ''; position: absolute; top:-40%; right:-10%; width: 320px; height: 320px;
+        background: radial-gradient(closest-side, rgba(168,85,247,.35), transparent 70%);
+        pointer-events: none;
+    }
+    .exec-h { display:flex; align-items:center; justify-content:space-between; gap: 1rem; margin-bottom: 1rem; }
+    .exec h3 { color: #fff; font-size: 1.05rem; font-weight: 700; margin: 0;
+               display: flex; align-items: center; gap: .5rem; }
+    .exec ul { list-style: none; padding: 0; margin: 0; display: grid; gap: .7rem; }
+    .exec li {
+        display: flex; gap: .85rem; align-items: flex-start; padding: .6rem .75rem;
+        background: rgba(255,255,255,.06); border-radius: .65rem;
+        font-size: .92rem; line-height: 1.45;
+    }
+    .exec li i { font-size: 1.15rem; margin-top: 2px; }
+    .exec li.sev-danger  i { color: #fca5a5; }
+    .exec li.sev-warning i { color: #fcd34d; }
+    .exec li.sev-info    i { color: #93c5fd; }
+    .exec-skel {
+        display: grid; gap: .7rem;
+    }
+    .exec-skel .bar {
+        height: 14px; background: rgba(255,255,255,.08); border-radius: 6px;
+        animation: shimmer 1.6s ease-in-out infinite;
+    }
+    @keyframes shimmer { 0%, 100% { opacity: .4; } 50% { opacity: .75; } }
+
+    /* ───── Anomaly callouts ───────────────────────────────────────── */
+    .callouts { display: grid; gap: .65rem; margin-bottom: 1.5rem; }
+    .callout {
+        display: flex; gap: .85rem; padding: .9rem 1.05rem;
+        border-radius: .85rem; border: 1px solid; background: var(--c-card);
+        font-size: .9rem;
+    }
+    .callout i { font-size: 1.25rem; }
+    .callout .ttl { font-weight: 700; margin-right: .35rem; }
+    .callout.danger  { border-color: rgba(239,68,68,.35); background: rgba(239,68,68,.05); color: #991b1b; }
+    .callout.warning { border-color: rgba(245,158,11,.35); background: rgba(245,158,11,.07); color: #92400e; }
+    .callout.info    { border-color: rgba(14,165,233,.3);  background: rgba(14,165,233,.06); color: #075985; }
+
+    /* ───── Bands ──────────────────────────────────────────────────── */
+    .bands { display: grid; gap: .9rem; grid-template-columns: repeat(4, 1fr); }
+    @media (max-width: 700px) { .bands { grid-template-columns: repeat(2, 1fr); } }
+    .band {
+        border-radius: 1rem; padding: 1.1rem 1.2rem; border: 1px solid;
+        position: relative; overflow: hidden;
+    }
+    .band .lbl { font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; }
+    .band .val { font-size: 1.7rem; font-weight: 700; margin-top: .15rem; }
+    .band .desc { font-size: .78rem; opacity: .85; margin-top: .15rem; }
+    .band.champion { background: rgba(16,185,129,.08); border-color: rgba(16,185,129,.3); color: #065f46; }
+    .band.steady   { background: rgba(14,165,233,.08); border-color: rgba(14,165,233,.3); color: #075985; }
+    .band.atrisk   { background: rgba(245,158,11,.08); border-color: rgba(245,158,11,.3); color: #92400e; }
+    .band.critical { background: rgba(239,68,68,.08); border-color: rgba(239,68,68,.3); color: #991b1b; }
+    .band .icn { position: absolute; right: 1rem; top: 1rem; font-size: 1.6rem; opacity: .35; }
+
+    /* ───── Heatmap ────────────────────────────────────────────────── */
+    .heatmap-wrap { overflow-x: auto; }
+    .heatmap {
+        display: grid; gap: 2px; min-width: 100%;
+        font-size: .68rem; color: var(--c-text-2);
+    }
+    .heatmap .hcell {
+        width: 22px; height: 22px; border-radius: 4px;
+        display: flex; align-items: center; justify-content: center;
+        color: rgba(0,0,0,.55); cursor: default;
+    }
+    .heatmap .hsite {
+        font-size: .78rem; padding: 0 .65rem 0 0; white-space: nowrap;
+        font-weight: 600; color: var(--c-text); display: flex; align-items: center; gap: .5rem;
+    }
+    .heatmap .hsite .pct {
+        font-size: .68rem; color: var(--c-text-3); font-weight: 600;
+    }
+    .heatmap .hday-label {
+        font-size: .6rem; color: var(--c-text-3); text-align: center;
         font-weight: 700;
-        font-size: 0.75rem;
-        text-transform: uppercase;
-        color: #64748b;
-        border-bottom: 2px solid #f1f5f9;
+    }
+    .heatmap .hcell.lv0 { background: #fee2e2; }
+    .heatmap .hcell.lv1 { background: #fef3c7; }
+    .heatmap .hcell.lv2 { background: #fef08a; }
+    .heatmap .hcell.lv3 { background: #d9f99d; }
+    .heatmap .hcell.lv4 { background: #86efac; }
+    .heatmap .hcell.lv5 { background: #22c55e; color: #fff; }
+    .heatmap .hcell.empty { background: var(--c-border-soft); }
+    .heatmap-legend { display: flex; align-items: center; gap: .4rem; font-size: .7rem; color: var(--c-text-3); }
+    .heatmap-legend .swatch { width: 14px; height: 14px; border-radius: 3px; display:inline-block; }
+
+    /* ───── Leaderboard ────────────────────────────────────────────── */
+    .leader-grid {
+        display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem;
+    }
+    @media (max-width: 900px) { .leader-grid { grid-template-columns: 1fr; } }
+    .leader-list { display: grid; gap: .45rem; }
+    .leader-row {
+        display: grid; grid-template-columns: 24px 32px 1fr auto; align-items: center;
+        gap: .65rem; padding: .55rem .7rem; border-radius: .55rem;
+        background: var(--c-bg); transition: background .15s;
+    }
+    .leader-row:hover { background: var(--c-border-soft); cursor: pointer; }
+    .leader-row .rank { font-weight: 700; color: var(--c-text-3); font-size: .85rem; text-align:center; }
+    .leader-row .avatar {
+        width: 32px; height: 32px; border-radius: 50%; background: var(--c-border);
+        display: flex; align-items: center; justify-content: center; overflow: hidden;
+        font-weight: 700; color: var(--c-text-2);
+    }
+    .leader-row .avatar img { width: 100%; height: 100%; object-fit: cover; }
+    .leader-row .nm { font-weight: 600; font-size: .88rem; color: var(--c-text); }
+    .leader-row .sub { font-size: .7rem; color: var(--c-text-3); }
+    .leader-row .pct { font-weight: 700; font-size: .9rem; }
+
+    /* ───── Employee table ─────────────────────────────────────────── */
+    .table-card {
+        background: var(--c-card); border: 1px solid var(--c-border-soft);
+        border-radius: 1.25rem; overflow: hidden;
+        box-shadow: 0 1px 2px rgba(15,23,42,.04);
+    }
+    .table-card .table { margin: 0; }
+    .table-card thead th {
+        background: var(--c-bg); padding: 1rem; font-weight: 700; font-size: .68rem;
+        text-transform: uppercase; color: var(--c-text-3); letter-spacing: .08em;
+        border-bottom: 1px solid var(--c-border-soft);
+    }
+    .table-card tbody td {
+        padding: .95rem 1rem; vertical-align: middle; border-bottom: 1px solid var(--c-border-soft);
+    }
+    .table-card tbody tr { cursor: pointer; transition: background .12s; }
+    .table-card tbody tr:hover { background: var(--c-bg); }
+    .avatar-s {
+        width: 36px; height: 36px; border-radius: 50%; background: var(--c-border-soft);
+        display: flex; align-items: center; justify-content: center; overflow: hidden;
+        font-weight: 700; color: var(--c-indigo); font-size: .9rem; border: 1px solid var(--c-border);
+    }
+    .avatar-s img { width:100%; height:100%; object-fit:cover; }
+    .pct-bar { height: 6px; border-radius: 99px; background: var(--c-border-soft); overflow: hidden; width: 80px; }
+    .pct-fill { height: 100%; border-radius: 99px; }
+
+    /* ───── Calendar modal (mini per-employee) ────────────────────── */
+    .modal-backdrop.show { opacity: .55; }
+    .cal-modal-bg {
+        position: fixed; inset: 0; background: rgba(15,23,42,.55);
+        display: none; align-items: center; justify-content: center;
+        z-index: 1080; backdrop-filter: blur(4px);
+    }
+    .cal-modal-bg.is-open { display: flex; }
+    .cal-modal {
+        background: var(--c-card); border-radius: 1.25rem; padding: 1.75rem;
+        max-width: 580px; width: calc(100vw - 2rem); box-shadow: 0 25px 50px -12px rgba(0,0,0,.25);
+    }
+    .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+    .cal-cell {
+        aspect-ratio: 1; border-radius: 6px; display: flex; flex-direction: column;
+        align-items: center; justify-content: center; font-size: .75rem; font-weight: 600;
+        background: var(--c-border-soft); color: var(--c-text-2);
+    }
+    .cal-cell.present { background: rgba(16,185,129,.18); color: #065f46; }
+    .cal-cell.late    { background: rgba(245,158,11,.2);  color: #92400e; }
+    .cal-cell.absent  { background: rgba(239,68,68,.12);  color: #991b1b; }
+    .cal-cell.future  { background: transparent; color: var(--c-text-3); }
+    .cal-cell .badge {
+        font-size: .55rem; padding: 0 .2rem; line-height: 1; margin-top: 1px;
+        text-transform: uppercase; opacity: .85;
+    }
+    .cal-weekdays {
+        display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px;
+        font-size: .65rem; color: var(--c-text-3); text-transform: uppercase;
+        font-weight: 700; text-align: center; margin-bottom: .35rem;
     }
 
-    .table tbody td {
-        padding: 1.125rem 1rem;
-        vertical-align: middle;
-        border-bottom: 1px solid #f1f5f9;
-    }
+    /* Chart container heights so layout doesn't jump */
+    .chart-wrap { position: relative; height: 280px; }
+    .chart-wrap.short { height: 200px; }
 
-    .percentage-bg {
-        height: 6px;
-        border-radius: 99px;
-        background: #f1f5f9;
-        overflow: hidden;
-        width: 100px;
+    /* Misc */
+    .btn-clean {
+        border-radius: .75rem; padding: .55rem 1rem; font-weight: 600;
+        display: inline-flex; align-items: center; gap: .45rem;
+        background: var(--c-card); color: var(--c-text); border: 1px solid var(--c-border);
+        transition: all .15s; text-decoration: none; font-size: .88rem;
     }
+    .btn-clean:hover { background: var(--c-text); color: #fff; border-color: var(--c-text); }
+    .btn-clean.primary { background: var(--c-text); color: #fff; border-color: var(--c-text); }
+    .btn-clean.primary:hover { opacity: .9; }
 
-    .percentage-fill {
-        height: 100%;
-        border-radius: 99px;
-    }
-
-    /* Buttons - Professional Monochrome */
-    .btn-premium {
-        border-radius: 0.875rem;
-        padding: 0.75rem 1.5rem;
-        font-weight: 600;
-        transition: all 0.2s;
-        display: inline-flex;
-        align-items: center;
-        gap: 0.6rem;
-        background: white !important;
-        color: black !important;
-        border: 1px solid black !important;
-        box-shadow: none !important;
-    }
-
-    .btn-premium:hover {
-        background: black !important;
-        color: white !important;
-        transform: translateY(-1px);
-    }
-
-    .avatar-circle-sm {
-        width: 38px;
-        height: 38px;
-        border-radius: 50%;
-        background: #f1f5f9;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-weight: 700;
-        color: #4f46e5;
-        font-size: 0.95rem;
-        border: 1px solid #e2e8f0;
-        overflow: hidden;
-    }
-
-    .avatar-circle-sm img {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
+    .live-clock {
+        display: inline-flex; gap: .35rem; align-items: center;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+        font-size: .82rem; color: var(--c-text-3);
     }
 </style>
 
-<!-- Top Navigation & Header -->
-<div class="report-header d-flex justify-content-between align-items-center mb-5">
+<!-- Header -->
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
     <div>
-        <h1 class="h3 fw-bold text-dark mb-1">Monthly Attendance Report</h1>
-        <div class="d-flex align-items-center gap-2 text-secondary font-monospace small">
-            <i class="ri-calendar-todo-line"></i>
-            <span id="current-month-display">...</span>
-            <span class="mx-1">•</span>
-            <i class="ri-time-line"></i>
-            <span id="live-clock">Loading...</span>
+        <h1 class="page-h1 mb-1">Monthly Attendance Report</h1>
+        <div class="d-flex align-items-center gap-3 flex-wrap">
+            <span class="page-sub"><i class="ri-calendar-todo-line"></i> <span id="current-month-display">…</span></span>
+            <span class="live-clock"><i class="ri-time-line"></i> <span id="live-clock">Loading…</span></span>
         </div>
     </div>
-    <div class="d-flex gap-3">
-        <button onclick="window.location.href='/api/attendance/dashboard/'" class="btn btn-premium shadow-sm">
-            <i class="ri-arrow-left-line me-2"></i>Dashboard
-        </button>
-        <button onclick="downloadExcel()" class="btn btn-premium shadow-sm">
-            <i class="ri-file-excel-2-line"></i> Export Excel
-        </button>
+    <div class="d-flex gap-2 flex-wrap">
+        <a href="/dashboard/" class="btn-clean"><i class="ri-arrow-left-line"></i> Dashboard</a>
+        <button onclick="downloadExcel()" class="btn-clean primary"><i class="ri-file-excel-2-line"></i> Export Excel</button>
     </div>
 </div>
 
 <!-- Filters -->
-<div class="filter-card border-0">
-    <div class="row g-4 align-items-end">
+<div class="filter-card">
+    <div class="row g-3 align-items-end">
         <div class="col-md-3">
             <label class="form-label-premium">Select Month</label>
-            <select id="filterMonth" class="form-select form-select-premium w-100" onchange="loadData(1)"></select>
+            <select id="filterMonth" class="form-select-premium" onchange="loadData(1)"></select>
         </div>
         <div class="col-md-3">
             <label class="form-label-premium">Select Year</label>
-            <select id="filterYear" class="form-select form-select-premium w-100" onchange="loadData(1)"></select>
+            <select id="filterYear" class="form-select-premium" onchange="loadData(1)"></select>
         </div>
-        <div class="col-md-4 d-none" id="site-filter-col">
+        <div class="col-md-3 d-none" id="site-filter-col">
             <label class="form-label-premium">Select Site</label>
-            <select id="filterSite" class="form-select form-select-premium w-100" onchange="loadData(1)">
+            <select id="filterSite" class="form-select-premium" onchange="loadData(1)">
                 <option value="all">All Sites</option>
             </select>
         </div>
         <div class="col-md-3">
             <label class="form-label-premium">Employer</label>
-            <select id="filterEmployer" class="form-select form-select-premium w-100" onchange="loadData(1)">
+            <select id="filterEmployer" class="form-select-premium" onchange="loadData(1)">
                 <option value="all">All Employers</option>
                 <option value="PIC">PIC</option>
                 <option value="KFD">KFD</option>
@@ -237,19 +354,130 @@
     </div>
 </div>
 
-<!-- Search and Rows Bar -->
-<div class="d-flex justify-content-between align-items-center mb-4 gap-3 flex-wrap">
-    <div class="flex-grow-1" style="max-width: 400px;">
+<!-- Executive Summary -->
+<div class="exec" id="execCard">
+    <div class="exec-h">
+        <h3><i class="ri-sparkling-2-line"></i> Executive Summary <span class="ai-pill" id="aiBadge" style="display:none;">AI polished</span></h3>
+        <button class="btn btn-sm" onclick="loadExecSummary(true)" style="background:rgba(255,255,255,.12);color:#fff;border:0;border-radius:.55rem;padding:.45rem .85rem;font-size:.78rem;font-weight:600;">
+            <i class="ri-refresh-line"></i> Regenerate
+        </button>
+    </div>
+    <div id="execBody" class="exec-skel">
+        <div class="bar" style="width: 92%;"></div>
+        <div class="bar" style="width: 85%;"></div>
+        <div class="bar" style="width: 78%;"></div>
+    </div>
+</div>
+
+<!-- Anomaly callouts -->
+<div class="callouts" id="anomalyCallouts"></div>
+
+<!-- KPI Tiles -->
+<div class="kpi-grid" id="kpiGrid">
+    <!-- rendered by JS -->
+</div>
+
+<!-- Daily trend -->
+<div class="panel">
+    <div class="panel-h">
+        <h3><i class="ri-line-chart-line"></i> Daily Attendance Trend</h3>
+        <div class="panel-tabs" id="trendTabs">
+            <button class="panel-tab active" data-trend="present">Present</button>
+            <button class="panel-tab" data-trend="absent">Absent</button>
+            <button class="panel-tab" data-trend="late">Late</button>
+            <button class="panel-tab" data-trend="all">All</button>
+        </div>
+    </div>
+    <div class="chart-wrap"><canvas id="trendChart"></canvas></div>
+</div>
+
+<!-- Bands -->
+<div class="panel">
+    <div class="panel-h">
+        <h3><i class="ri-bar-chart-grouped-line"></i> Attendance Bands</h3>
+        <span class="sub">Per-employee, vs site working-day expectation</span>
+    </div>
+    <div class="bands" id="bandsRow">
+        <!-- rendered by JS -->
+    </div>
+</div>
+
+<!-- Departments + Weekday split -->
+<div class="row g-3">
+    <div class="col-lg-7">
+        <div class="panel" style="margin-bottom: 1rem;">
+            <div class="panel-h">
+                <h3><i class="ri-building-line"></i> Department Breakdown</h3>
+                <span class="sub">Sorted by avg attendance %</span>
+            </div>
+            <div class="chart-wrap"><canvas id="deptChart"></canvas></div>
+        </div>
+    </div>
+    <div class="col-lg-5">
+        <div class="panel" style="margin-bottom: 1rem;">
+            <div class="panel-h">
+                <h3><i class="ri-calendar-2-line"></i> Weekday Split</h3>
+                <span class="sub">Avg attendance %</span>
+            </div>
+            <div class="chart-wrap"><canvas id="weekdayChart"></canvas></div>
+        </div>
+    </div>
+</div>
+
+<!-- Leaderboards -->
+<div class="panel">
+    <div class="panel-h">
+        <h3><i class="ri-trophy-line"></i> Top &amp; Bottom Performers</h3>
+        <div class="panel-tabs" id="leaderTabs">
+            <button class="panel-tab active" data-leader="employees">Employees</button>
+            <button class="panel-tab" data-leader="sites">Sites</button>
+        </div>
+    </div>
+    <div class="leader-grid">
+        <div>
+            <div class="page-sub mb-2"><i class="ri-arrow-up-line text-success"></i> <strong>Top 10</strong></div>
+            <div class="leader-list" id="leaderTop"></div>
+        </div>
+        <div>
+            <div class="page-sub mb-2"><i class="ri-arrow-down-line text-danger"></i> <strong>Bottom 10</strong></div>
+            <div class="leader-list" id="leaderBottom"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Site Heatmap -->
+<div class="panel">
+    <div class="panel-h">
+        <h3><i class="ri-grid-line"></i> Site × Day Heatmap</h3>
+        <div class="heatmap-legend">
+            <span>0%</span>
+            <span class="swatch" style="background:#fee2e2"></span>
+            <span class="swatch" style="background:#fef3c7"></span>
+            <span class="swatch" style="background:#fef08a"></span>
+            <span class="swatch" style="background:#d9f99d"></span>
+            <span class="swatch" style="background:#86efac"></span>
+            <span class="swatch" style="background:#22c55e"></span>
+            <span>100%</span>
+        </div>
+    </div>
+    <div class="heatmap-wrap">
+        <div class="heatmap" id="heatmap"></div>
+    </div>
+</div>
+
+<!-- Search Bar -->
+<div class="d-flex justify-content-between align-items-center mb-3 gap-3 flex-wrap">
+    <div class="flex-grow-1" style="max-width: 420px;">
         <div class="input-group shadow-sm rounded-3 overflow-hidden">
             <span class="input-group-text border-0 bg-white ps-3"><i class="ri-search-line text-secondary"></i></span>
             <input type="text" id="searchInput" class="form-control border-0 py-2"
-                placeholder="Search by name, ID, email..." oninput="debounceSearch()">
+                placeholder="Search by name, ID, email…" oninput="debounceSearch()">
         </div>
     </div>
     <div class="d-flex align-items-center gap-2">
-        <label class="small fw-bold text-secondary text-uppercase">Rows:</label>
+        <label class="page-sub fw-bold">Rows:</label>
         <select id="filterPerPage" class="form-select form-select-sm border-0 shadow-sm rounded-3 fw-semibold"
-            style="width: 80px;" onchange="loadData(1)">
+            style="width: 90px;" onchange="loadData(1)">
             <option value="20" selected>20</option>
             <option value="50">50</option>
             <option value="100">100</option>
@@ -258,52 +486,11 @@
     </div>
 </div>
 
-<!-- Stats Summary -->
-<div class="row g-4 mb-5" id="stats-container">
-    <div class="col-md-3">
-        <div class="stat-card">
-            <div class="card-body">
-                <div class="stat-icon-wrapper"><i class="ri-calendar-event-line"></i></div>
-                <div class="stat-label mb-1">Working Days</div>
-                <div class="stat-value" id="stat-total-days">-</div>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-3">
-        <div class="stat-card">
-            <div class="card-body">
-                <div class="stat-icon-wrapper"><i class="ri-group-line"></i></div>
-                <div class="stat-label mb-1">Total Employees</div>
-                <div class="stat-value" id="stat-total-employees">-</div>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-3">
-        <div class="stat-card">
-            <div class="card-body">
-                <div class="stat-icon-wrapper"><i class="ri-percent-line"></i></div>
-                <div class="stat-label mb-1">Avg Attendance</div>
-                <div class="stat-value" id="stat-avg-attendance">0%</div>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-3">
-        <div class="stat-card">
-            <div class="card-body">
-                <div class="stat-icon-wrapper"><i class="ri-alarm-warning-line"></i></div>
-                <div class="stat-label mb-1">Total Late</div>
-                <div class="stat-value" id="stat-total-late">0</div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Table Container -->
-<div class="modern-table-container">
-    <div class="card-header bg-white p-4 border-bottom">
-        <h5 class="fw-bold mb-0 d-flex align-items-center gap-2">
-            <i class="ri-user-line text-primary"></i> Employee Attendance Details
-        </h5>
+<!-- Employee Table -->
+<div class="table-card">
+    <div class="p-3 border-bottom d-flex align-items-center justify-content-between">
+        <h5 class="fw-bold mb-0 d-flex align-items-center gap-2"><i class="ri-team-line"></i> Employee Attendance Details</h5>
+        <span class="page-sub">Click any row to see daily calendar</span>
     </div>
     <div class="table-responsive">
         <table class="table table-hover align-middle mb-0">
@@ -316,212 +503,598 @@
                     <th class="text-center">Present</th>
                     <th class="text-center">Absent</th>
                     <th class="text-center">Late</th>
+                    <th class="text-center">OT (hrs)</th>
                     <th class="pe-4">Attendance %</th>
                 </tr>
             </thead>
-            <tbody id="reportTableBody">
-                <!-- Loaded via JS -->
-            </tbody>
+            <tbody id="reportTableBody"></tbody>
         </table>
     </div>
-    <div class="card-footer bg-white py-4 px-4 border-top" id="paginationContainer">
-        <!-- Pagination JS -->
+    <div class="py-3 px-4 border-top" id="paginationContainer"></div>
+</div>
+
+<!-- Mini-calendar modal -->
+<div class="cal-modal-bg" id="calModal" onclick="closeCal(event)">
+    <div class="cal-modal" onclick="event.stopPropagation()">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+                <h5 class="fw-bold mb-0" id="calTitle">Employee</h5>
+                <div class="page-sub" id="calSubtitle">…</div>
+            </div>
+            <button type="button" class="btn-clean" onclick="closeCal()"><i class="ri-close-line"></i></button>
+        </div>
+        <div class="cal-weekdays">
+            <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
+        </div>
+        <div class="cal-grid" id="calGrid"></div>
+        <div class="d-flex gap-3 mt-3 small page-sub">
+            <span><span class="d-inline-block" style="width:10px;height:10px;background:rgba(16,185,129,.45);border-radius:2px"></span> Present</span>
+            <span><span class="d-inline-block" style="width:10px;height:10px;background:rgba(245,158,11,.45);border-radius:2px"></span> Late</span>
+            <span><span class="d-inline-block" style="width:10px;height:10px;background:rgba(239,68,68,.25);border-radius:2px"></span> Absent</span>
+        </div>
     </div>
 </div>
 
 {% endblock %}
 
 {% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script>
+    /* ───────────────────────────── State ───────────────────────────── */
     let filterInitialized = false;
     let searchTimer;
     let currentPage = 1;
+    let lastPayload = null;
+    let leaderMode = 'employees';
+    let trendMode = 'present';
+    let trendChart = null;
+    let deptChart  = null;
+    let wkChart    = null;
 
     document.addEventListener('DOMContentLoaded', () => {
         setupFilterDropdowns();
-        startTime();
+        startClock();
+        wireTabs();
         loadData(1);
     });
 
+    /* ─────────────────────────── Filters ───────────────────────────── */
     function setupFilterDropdowns() {
         const monthSelect = document.getElementById('filterMonth');
         const yearSelect = document.getElementById('filterYear');
         const now = new Date();
-
-        const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+        const monthNames = ["January","February","March","April","May","June","July","August","September","October","November","December"];
         monthNames.forEach((name, i) => {
-            const opt = document.createElement('option');
-            opt.value = i + 1;
-            opt.textContent = name;
-            if (i === now.getMonth()) opt.selected = true;
-            monthSelect.appendChild(opt);
+            const o = document.createElement('option');
+            o.value = i + 1; o.textContent = name;
+            if (i === now.getMonth()) o.selected = true;
+            monthSelect.appendChild(o);
         });
-
-        const currentYear = now.getFullYear();
-        for (let y = currentYear - 2; y <= currentYear; y++) {
-            const opt = document.createElement('option');
-            opt.value = y;
-            opt.textContent = y;
-            if (y === currentYear) opt.selected = true;
-            yearSelect.appendChild(opt);
+        const cy = now.getFullYear();
+        for (let y = cy - 2; y <= cy; y++) {
+            const o = document.createElement('option');
+            o.value = y; o.textContent = y;
+            if (y === cy) o.selected = true;
+            yearSelect.appendChild(o);
         }
     }
 
     function debounceSearch() {
         clearTimeout(searchTimer);
-        searchTimer = setTimeout(() => loadData(1), 500);
+        searchTimer = setTimeout(() => loadData(1), 400);
     }
 
+    function wireTabs() {
+        document.querySelectorAll('#trendTabs .panel-tab').forEach(b => {
+            b.addEventListener('click', () => {
+                document.querySelectorAll('#trendTabs .panel-tab').forEach(x => x.classList.remove('active'));
+                b.classList.add('active');
+                trendMode = b.dataset.trend;
+                if (lastPayload) renderTrend(lastPayload.trend);
+            });
+        });
+        document.querySelectorAll('#leaderTabs .panel-tab').forEach(b => {
+            b.addEventListener('click', () => {
+                document.querySelectorAll('#leaderTabs .panel-tab').forEach(x => x.classList.remove('active'));
+                b.classList.add('active');
+                leaderMode = b.dataset.leader;
+                if (lastPayload) renderLeaders(lastPayload);
+            });
+        });
+    }
+
+    /* ─────────────────────────── Loader ────────────────────────────── */
     async function loadData(page = 1) {
         currentPage = page;
         const tbody = document.getElementById('reportTableBody');
-        tbody.innerHTML = `<tr><td colspan="8" class="text-center py-5">
+        tbody.innerHTML = `<tr><td colspan="9" class="text-center py-5">
             <div class="spinner-border text-primary spinner-border-sm"></div>
-            <p class="mt-2 mb-0 text-secondary small">Generating monthly report...</p>
-        </td></tr>`;
+            <p class="mt-2 mb-0 page-sub">Generating monthly report…</p></td></tr>`;
 
-        const month = document.getElementById('filterMonth').value;
-        const year = document.getElementById('filterYear').value;
-        const site = document.getElementById('filterSite')?.value || 'all';
-        const employer = document.getElementById('filterEmployer')?.value || 'all';
-        const search = document.getElementById('searchInput').value;
-        const perPage = document.getElementById('filterPerPage').value;
-
-        const params = new URLSearchParams({ month, year, site, employer, search, page: currentPage, per_page: perPage });
+        const params = new URLSearchParams({
+            month: document.getElementById('filterMonth').value,
+            year:  document.getElementById('filterYear').value,
+            site:  document.getElementById('filterSite')?.value || 'all',
+            employer: document.getElementById('filterEmployer').value,
+            search: document.getElementById('searchInput').value,
+            page: currentPage,
+            per_page: document.getElementById('filterPerPage').value,
+        });
 
         try {
             const res = await fetch(`?${params.toString()}`, {
                 headers: { 'X-Requested-With': 'XMLHttpRequest' }
             });
             const data = await res.json();
+            lastPayload = data;
 
-            if (!filterInitialized && data.permissions.is_superuser) {
+            if (!filterInitialized && data.permissions?.is_superuser) {
                 const siteCol = document.getElementById('site-filter-col');
                 const siteSelect = document.getElementById('filterSite');
                 siteCol.classList.remove('d-none');
-
-                if (data.sites) {
-                    data.sites.forEach(s => {
-                        const opt = document.createElement('option');
-                        opt.value = s.id;
-                        opt.textContent = s.name;
-                        siteSelect.appendChild(opt);
-                    });
-                }
+                (data.sites || []).forEach(s => {
+                    const o = document.createElement('option');
+                    o.value = s.id; o.textContent = s.name;
+                    siteSelect.appendChild(o);
+                });
                 filterInitialized = true;
             }
 
-            renderStats(data.summary);
+            renderKpis(data.summary, data.comparison);
+            renderAnomalies(data.anomalies);
+            renderBands(data.bands, data.summary.total_employees);
+            renderTrend(data.trend);
+            renderDept(data.department_breakdown);
+            renderWeekday(data.weekday_split);
+            renderLeaders(data);
+            renderHeatmap(data.heatmap);
             renderTable(data.results);
             renderPagination(data.pagination);
 
             document.getElementById('current-month-display').textContent = `${data.summary.month_name} ${data.summary.year}`;
-
+            loadExecSummary(false);
         } catch (e) {
-            tbody.innerHTML = `<tr><td colspan="8" class="text-center py-5 text-danger">Failed to sync report data.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="9" class="text-center py-5 text-danger">Failed to load report — ${e.message}</td></tr>`;
+            console.error(e);
         }
     }
 
-    function renderStats(summary) {
-        document.getElementById('stat-total-days').textContent = summary.total_days;
-        document.getElementById('stat-total-employees').textContent = summary.total_employees;
-        document.getElementById('stat-avg-attendance').textContent = summary.avg_attendance + '%';
-        document.getElementById('stat-total-late').textContent = summary.total_late;
+    /* ─────────────────────── KPI tiles + deltas ────────────────────── */
+    function renderKpis(s, cmp) {
+        const c = cmp || {};
+        const pm = c.previous || {};
+        const tiles = [
+            { icn: 'ri-calendar-event-line', lbl: 'Working Days', val: s.total_days, delta: null },
+            { icn: 'ri-group-line', lbl: 'Total Employees', val: s.total_employees?.toLocaleString() || 0, delta: null },
+            { icn: 'ri-percent-line', lbl: 'Avg Attendance', val: s.avg_attendance + '%',
+              delta: { v: c.delta_avg_pct, unit: 'pp', vs: `vs ${pm.month || ''}` } },
+            { icn: 'ri-alarm-warning-line', lbl: 'Total Late', val: (s.total_late ?? 0).toLocaleString(),
+              delta: { v: c.delta_late, unit: '', vs: `vs ${pm.month || ''}`, inverted: true } },
+            { icn: 'ri-time-line', lbl: 'Total Overtime', val: (s.total_overtime ?? 0).toLocaleString() + ' hrs',
+              delta: { v: c.delta_overtime, unit: ' hrs', vs: `vs ${pm.month || ''}` } },
+            { icn: 'ri-user-unfollow-line', lbl: 'Ghost (0 days)', val: s.employees_with_zero_attendance ?? 0,
+              delta: null, severity: s.employees_with_zero_attendance > 0 ? 'danger' : null },
+        ];
+        document.getElementById('kpiGrid').innerHTML = tiles.map(t => `
+            <div class="kpi">
+                <div class="icn"><i class="${t.icn}"></i></div>
+                <div class="lbl">${t.lbl}</div>
+                <div class="val">${t.val}</div>
+                ${t.delta && t.delta.v !== undefined && t.delta.v !== null ? renderDelta(t.delta) : ''}
+            </div>
+        `).join('');
     }
 
+    function renderDelta(d) {
+        if (d.v === 0) return `<span class="delta flat">— ${d.vs}</span>`;
+        const positive = d.v > 0;
+        const isGood = d.inverted ? !positive : positive;
+        const cls = isGood ? 'up' : 'down';
+        const arrow = positive ? 'ri-arrow-up-line' : 'ri-arrow-down-line';
+        const sign = positive ? '+' : '';
+        return `<span class="delta ${cls}"><i class="${arrow}"></i> ${sign}${d.v}${d.unit} ${d.vs}</span>`;
+    }
+
+    /* ─────────────────────────── Anomalies ─────────────────────────── */
+    function renderAnomalies(list) {
+        const container = document.getElementById('anomalyCallouts');
+        if (!list || !list.length) { container.innerHTML = ''; return; }
+        container.innerHTML = list.map(a => `
+            <div class="callout ${a.severity}">
+                <i class="${a.icon}"></i>
+                <div><span class="ttl">${a.title}:</span>${a.message}</div>
+            </div>
+        `).join('');
+    }
+
+    /* ─────────────────────────── Bands ─────────────────────────────── */
+    function renderBands(b, total) {
+        const t = Math.max(1, total || 1);
+        const items = [
+            { k: 'champion', cls: 'champion', lbl: 'Champions ≥95%',  icn: 'ri-medal-line',           desc: 'Above target' },
+            { k: 'steady',   cls: 'steady',   lbl: 'Steady 85–95%',   icn: 'ri-checkbox-circle-line', desc: 'On track' },
+            { k: 'at_risk',  cls: 'atrisk',   lbl: 'At Risk 70–85%',  icn: 'ri-alert-line',           desc: 'Watch closely' },
+            { k: 'critical', cls: 'critical', lbl: 'Critical <70%',   icn: 'ri-error-warning-line',   desc: 'Needs HR action' },
+        ];
+        document.getElementById('bandsRow').innerHTML = items.map(it => {
+            const v = (b && b[it.k]) || 0;
+            const pct = (v / t * 100).toFixed(1);
+            return `
+                <div class="band ${it.cls}">
+                    <i class="${it.icn} icn"></i>
+                    <div class="lbl">${it.lbl}</div>
+                    <div class="val">${v.toLocaleString()}</div>
+                    <div class="desc">${pct}% of workforce · ${it.desc}</div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    /* ─────────────────────────── Trend ─────────────────────────────── */
+    function renderTrend(trend) {
+        const ctx = document.getElementById('trendChart').getContext('2d');
+        if (trendChart) trendChart.destroy();
+        const labels = trend.map(t => `${t.day} ${t.weekday}`);
+        const datasets = [];
+        const presentDs = { label: 'Present', data: trend.map(t => t.present), borderColor: '#10b981',
+                            backgroundColor: 'rgba(16,185,129,.12)', fill: true, tension: .3, borderWidth: 2 };
+        const absentDs  = { label: 'Absent', data: trend.map(t => t.absent), borderColor: '#ef4444',
+                            backgroundColor: 'rgba(239,68,68,.10)', fill: true, tension: .3, borderWidth: 2 };
+        const lateDs    = { label: 'Late', data: trend.map(t => t.late), borderColor: '#f59e0b',
+                            backgroundColor: 'rgba(245,158,11,.12)', fill: true, tension: .3, borderWidth: 2 };
+        if (trendMode === 'present' || trendMode === 'all') datasets.push(presentDs);
+        if (trendMode === 'absent'  || trendMode === 'all') datasets.push(absentDs);
+        if (trendMode === 'late'    || trendMode === 'all') datasets.push(lateDs);
+
+        trendChart = new Chart(ctx, {
+            type: 'line',
+            data: { labels, datasets },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: { legend: { display: trendMode === 'all', position: 'top', align: 'end',
+                                     labels: { boxWidth: 10, font: { size: 11 } } } },
+                scales: {
+                    x: { grid: { display: false }, ticks: { font: { size: 10 }, color: '#94a3b8', autoSkip: true, maxTicksLimit: 16 } },
+                    y: { beginAtZero: true, grid: { color: '#f1f5f9' }, ticks: { font: { size: 10 }, color: '#94a3b8' } },
+                },
+            }
+        });
+    }
+
+    /* ─────────────────────── Departments ───────────────────────────── */
+    function renderDept(rows) {
+        const ctx = document.getElementById('deptChart').getContext('2d');
+        if (deptChart) deptChart.destroy();
+        const top = (rows || []).slice(0, 12);
+        deptChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: top.map(r => r.department),
+                datasets: [{
+                    label: 'Avg Attendance %',
+                    data: top.map(r => r.avg_pct),
+                    backgroundColor: top.map(r => r.avg_pct >= 80 ? '#10b981' : r.avg_pct >= 60 ? '#f59e0b' : '#ef4444'),
+                    borderRadius: 6,
+                }]
+            },
+            options: {
+                indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { display: false },
+                           tooltip: { callbacks: { label: ctx => `${ctx.parsed.x}% · ${top[ctx.dataIndex].employee_count} employees` } } },
+                scales: {
+                    x: { beginAtZero: true, max: 100, grid: { color: '#f1f5f9' }, ticks: { font: { size: 10 }, color: '#94a3b8' } },
+                    y: { grid: { display: false }, ticks: { font: { size: 11 }, color: '#475569' } },
+                }
+            }
+        });
+    }
+
+    /* ─────────────────────────── Weekday ───────────────────────────── */
+    function renderWeekday(rows) {
+        const ctx = document.getElementById('weekdayChart').getContext('2d');
+        if (wkChart) wkChart.destroy();
+        wkChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: rows.map(r => r.weekday),
+                datasets: [{
+                    label: 'Avg attendance %',
+                    data: rows.map(r => r.avg_present_pct),
+                    backgroundColor: '#6366f1',
+                    borderRadius: 6,
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { display: false },
+                           tooltip: { callbacks: { label: ctx => `${ctx.parsed.y}% avg present · ${rows[ctx.dataIndex].total_late} lates` } } },
+                scales: {
+                    y: { beginAtZero: true, max: 100, grid: { color: '#f1f5f9' }, ticks: { font: { size: 10 }, color: '#94a3b8' } },
+                    x: { grid: { display: false }, ticks: { font: { size: 11 }, color: '#475569' } },
+                }
+            }
+        });
+    }
+
+    /* ─────────────────────── Leaderboards ──────────────────────────── */
+    function renderLeaders(data) {
+        const top    = document.getElementById('leaderTop');
+        const bottom = document.getElementById('leaderBottom');
+        if (leaderMode === 'employees') {
+            top.innerHTML    = (data.employee_leaderboard.top || []).map((e, i)    => leaderRowEmp(e, i + 1)).join('') || empty();
+            bottom.innerHTML = (data.employee_leaderboard.bottom || []).map((e, i) => leaderRowEmp(e, i + 1)).join('') || empty();
+        } else {
+            top.innerHTML    = (data.site_leaderboard.top || []).map((s, i)    => leaderRowSite(s, i + 1)).join('') || empty();
+            bottom.innerHTML = (data.site_leaderboard.bottom || []).map((s, i) => leaderRowSite(s, i + 1)).join('') || empty();
+        }
+    }
+    function leaderRowEmp(e, rank) {
+        const initials = (e.name || '?').slice(0, 1);
+        const img = e.profile_picture ? `<img src="${e.profile_picture}" alt="">` : initials;
+        const color = e.attendance_percentage >= 80 ? '#10b981' : e.attendance_percentage >= 60 ? '#f59e0b' : '#ef4444';
+        return `
+            <div class="leader-row" onclick="openCalForEmp(${e.id})">
+                <div class="rank">${rank}</div>
+                <div class="avatar">${img}</div>
+                <div>
+                    <div class="nm">${escapeHtml(e.name)}</div>
+                    <div class="sub">${escapeHtml(e.site || '-')} · ${escapeHtml(e.department || '-')}</div>
+                </div>
+                <div class="pct" style="color:${color}">${e.attendance_percentage}%</div>
+            </div>
+        `;
+    }
+    function leaderRowSite(s, rank) {
+        const color = s.avg_pct >= 80 ? '#10b981' : s.avg_pct >= 60 ? '#f59e0b' : '#ef4444';
+        return `
+            <div class="leader-row">
+                <div class="rank">${rank}</div>
+                <div class="avatar"><i class="ri-map-pin-line"></i></div>
+                <div>
+                    <div class="nm">${escapeHtml(s.site)}</div>
+                    <div class="sub">${s.employee_count} employees</div>
+                </div>
+                <div class="pct" style="color:${color}">${s.avg_pct}%</div>
+            </div>
+        `;
+    }
+    function empty() { return `<div class="page-sub py-3 text-center">No data</div>`; }
+
+    /* ─────────────────────────── Heatmap ───────────────────────────── */
+    function renderHeatmap(rows) {
+        const cont = document.getElementById('heatmap');
+        if (!rows || !rows.length) { cont.innerHTML = `<div class="page-sub py-3 text-center">No site data</div>`; return; }
+        const numDays = rows[0].days.length;
+        cont.style.gridTemplateColumns = `200px repeat(${numDays}, 22px)`;
+        // Header row
+        let html = `<div></div>`;
+        for (let i = 0; i < numDays; i++) html += `<div class="hday-label">${i + 1}</div>`;
+        // Site rows
+        rows.forEach(r => {
+            html += `<div class="hsite"><span>${escapeHtml(r.site)}</span><span class="pct">${r.avg_pct}%</span></div>`;
+            r.days.forEach(d => {
+                const lv = heatLevel(d.pct);
+                html += `<div class="hcell ${lv}" title="${r.site} · Day ${d.day}: ${d.present} present (${d.pct}%)"></div>`;
+            });
+        });
+        cont.innerHTML = html;
+    }
+    function heatLevel(pct) {
+        if (pct == null) return 'empty';
+        if (pct === 0)   return 'lv0';
+        if (pct < 25)    return 'lv0';
+        if (pct < 50)    return 'lv1';
+        if (pct < 65)    return 'lv2';
+        if (pct < 80)    return 'lv3';
+        if (pct < 95)    return 'lv4';
+        return 'lv5';
+    }
+
+    /* ─────────────────────────── Table ─────────────────────────────── */
     function renderTable(rows) {
         const tbody = document.getElementById('reportTableBody');
-        if (rows.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="8" class="text-center py-5 text-muted">No records found for this selection.</td></tr>`;
+        if (!rows || !rows.length) {
+            tbody.innerHTML = `<tr><td colspan="9" class="text-center py-5 page-sub">No records found.</td></tr>`;
             return;
         }
-
         tbody.innerHTML = rows.map(r => `
-            <tr>
+            <tr onclick="openCalForRow(${r.id})">
                 <td class="ps-4">
                     <div class="d-flex align-items-center gap-3">
-                        <div class="avatar-circle-sm">
-                            ${r.profile_picture ? `<img src="${r.profile_picture}" alt="${r.name}">` : r.name.charAt(0)}
-                        </div>
+                        <div class="avatar-s">${r.profile_picture ? `<img src="${r.profile_picture}" alt="">` : (r.name || '?').charAt(0)}</div>
                         <div>
-                            <div class="fw-bold text-dark">${r.name}</div>
-                            <div class="small text-secondary font-monospace" style="font-size: 0.7rem;">ID: ${r.badge_number || '-'}</div>
+                            <div class="fw-bold text-dark">${escapeHtml(r.name)}</div>
+                            <div class="page-sub" style="font-size:.7rem;">ID: ${escapeHtml(r.badge_number || '-')}</div>
                         </div>
                     </div>
                 </td>
-                <td><span class="badge bg-light text-dark border font-monospace px-2">${r.badge_number || '-'}</span></td>
-                <td class="small fw-semibold text-secondary">${r.department || '-'}</td>
-                <td><div class="d-flex align-items-center gap-1 small fw-medium"><i class="ri-map-pin-line text-secondary"></i> ${r.site}</div></td>
+                <td><span class="badge bg-light text-dark border font-monospace px-2">${escapeHtml(r.badge_number || '-')}</span></td>
+                <td class="small fw-semibold text-secondary">${escapeHtml(r.department || '-')}</td>
+                <td><div class="d-flex align-items-center gap-1 small fw-medium"><i class="ri-map-pin-line text-secondary"></i> ${escapeHtml(r.site || '-')}</div></td>
                 <td class="text-center"><span class="badge bg-success bg-opacity-10 text-success px-3 py-2 rounded-pill fw-bold">${r.days_present}</span></td>
                 <td class="text-center"><span class="badge bg-danger bg-opacity-10 text-danger px-3 py-2 rounded-pill fw-bold">${r.days_absent}</span></td>
                 <td class="text-center"><span class="badge bg-warning bg-opacity-10 text-warning px-3 py-2 rounded-pill fw-bold">${r.late_count}</span></td>
+                <td class="text-center"><span class="badge bg-info bg-opacity-10 text-info px-3 py-2 rounded-pill fw-bold">${r.overtime_hours}</span></td>
                 <td class="pe-4">
                     <div class="d-flex align-items-center gap-3">
-                        <div class="flex-grow-1" style="max-width: 100px;">
-                            <div class="percentage-bg">
-                                <div class="percentage-fill shadow-sm" style="width: ${r.attendance_percentage}%; background: ${getProgressColor(r.attendance_percentage)}"></div>
-                            </div>
-                        </div>
-                        <span class="small fw-bold text-dark" style="min-width: 45px;">${r.attendance_percentage}%</span>
+                        <div class="pct-bar"><div class="pct-fill" style="width:${r.attendance_percentage}%; background:${pctColor(r.attendance_percentage)}"></div></div>
+                        <span class="small fw-bold text-dark" style="min-width:48px;">${r.attendance_percentage}%</span>
                     </div>
                 </td>
             </tr>
         `).join('');
     }
+    function pctColor(p) {
+        if (p >= 95) return '#10b981';
+        if (p >= 85) return '#0ea5e9';
+        if (p >= 70) return '#f59e0b';
+        return '#ef4444';
+    }
 
     function renderPagination(p) {
-        const container = document.getElementById('paginationContainer');
-        if (p.num_pages <= 1) {
-            container.innerHTML = `<div class="d-flex justify-content-between align-items-center small text-secondary fw-medium">
-                <span>Showing ${p.start_index}-${p.end_index} of ${p.total_items} entries</span>
-            </div>`;
+        const c = document.getElementById('paginationContainer');
+        if (!p || p.num_pages <= 1) {
+            c.innerHTML = `<div class="d-flex justify-content-between align-items-center page-sub fw-medium">
+                <span>Showing ${p?.start_index || 0}–${p?.end_index || 0} of ${p?.total_items || 0} entries</span></div>`;
             return;
         }
-
-        container.innerHTML = `
+        c.innerHTML = `
             <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
-                <span class="small text-secondary fw-semibold">Showing <span class="text-dark">${p.start_index}-${p.end_index}</span> of <span class="text-dark">${p.total_items}</span> records</span>
-                <nav>
-                    <ul class="pagination pagination-sm mb-0 gap-2">
-                        <li class="page-item ${!p.has_previous ? 'disabled' : ''}">
-                            <button class="btn btn-light border btn-sm px-3 rounded-3" onclick="loadData(${p.current_page - 1})" ${!p.has_previous ? 'disabled' : ''}>
-                                <i class="ri-arrow-left-s-line"></i>
-                            </button>
-                        </li>
-                        <li class="page-item active"><span class="btn btn-primary btn-sm px-3 rounded-3 shadow-sm">${p.current_page}</span></li>
-                        <li class="page-item ${!p.has_next ? 'disabled' : ''}">
-                            <button class="btn btn-light border btn-sm px-3 rounded-3" onclick="loadData(${p.current_page + 1})" ${!p.has_next ? 'disabled' : ''}>
-                                <i class="ri-arrow-right-s-line"></i>
-                            </button>
-                        </li>
-                    </ul>
-                </nav>
+                <span class="page-sub fw-semibold">Showing <strong class="text-dark">${p.start_index}–${p.end_index}</strong> of <strong class="text-dark">${p.total_items}</strong> records</span>
+                <nav><ul class="pagination pagination-sm mb-0 gap-2">
+                    <li><button class="btn btn-light border btn-sm px-3 rounded-3" onclick="loadData(${p.current_page - 1})" ${!p.has_previous ? 'disabled' : ''}><i class="ri-arrow-left-s-line"></i></button></li>
+                    <li><span class="btn btn-dark btn-sm px-3 rounded-3">${p.current_page} / ${p.num_pages}</span></li>
+                    <li><button class="btn btn-light border btn-sm px-3 rounded-3" onclick="loadData(${p.current_page + 1})" ${!p.has_next ? 'disabled' : ''}><i class="ri-arrow-right-s-line"></i></button></li>
+                </ul></nav>
             </div>
         `;
     }
 
-    function getProgressColor(p) {
-        if (p >= 80) return 'black';
-        if (p >= 50) return '#475569';
-        return '#94a3b8';
+    /* ────────────────────── Mini per-employee calendar ─────────────── */
+    async function openCalForRow(id) { return openCalForEmp(id); }
+    async function openCalForEmp(id) {
+        const month = document.getElementById('filterMonth').value;
+        const year  = document.getElementById('filterYear').value;
+        const modal = document.getElementById('calModal');
+        const grid  = document.getElementById('calGrid');
+        const title = document.getElementById('calTitle');
+        const sub   = document.getElementById('calSubtitle');
+        title.textContent = 'Loading…'; sub.textContent = '';
+        grid.innerHTML = '';
+        modal.classList.add('is-open');
+        document.body.style.overflow = 'hidden';
+
+        try {
+            const res = await fetch(`/api/attendance/dashboard/monthly-report/calendar/${id}/?month=${month}&year=${year}`, {
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            });
+            const data = await res.json();
+            const emp = data.employee || {};
+            title.textContent = emp.name || `Employee #${id}`;
+            sub.textContent = `${data.month_name || ''} ${data.year || ''} · ${emp.site || ''} · ${emp.department || ''}`;
+            renderCal(data.attendance || [], parseInt(month), parseInt(year));
+        } catch (e) {
+            // Fallback: render from the table row data we already have
+            const row = (lastPayload?.results || []).find(r => r.id === id)
+                     || (lastPayload?.employee_leaderboard?.top || []).find(r => r.id === id)
+                     || (lastPayload?.employee_leaderboard?.bottom || []).find(r => r.id === id);
+            if (row) {
+                title.textContent = row.name;
+                sub.textContent = `${row.site || ''} · ${row.department || ''} · ${row.attendance_percentage}% attendance`;
+                renderCalFallback(row, parseInt(document.getElementById('filterMonth').value),
+                                       parseInt(document.getElementById('filterYear').value));
+            } else {
+                title.textContent = 'Could not load calendar';
+                sub.textContent = e.message || '';
+            }
+        }
+    }
+    function renderCal(records, month, year) {
+        const grid = document.getElementById('calGrid');
+        const firstDay = new Date(year, month - 1, 1);
+        const startWd  = (firstDay.getDay() + 6) % 7; // Monday = 0
+        const daysIn   = new Date(year, month, 0).getDate();
+        const byDate   = {};
+        records.forEach(r => {
+            const d = (r.date || '').split('T')[0];
+            byDate[d] = r;
+        });
+
+        let html = '';
+        for (let i = 0; i < startWd; i++) html += `<div class="cal-cell future"></div>`;
+        for (let d = 1; d <= daysIn; d++) {
+            const iso = `${year}-${String(month).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+            const rec = byDate[iso];
+            let cls = 'absent', tag = 'A';
+            if (rec) {
+                if (rec.late_minutes && rec.late_minutes > 0) { cls = 'late'; tag = `${Math.round(rec.late_minutes)}m late`; }
+                else if (rec.check_in_time) { cls = 'present'; tag = 'P'; }
+            }
+            const today = new Date();
+            if (year === today.getFullYear() && month === today.getMonth() + 1 && d > today.getDate()) {
+                cls = 'future'; tag = '';
+            }
+            html += `<div class="cal-cell ${cls}" title="Day ${d}">${d}<span class="badge">${tag}</span></div>`;
+        }
+        grid.innerHTML = html;
+    }
+    function renderCalFallback(row, month, year) {
+        const grid = document.getElementById('calGrid');
+        const firstDay = new Date(year, month - 1, 1);
+        const startWd  = (firstDay.getDay() + 6) % 7;
+        const daysIn   = new Date(year, month, 0).getDate();
+        let html = '';
+        for (let i = 0; i < startWd; i++) html += `<div class="cal-cell future"></div>`;
+        for (let d = 1; d <= daysIn; d++) {
+            html += `<div class="cal-cell future">${d}</div>`;
+        }
+        grid.innerHTML = html + `<div class="col-span-7 small page-sub mt-2">Detailed daily breakdown unavailable from this endpoint. Showing aggregate only: ${row.days_present}/${row.working_days} working days.</div>`;
+    }
+    function closeCal(e) {
+        if (e && e.target && e.target.closest && !e.target.closest('.cal-modal-bg')) return;
+        document.getElementById('calModal').classList.remove('is-open');
+        document.body.style.overflow = '';
+    }
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeCal(); });
+
+    /* ─────────────────────── Executive Summary ─────────────────────── */
+    async function loadExecSummary(force) {
+        const body = document.getElementById('execBody');
+        body.classList.add('exec-skel');
+        body.innerHTML = `<div class="bar" style="width:92%"></div><div class="bar" style="width:85%"></div><div class="bar" style="width:78%"></div>`;
+        document.getElementById('aiBadge').style.display = 'none';
+
+        const params = new URLSearchParams({
+            month: document.getElementById('filterMonth').value,
+            year:  document.getElementById('filterYear').value,
+            site:  document.getElementById('filterSite')?.value || 'all',
+            employer: document.getElementById('filterEmployer').value,
+        });
+        try {
+            const res = await fetch(`/api/attendance/dashboard/monthly-report/exec-summary/?${params.toString()}`);
+            const data = await res.json();
+            const bullets = data.narrative || [];
+            body.classList.remove('exec-skel');
+            body.innerHTML = `<ul>${bullets.map(b => `
+                <li class="sev-${b.severity || 'info'}">
+                    <i class="${b.icon || 'ri-information-line'}"></i>
+                    <span>${escapeHtml(b.text || '')}</span>
+                </li>
+            `).join('')}</ul>`;
+            document.getElementById('aiBadge').style.display = data.ai_used ? 'inline-flex' : 'none';
+        } catch (e) {
+            body.classList.remove('exec-skel');
+            body.innerHTML = `<div class="text-warning">Could not generate summary: ${escapeHtml(e.message)}</div>`;
+        }
     }
 
+    /* ─────────────────────────── Misc ──────────────────────────────── */
     function downloadExcel() {
-        const month = document.getElementById('filterMonth').value;
-        const year = document.getElementById('filterYear').value;
-        const site = document.getElementById('filterSite')?.value || 'all';
-        const employer = document.getElementById('filterEmployer')?.value || 'all';
-        const params = new URLSearchParams({ month, year, site, employer });
+        const params = new URLSearchParams({
+            month: document.getElementById('filterMonth').value,
+            year:  document.getElementById('filterYear').value,
+            site:  document.getElementById('filterSite')?.value || 'all',
+            employer: document.getElementById('filterEmployer').value,
+        });
         window.location.href = `/api/attendance/dashboard/monthly-report/export/?${params.toString()}`;
     }
 
-    function startTime() {
+    function startClock() {
         const update = () => {
             const now = new Date();
-            document.getElementById('live-clock').innerText = `🇦🇪 ` + now.toLocaleString('en-US', { timeZone: 'Asia/Dubai', weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            document.getElementById('live-clock').innerText =
+                `🇦🇪 ` + now.toLocaleString('en-US', { timeZone: 'Asia/Dubai',
+                    weekday: 'short', month: 'short', day: 'numeric',
+                    hour: '2-digit', minute: '2-digit', second: '2-digit' });
         };
-        setInterval(update, 1000);
-        update();
+        update(); setInterval(update, 1000);
+    }
+
+    function escapeHtml(s) {
+        if (s == null) return '';
+        return String(s).replace(/[&<>"']/g, c =>
+            ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     }
 </script>
 {% endblock %}

@@ -3,337 +3,339 @@
 {% block title %}Reports - Admin Dashboard{% endblock %}
 
 {% block content %}
-<!-- Remix Icons -->
 <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
-<!-- Google Fonts (Outfit) -->
-<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 
 <style>
     :root {
         --font-family: 'Outfit', sans-serif;
-        --card-bg: #ffffff;
-        --text-primary: #1e293b;
-        --text-secondary: #64748b;
+        --c-bg:         #f8fafc;
+        --c-card:       #ffffff;
+        --c-border:     #e2e8f0;
+        --c-border-soft:#f1f5f9;
+        --c-text:       #0f172a;
+        --c-text-2:     #475569;
+        --c-text-3:     #94a3b8;
+        --c-success:    #10b981;
+        --c-info:       #0ea5e9;
+        --c-warn:       #f59e0b;
+        --c-danger:     #ef4444;
+        --c-indigo:     #6366f1;
+    }
+    body { font-family: var(--font-family) !important; background: var(--c-bg); }
 
-        /* Modern Gradients */
-        --grad-total: linear-gradient(135deg, #4f46e5 0%, #818cf8 100%);
-        --grad-present: linear-gradient(135deg, #059669 0%, #34d399 100%);
-        --grad-absent: linear-gradient(135deg, #e11d48 0%, #fb7185 100%);
-        --grad-late: linear-gradient(135deg, #d97706 0%, #fbbf24 100%);
+    .page-h1   { font-size: 1.75rem; font-weight: 700; letter-spacing: -.02em; }
+    .page-sub  { color: var(--c-text-3); font-size: .85rem; }
+    .ai-pill {
+        display: inline-flex; gap: .35rem; align-items: center;
+        font-size: .68rem; font-weight: 700; letter-spacing: .08em;
+        text-transform: uppercase; padding: .25rem .55rem; border-radius: 999px;
+        background: linear-gradient(120deg,#312e81,#4f46e5,#9333ea); color: #fff;
+    }
+    .live-dot {
+        width: 8px; height: 8px; border-radius: 50%; background: var(--c-success); display: inline-block;
+        box-shadow: 0 0 0 0 rgba(16,185,129,.45);
+        animation: pulse 1.6s infinite;
+    }
+    @keyframes pulse {
+        0%   { box-shadow: 0 0 0 0 rgba(16,185,129,.55); }
+        70%  { box-shadow: 0 0 0 10px rgba(16,185,129,0); }
+        100% { box-shadow: 0 0 0 0 rgba(16,185,129,0); }
     }
 
-    body {
-        font-family: var(--font-family) !important;
-        background-color: #f8fafc;
+    /* ───── Filter card ───────────────────────────────────────────── */
+    .filter-card {
+        background: var(--c-card); border-radius: 1.25rem; padding: 1.4rem 1.6rem;
+        border: 1px solid var(--c-border-soft); box-shadow: 0 1px 2px rgba(15,23,42,.04);
+        margin-bottom: 1.5rem;
+    }
+    .form-label-premium {
+        font-size: .7rem; text-transform: uppercase; font-weight: 700;
+        color: var(--c-text-3); letter-spacing: .08em; margin-bottom: .5rem; display: block;
+    }
+    .form-control-modern, .form-select-modern {
+        border: 1px solid var(--c-border); border-radius: .8rem; padding: .65rem .9rem;
+        font-weight: 500; transition: all .2s; cursor: pointer; width: 100%;
+    }
+    .form-control-modern:focus, .form-select-modern:focus {
+        border-color: var(--c-indigo); box-shadow: 0 0 0 4px rgba(99,102,241,.12); outline: none;
     }
 
-    /* Card & Stats - Monochrome Professional */
-    .stat-card {
-        background: white !important;
-        border: 1px solid black !important;
-        border-radius: 1.25rem;
-        transition: all 0.2s ease;
-        overflow: hidden;
-        position: relative;
-        height: 100%;
-        cursor: pointer;
-        box-shadow: none !important;
+    /* ───── Quick filter chips ────────────────────────────────────── */
+    .chip-row { display: flex; gap: .5rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
+    .chip {
+        font-size: .78rem; font-weight: 600; padding: .5rem .9rem; border-radius: 999px;
+        border: 1px solid var(--c-border); background: var(--c-card); cursor: pointer;
+        color: var(--c-text-2); transition: all .15s; display: inline-flex; align-items: center; gap: .35rem;
     }
+    .chip:hover { background: var(--c-bg); }
+    .chip.active { background: var(--c-text); color: #fff; border-color: var(--c-text); }
+    .chip .count { font-weight: 700; opacity: .75; margin-left: .15rem; }
 
-    .stat-card:hover {
-        transform: translateY(-4px);
-        background: #fbfbfb !important;
+    /* ───── KPI tiles ─────────────────────────────────────────────── */
+    .kpi-grid {
+        display: grid; gap: 1rem; grid-template-columns: repeat(6, minmax(0,1fr));
+        margin-bottom: 1.5rem;
     }
-
-    .stat-card .card-body {
-        padding: 1.75rem;
-        display: flex;
-        flex-direction: column;
-        justify-content: space-between;
-        height: 100%;
+    @media (max-width: 1200px) { .kpi-grid { grid-template-columns: repeat(3, 1fr); } }
+    @media (max-width: 700px)  { .kpi-grid { grid-template-columns: repeat(2, 1fr); } }
+    .kpi {
+        background: var(--c-card); border: 1px solid var(--c-border-soft);
+        border-radius: 1rem; padding: 1.1rem 1.2rem; cursor: pointer;
+        transition: transform .15s, border-color .15s;
     }
-
-    .stat-icon-wrapper {
-        width: 48px;
-        height: 48px;
-        border-radius: 12px;
-        background: #f1f5f9;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        margin-bottom: 1rem;
-        font-size: 1.5rem;
-        color: black;
-        border: 1px solid #e2e8f0;
+    .kpi:hover { transform: translateY(-2px); border-color: var(--c-border); }
+    .kpi.active { border-color: var(--c-text); box-shadow: 0 0 0 2px var(--c-text); }
+    .kpi .icn {
+        width: 34px; height: 34px; border-radius: 10px;
+        display: flex; align-items: center; justify-content: center;
+        background: var(--c-border-soft); color: var(--c-text);
+        font-size: 1.1rem; margin-bottom: .55rem;
     }
-
-    .stat-label {
-        font-size: 0.75rem;
-        font-weight: 700;
-        color: #64748b;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-        margin-bottom: 0.25rem;
+    .kpi .lbl { font-size: .68rem; text-transform: uppercase; font-weight: 700;
+                color: var(--c-text-3); letter-spacing: .08em; }
+    .kpi .val { font-size: 1.55rem; font-weight: 700; color: var(--c-text); margin-top: .15rem; }
+    .delta {
+        display: inline-flex; gap: .2rem; align-items: center; font-size: .7rem;
+        font-weight: 700; padding: .15rem .5rem; border-radius: 999px; margin-top: .35rem;
     }
+    .delta.up   { background: rgba(16,185,129,.12); color: var(--c-success); }
+    .delta.down { background: rgba(239,68,68,.12);  color: var(--c-danger); }
+    .delta.flat { background: var(--c-border-soft); color: var(--c-text-3); }
 
-    .stat-value {
-        font-size: 2.5rem;
-        font-weight: 800;
-        color: black;
-        line-height: 1.1;
+    /* ───── Generic panel ─────────────────────────────────────────── */
+    .panel {
+        background: var(--c-card); border: 1px solid var(--c-border-soft);
+        border-radius: 1.25rem; padding: 1.4rem 1.5rem 1.2rem;
+        box-shadow: 0 1px 2px rgba(15,23,42,.04);
+        margin-bottom: 1.4rem;
     }
-
-    /* Action Buttons */
-    .btn-action {
-        padding: 0.75rem 1.5rem;
-        border-radius: 0.75rem;
-        font-weight: 600;
-        transition: all 0.2s;
-        border: 1px solid black !important;
-        display: inline-flex;
-        align-items: center;
-        gap: 0.5rem;
-        background: white !important;
-        color: black !important;
-        box-shadow: none !important;
+    .panel-h {
+        display: flex; align-items: center; justify-content: space-between;
+        margin-bottom: 1rem; gap: .75rem; flex-wrap: wrap;
     }
-
-    .btn-action:hover {
-        background: black !important;
-        color: white !important;
-        transform: translateY(-1px);
+    .panel-h h3 {
+        font-size: 1rem; font-weight: 700; color: var(--c-text);
+        margin: 0; display: flex; align-items: center; gap: .5rem;
     }
+    .panel-h .sub { font-size: .8rem; color: var(--c-text-3); }
+    .chart-wrap { position: relative; height: 260px; }
+    .chart-wrap.tall { height: 320px; }
+    .chart-wrap.short { height: 200px; }
 
-    /* Table */
+    /* ───── Exec summary ──────────────────────────────────────────── */
+    .exec {
+        background: linear-gradient(135deg, #0f172a 0%, #312e81 60%, #581c87 100%);
+        border-radius: 1.25rem; padding: 1.6rem 1.75rem; color: #e2e8f0;
+        margin-bottom: 1.5rem; position: relative; overflow: hidden;
+    }
+    .exec::before {
+        content: ''; position: absolute; top: -40%; right: -10%; width: 320px; height: 320px;
+        background: radial-gradient(closest-side, rgba(168,85,247,.35), transparent 70%);
+        pointer-events: none;
+    }
+    .exec-h { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
+    .exec h3 { color: #fff; font-size: 1.05rem; font-weight: 700; margin: 0;
+               display: flex; align-items: center; gap: .5rem; }
+    .exec ul { list-style: none; padding: 0; margin: 0; display: grid; gap: .65rem; }
+    .exec li {
+        display: flex; gap: .85rem; align-items: flex-start; padding: .6rem .75rem;
+        background: rgba(255,255,255,.06); border-radius: .65rem;
+        font-size: .92rem; line-height: 1.45;
+    }
+    .exec li i { font-size: 1.15rem; margin-top: 2px; }
+    .exec li.sev-danger  i { color: #fca5a5; }
+    .exec li.sev-warning i { color: #fcd34d; }
+    .exec li.sev-info    i { color: #93c5fd; }
+    .exec-skel { display: grid; gap: .7rem; }
+    .exec-skel .bar {
+        height: 14px; background: rgba(255,255,255,.08); border-radius: 6px;
+        animation: shimmer 1.6s ease-in-out infinite;
+    }
+    @keyframes shimmer { 0%, 100% { opacity: .4; } 50% { opacity: .75; } }
+
+    /* ───── Callouts ──────────────────────────────────────────────── */
+    .callouts { display: grid; gap: .65rem; margin-bottom: 1.4rem; }
+    .callout {
+        display: flex; gap: .85rem; padding: .9rem 1.05rem;
+        border-radius: .85rem; border: 1px solid; background: var(--c-card);
+        font-size: .9rem;
+    }
+    .callout i { font-size: 1.25rem; }
+    .callout .ttl { font-weight: 700; margin-right: .35rem; }
+    .callout.danger  { border-color: rgba(239,68,68,.35); background: rgba(239,68,68,.05); color: #991b1b; }
+    .callout.warning { border-color: rgba(245,158,11,.35); background: rgba(245,158,11,.07); color: #92400e; }
+    .callout.info    { border-color: rgba(14,165,233,.3); background: rgba(14,165,233,.06); color: #075985; }
+
+    /* ───── Table ─────────────────────────────────────────────────── */
     .modern-table-container {
-        background: white;
-        border-radius: 1.25rem;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-        border: none;
-        overflow: hidden;
+        background: var(--c-card); border-radius: 1.25rem;
+        border: 1px solid var(--c-border-soft); overflow: hidden;
+        box-shadow: 0 1px 2px rgba(15,23,42,.04);
     }
-
+    .table { margin: 0; }
     .table thead th {
-        background: #f1f5f9;
-        color: #475569;
-        font-weight: 600;
-        text-transform: uppercase;
-        font-size: 0.75rem;
-        letter-spacing: 0.05em;
-        padding: 1.25rem 1rem;
-        border-bottom: 2px solid #e2e8f0;
+        background: var(--c-bg); padding: 1rem; font-weight: 700; font-size: .68rem;
+        text-transform: uppercase; color: var(--c-text-3); letter-spacing: .08em;
+        border-bottom: 1px solid var(--c-border-soft);
     }
-
     .table tbody td {
-        padding: 1rem;
-        vertical-align: middle;
-        border-bottom: 1px solid #f1f5f9;
-        font-size: 0.95rem;
+        padding: .85rem 1rem; vertical-align: middle; border-bottom: 1px solid var(--c-border-soft);
     }
-
     .avatar-circle {
-        width: 40px;
-        height: 40px;
-        border-radius: 50%;
-        background: #f1f5f9;
-        color: #4338ca;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-weight: 700;
-        font-size: 1rem;
-        overflow: hidden;
-        border: 1px solid #e2e8f0;
+        width: 38px; height: 38px; border-radius: 50%; background: var(--c-border-soft);
+        color: var(--c-indigo); display: flex; align-items: center; justify-content: center;
+        font-weight: 700; font-size: .9rem; overflow: hidden; border: 1px solid var(--c-border);
     }
-
-    .avatar-circle img {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-    }
-
+    .avatar-circle img { width: 100%; height: 100%; object-fit: cover; }
     .badge-soft {
-        padding: 0.35rem 0.75rem;
-        border-radius: 9999px;
-        font-weight: 600;
-        font-size: 0.75rem;
-        letter-spacing: 0.025em;
+        padding: .3rem .65rem; border-radius: 9999px; font-weight: 600;
+        font-size: .72rem; letter-spacing: .025em; display: inline-flex; gap: .25rem; align-items: center;
     }
-
-    .badge-present {
-        background: #dcfce7;
-        color: #15803d;
-    }
-
-    .badge-absent {
-        background: #fee2e2;
-        color: #b91c1c;
-    }
-
+    .badge-present { background: rgba(16,185,129,.12); color: #15803d; }
+    .badge-absent  { background: rgba(239,68,68,.1);  color: #b91c1c; }
+    .badge-late    { background: rgba(245,158,11,.14); color: #b45309; }
+    .badge-violation { background: rgba(239,68,68,.1); color: #b91c1c; }
     .btn-view-map {
-        background: white;
-        border: 1px solid #e2e8f0;
-        color: #475569;
-        padding: 0.4rem 0.8rem;
-        border-radius: 0.5rem;
-        font-size: 0.85rem;
-        font-weight: 500;
-        transition: all 0.2s;
-        display: inline-flex;
-        align-items: center;
-        gap: 0.4rem;
+        background: var(--c-card); border: 1px solid var(--c-border);
+        color: var(--c-text-2); padding: .35rem .7rem; border-radius: .5rem;
+        font-size: .8rem; font-weight: 500; transition: all .2s;
+        display: inline-flex; align-items: center; gap: .35rem;
     }
+    .btn-view-map:hover { background: var(--c-text); color: #fff; border-color: var(--c-text); }
 
-    .btn-view-map:hover {
-        background: #f8fafc;
-        border-color: #cbd5e1;
-        color: #0f172a;
+    /* ───── List panels (Late / Missing / Geofence) ───────────────── */
+    .list-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.25rem; }
+    @media (max-width: 1100px) { .list-grid { grid-template-columns: 1fr; } }
+    .list-panel { display: flex; flex-direction: column; gap: .5rem; }
+    .list-row {
+        display: grid; grid-template-columns: 32px 1fr auto; gap: .65rem;
+        align-items: center; padding: .55rem .7rem; border-radius: .55rem;
+        background: var(--c-bg); cursor: pointer; transition: background .12s;
     }
+    .list-row:hover { background: var(--c-border-soft); }
+    .list-row .avatar { width: 32px; height: 32px; border-radius: 50%; background: var(--c-border);
+                        display: flex; align-items: center; justify-content: center;
+                        overflow: hidden; font-weight: 700; color: var(--c-text-2); font-size: .85rem; }
+    .list-row .avatar img { width: 100%; height: 100%; object-fit: cover; }
+    .list-row .nm  { font-weight: 600; font-size: .85rem; color: var(--c-text); }
+    .list-row .sub { font-size: .7rem; color: var(--c-text-3); }
+    .list-row .meta { font-weight: 700; font-size: .82rem; text-align: right; }
 
-    /* Skeleton */
+    /* ───── Site bar list ─────────────────────────────────────────── */
+    .site-bars { display: flex; flex-direction: column; gap: .4rem; max-height: 320px; overflow-y: auto; padding-right: .5rem; }
+    .site-bar {
+        display: grid; grid-template-columns: 160px 1fr 90px; align-items: center;
+        gap: .75rem; font-size: .82rem;
+    }
+    .site-bar .nm { font-weight: 600; color: var(--c-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .site-bar .track {
+        height: 8px; background: var(--c-border-soft); border-radius: 99px; overflow: hidden;
+    }
+    .site-bar .fill {
+        height: 100%; border-radius: 99px;
+        background: linear-gradient(90deg, var(--c-success), #34d399);
+    }
+    .site-bar.warn .fill { background: linear-gradient(90deg, var(--c-warn), #fcd34d); }
+    .site-bar.danger .fill { background: linear-gradient(90deg, var(--c-danger), #fca5a5); }
+    .site-bar .pct-label { text-align: right; font-weight: 700; color: var(--c-text); font-variant-numeric: tabular-nums; }
+
+    .btn-clean {
+        border-radius: .75rem; padding: .55rem 1rem; font-weight: 600;
+        display: inline-flex; align-items: center; gap: .45rem;
+        background: var(--c-card); color: var(--c-text); border: 1px solid var(--c-border);
+        transition: all .15s; text-decoration: none; font-size: .88rem;
+    }
+    .btn-clean:hover { background: var(--c-text); color: #fff; border-color: var(--c-text); }
+    .btn-clean.primary { background: var(--c-text); color: #fff; border-color: var(--c-text); }
+
     .skeleton {
         background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
-        background-size: 200% 100%;
-        animation: pulse 1.5s infinite;
-        border-radius: 6px;
+        background-size: 200% 100%; animation: skel 1.5s infinite; border-radius: 6px;
     }
-
-    @keyframes pulse {
-        0% {
-            background-position: 200% 0;
-        }
-
-        100% {
-            background-position: -200% 0;
-        }
-    }
+    @keyframes skel { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 </style>
 
-<!-- Main Header -->
-<div class="d-flex justify-content-between align-items-center mb-5 pt-2">
+<!-- Header -->
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
     <div>
-        <h1 class="h3 fw-bold text-dark mb-1" style="font-family: 'Outfit', sans-serif;">Attendance Reports</h1>
-        <div class="d-flex align-items-center gap-2 text-secondary font-monospace small">
-            <i class="ri-time-line"></i>
-            <span id="liveClock">Loading time...</span>
-            <span class="mx-1">•</span>
-            <i class="ri-user-smile-line"></i>
-            <span>{{ user.username }}</span>
+        <h1 class="page-h1 mb-1">Attendance Reports</h1>
+        <div class="d-flex align-items-center gap-3 flex-wrap">
+            <span class="page-sub"><i class="ri-time-line"></i> <span id="liveClock">…</span></span>
+            <span class="page-sub"><i class="ri-user-smile-line"></i> {{ user.username }}</span>
+            <span class="page-sub" id="lastSyncWrap" style="display:none;">
+                <span class="live-dot"></span> Live · synced <span id="lastSync">just now</span>
+            </span>
         </div>
     </div>
-    <button type="button" onclick="downloadExcel()" class="btn btn-action shadow-sm">
-        <i class="ri-file-excel-2-line"></i> Download Excel Report
-    </button>
-</div>
-
-<!-- Stats Grid -->
-<div class="row g-4 mb-4">
-    <div class="col-12 col-md-6 col-xl-3">
-        <div class="stat-card" onclick="filterStatus('')" role="button">
-            <div class="card-body">
-                <div class="d-flex justify-content-between align-items-start">
-                    <div class="stat-icon-wrapper">
-                        <i class="ri-team-line"></i>
-                    </div>
-                    <i class="ri-arrow-right-up-line opacity-50"></i>
-                </div>
-                <div>
-                    <div class="stat-label">Total Employees</div>
-                    <div class="stat-value" id="stat-total">-</div>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="col-12 col-md-6 col-xl-3">
-        <div class="stat-card" onclick="filterStatus('Present')" role="button">
-            <div class="card-body">
-                <div class="d-flex justify-content-between align-items-start">
-                    <div class="stat-icon-wrapper">
-                        <i class="ri-check-double-line"></i>
-                    </div>
-                </div>
-                <div>
-                    <div class="stat-label">Present Today</div>
-                    <div class="stat-value" id="stat-present">-</div>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="col-12 col-md-6 col-xl-3">
-        <div class="stat-card" onclick="filterStatus('Absent')" role="button">
-            <div class="card-body">
-                <div class="d-flex justify-content-between align-items-start">
-                    <div class="stat-icon-wrapper">
-                        <i class="ri-close-circle-line"></i>
-                    </div>
-                </div>
-                <div>
-                    <div class="stat-label">Absent Today</div>
-                    <div class="stat-value" id="stat-absent">-</div>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="col-12 col-md-6 col-xl-3">
-        <div class="stat-card" role="button">
-            <div class="card-body">
-                <div class="d-flex justify-content-between align-items-start">
-                    <div class="stat-icon-wrapper">
-                        <i class="ri-alarm-warning-line"></i>
-                    </div>
-                </div>
-                <div>
-                    <div class="stat-label">Late Arrivals</div>
-                    <div class="stat-value" id="stat-late">-</div>
-                </div>
-            </div>
-        </div>
+    <div class="d-flex gap-2 flex-wrap">
+        <button type="button" class="btn-clean" onclick="toggleLive()" id="liveBtn">
+            <i class="ri-broadcast-line"></i> <span id="liveBtnTxt">Live OFF</span>
+        </button>
+        <button type="button" onclick="downloadExcel()" class="btn-clean primary">
+            <i class="ri-file-excel-2-line"></i> Download Excel
+        </button>
     </div>
 </div>
 
-<!-- Filter Section -->
-<div class="filter-card mb-4">
-    <form id="filterForm" class="row g-4 align-items-end">
+<!-- AI Executive Summary -->
+<div class="exec" id="execCard">
+    <div class="exec-h">
+        <h3><i class="ri-sparkling-2-line"></i> Today at a Glance <span class="ai-pill" id="aiBadge" style="display:none;">AI polished</span></h3>
+        <button class="btn btn-sm" onclick="loadExecSummary(true)" style="background:rgba(255,255,255,.12);color:#fff;border:0;border-radius:.55rem;padding:.45rem .85rem;font-size:.78rem;font-weight:600;">
+            <i class="ri-refresh-line"></i> Regenerate
+        </button>
+    </div>
+    <div id="execBody" class="exec-skel">
+        <div class="bar" style="width:92%"></div>
+        <div class="bar" style="width:85%"></div>
+        <div class="bar" style="width:78%"></div>
+    </div>
+</div>
+
+<!-- Anomaly callouts -->
+<div class="callouts" id="anomalyCallouts"></div>
+
+<!-- KPI tiles (clickable) -->
+<div class="kpi-grid" id="kpiGrid"></div>
+
+<!-- Quick filter chips -->
+<div class="chip-row" id="chipRow">
+    <span class="chip active" data-quick="" onclick="setQuickFilter('')"><i class="ri-list-check-2"></i> All</span>
+    <span class="chip" data-quick="late" onclick="setQuickFilter('late')"><i class="ri-alarm-warning-line"></i> Late only <span class="count" id="chipLateCount">0</span></span>
+    <span class="chip" data-quick="missing_checkout" onclick="setQuickFilter('missing_checkout')"><i class="ri-logout-box-line"></i> Missing check-out <span class="count" id="chipMissingCount">0</span></span>
+    <span class="chip" data-quick="geofence" onclick="setQuickFilter('geofence')"><i class="ri-map-pin-2-line"></i> Geofence violation <span class="count" id="chipGeoCount">0</span></span>
+    <span class="chip" data-quick="now" onclick="setQuickFilter('now')"><i class="ri-flashlight-line"></i> Checking in now <span class="count" id="chipNowCount">0</span></span>
+</div>
+
+<!-- Filter card -->
+<div class="filter-card">
+    <form id="filterForm" class="row g-3 align-items-end">
         <div class="col-md-3">
-            <label class="form-label small fw-bold text-secondary text-uppercase mb-2">
-                <i class="ri-calendar-line me-1"></i> Date
-            </label>
-            <input type="date" id="filterDate" class="form-control form-control-modern" onchange="loadData(1)">
+            <label class="form-label-premium">Date</label>
+            <input type="date" id="filterDate" class="form-control-modern" onchange="loadData(1)">
         </div>
-
         <div class="col-md-3" id="siteFilterContainer" style="display:none;">
-            <label class="form-label small fw-bold text-secondary text-uppercase mb-2">
-                <i class="ri-building-line me-1"></i> Site
-            </label>
-            <select id="filterSite" class="form-select form-select-modern" onchange="loadData(1)">
+            <label class="form-label-premium">Site</label>
+            <select id="filterSite" class="form-select-modern" onchange="loadData(1)">
                 <option value="all">All Sites</option>
             </select>
         </div>
-
         <div class="col-md-3">
-            <label class="form-label small fw-bold text-secondary text-uppercase mb-2">
-                <i class="ri-user-settings-line me-1"></i> Position
-            </label>
-            <select id="filterPosition" class="form-select form-select-modern" onchange="loadData(1)">
+            <label class="form-label-premium">Position</label>
+            <select id="filterPosition" class="form-select-modern" onchange="loadData(1)">
                 <option value="all">All Positions</option>
             </select>
         </div>
-
         <div class="col-md-3">
-            <label class="form-label small fw-bold text-secondary text-uppercase mb-2">
-                <i class="ri-user-settings-line me-1"></i> Category
-            </label>
-            <select id="filterCategory" class="form-select form-select-modern" onchange="loadData(1)">
+            <label class="form-label-premium">Category</label>
+            <select id="filterCategory" class="form-select-modern" onchange="loadData(1)">
                 <option value="all">All Categories</option>
             </select>
         </div>
-
         <div class="col-md-3">
-            <label class="form-label small fw-bold text-secondary text-uppercase mb-2">
-                <i class="ri-building-2-line me-1"></i> Employer
-            </label>
-            <select id="filterEmployer" class="form-select form-select-modern" onchange="loadData(1)">
+            <label class="form-label-premium">Employer</label>
+            <select id="filterEmployer" class="form-select-modern" onchange="loadData(1)">
                 <option value="all">All Employers</option>
                 <option value="PIC">PIC</option>
                 <option value="KFD">KFD</option>
@@ -341,32 +343,83 @@
                 <option value="PRMC">PRMC</option>
             </select>
         </div>
-
         <div class="col-md-2">
-            <label class="form-label small fw-bold text-secondary text-uppercase mb-2">
-                <i class="ri-list-check-2 me-1"></i> Entries
-            </label>
-            <select id="filterPerPage" class="form-select form-select-modern" onchange="loadData(1)">
+            <label class="form-label-premium">Entries</label>
+            <select id="filterPerPage" class="form-select-modern" onchange="loadData(1)">
                 <option value="20" selected>20</option>
                 <option value="50">50</option>
                 <option value="100">100</option>
                 <option value="500">500</option>
             </select>
         </div>
-
         <input type="hidden" id="filterStatus" value="">
+        <input type="hidden" id="filterQuick"  value="">
     </form>
 </div>
 
-<!-- Data Table -->
+<!-- Hourly check-in histogram -->
+<div class="panel">
+    <div class="panel-h">
+        <h3><i class="ri-time-line"></i> Hourly Check-in Distribution</h3>
+        <span class="sub" id="checkinAvgLabel">—</span>
+    </div>
+    <div class="chart-wrap"><canvas id="hourlyChart"></canvas></div>
+</div>
+
+<!-- Site bars + Department donut -->
+<div class="row g-3">
+    <div class="col-lg-7">
+        <div class="panel">
+            <div class="panel-h">
+                <h3><i class="ri-building-line"></i> Site Attendance Today</h3>
+                <span class="sub" id="siteAvgLabel">—</span>
+            </div>
+            <div class="site-bars" id="siteBars"></div>
+        </div>
+    </div>
+    <div class="col-lg-5">
+        <div class="panel">
+            <div class="panel-h">
+                <h3><i class="ri-pie-chart-line"></i> Department Share</h3>
+                <span class="sub">Top 12 by attendance %</span>
+            </div>
+            <div class="chart-wrap"><canvas id="deptChart"></canvas></div>
+        </div>
+    </div>
+</div>
+
+<!-- Late / Missing checkouts / Geofence lists -->
+<div class="panel">
+    <div class="panel-h">
+        <h3><i class="ri-error-warning-line"></i> Action Lists</h3>
+        <span class="sub">Auto-curated from today's activity</span>
+    </div>
+    <div class="list-grid">
+        <div>
+            <div class="page-sub mb-2"><i class="ri-alarm-warning-line text-warning"></i> <strong>Late arrivals</strong> <span id="lateCount" class="text-muted">(0)</span></div>
+            <div class="list-panel" id="lateListPanel"></div>
+        </div>
+        <div>
+            <div class="page-sub mb-2"><i class="ri-logout-box-line text-warning"></i> <strong>Missing check-outs</strong> <span id="missingCount" class="text-muted">(0)</span></div>
+            <div class="list-panel" id="missingListPanel"></div>
+        </div>
+        <div>
+            <div class="page-sub mb-2"><i class="ri-map-pin-2-line text-danger"></i> <strong>Geofence violations</strong> <span id="geofenceCount" class="text-muted">(0)</span></div>
+            <div class="list-panel" id="geofenceListPanel"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Table -->
 <div class="card modern-table-container">
-    <div class="card-header bg-white py-4 px-4 border-bottom">
-        <div class="d-flex align-items-center justify-content-between">
-            <h5 class="mb-0 fw-bold d-flex align-items-center gap-2">
-                <i class="ri-table-line text-primary"></i> Daily Logs
-            </h5>
-            <span id="statusBadge"
-                class="badge bg-primary bg-opacity-10 text-primary px-3 py-2 rounded-pill d-none"></span>
+    <div class="card-header bg-white py-3 px-4 border-bottom">
+        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+            <h5 class="mb-0 fw-bold d-flex align-items-center gap-2"><i class="ri-table-line"></i> Daily Logs</h5>
+            <div class="d-flex align-items-center gap-2">
+                <span id="quickBadge" class="badge bg-dark px-3 py-2 rounded-pill d-none"></span>
+                <span id="statusBadge" class="badge bg-dark px-3 py-2 rounded-pill d-none"></span>
+                <span class="page-sub" id="rowsSummary"></span>
+            </div>
         </div>
     </div>
 
@@ -378,21 +431,20 @@
                     <th>Badge ID</th>
                     <th>Category</th>
                     <th>Department</th>
-                    <th>Position</th>
                     <th>Site</th>
                     <th>Status</th>
-                    <th>Time</th>
+                    <th>Check-in</th>
+                    <th>Check-out</th>
+                    <th class="text-center">Late</th>
+                    <th class="text-center">OT</th>
                     <th class="text-end pe-4">Actions</th>
                 </tr>
             </thead>
-            <tbody id="reportTableBody">
-                <!-- Data -->
-            </tbody>
+            <tbody id="reportTableBody"></tbody>
         </table>
     </div>
 
-    <!-- Pagination -->
-    <div class="card-footer bg-white py-4" id="paginationContainer"></div>
+    <div class="card-footer bg-white py-3" id="paginationContainer"></div>
 </div>
 
 <!-- Map Modal -->
@@ -401,16 +453,13 @@
         <div class="modal-content border-0 shadow-2xl" style="height: 85vh; border-radius: 1.5rem; overflow: hidden;">
             <div class="modal-header border-bottom bg-white p-4">
                 <div class="d-flex align-items-center gap-3">
-                    <div class="bg-primary bg-opacity-10 p-2 rounded-circle text-primary">
-                        <i class="ri-map-pin-user-line fs-4"></i>
-                    </div>
+                    <div class="bg-primary bg-opacity-10 p-2 rounded-circle text-primary"><i class="ri-map-pin-user-line fs-4"></i></div>
                     <div>
                         <h5 class="modal-title fw-bold">Location Details</h5>
-                        <p class="mb-0 text-secondary small">View employee check-in location</p>
+                        <p class="mb-0 page-sub">View check-in location vs geofence</p>
                     </div>
                 </div>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"
-                    onclick="closeMapModal()"></button>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" onclick="closeMapModal()"></button>
             </div>
             <div class="modal-body p-0 position-relative bg-light">
                 <div id="map" class="w-100 h-100"></div>
@@ -422,304 +471,532 @@
 {% endblock %}
 
 {% block scripts %}
-<script
-    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDSFQyDq5VpsbAXjsie3xZKvah0__PCyBc&libraries=geometry"></script>
+<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDSFQyDq5VpsbAXjsie3xZKvah0__PCyBc&libraries=geometry"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script>
-    // Config
-    const API_URL = '{% url "api-reports-data" %}';
+    const API_URL    = '{% url "api-reports-data" %}';
     const EXPORT_URL = '{% url "export-reports" %}';
+    const AI_URL     = '{% url "api-reports-exec-summary" %}';
 
-    // State
     let currentPage = 1;
     let sitesLoaded = false;
+    let mapModalInstance = null;
     let currentMap = null;
     let currentMarker = null;
     let currentPolygon = null;
-    let mapModalInstance = null;
+    let currentSiteMarker = null;
+    let liveTimer = null;
+    let hourlyChart = null;
+    let deptChart   = null;
+    let lastPayload = null;
 
-    // Initialization
     document.addEventListener('DOMContentLoaded', () => {
         mapModalInstance = new bootstrap.Modal(document.getElementById('mapModal'));
-        const today = new Date().toISOString().split('T')[0];
-        document.getElementById('filterDate').value = today;
+        document.getElementById('filterDate').value = new Date().toISOString().split('T')[0];
         loadData(1);
-        updateClock();
-        setInterval(updateClock, 1000);
+        updateClock(); setInterval(updateClock, 1000);
     });
 
-    async function loadData(page = 1) {
+    /* ───────────── Data load ─────────────────────────────────────── */
+    async function loadData(page = 1, opts = {}) {
         currentPage = page;
         const tbody = document.getElementById('reportTableBody');
-
-        // Skeleton Row
-        const skeletonRow = `
-            <tr>
-                <td class="ps-4"><div class="skeleton" style="width: 180px; height: 40px;"></div></td>
-                <td><div class="skeleton" style="width: 60px; height: 20px;"></div></td>
-                <td><div class="skeleton" style="width: 100px; height: 20px;"></div></td>
-                <td><div class="skeleton" style="width: 100px; height: 20px;"></div></td>
-                <td><div class="skeleton" style="width: 80px; height: 20px;"></div></td>
-                <td><div class="skeleton" style="width: 140px; height: 20px;"></div></td>
-                <td class="text-end pe-4"><div class="skeleton" style="width: 80px; height: 32px;"></div></td>
-            </tr>`;
-        tbody.innerHTML = skeletonRow.repeat(5);
+        if (!opts.silent) {
+            const skel = `
+                <tr>
+                  <td class="ps-4"><div class="skeleton" style="width:180px;height:36px"></div></td>
+                  <td colspan="9"><div class="skeleton" style="width:90%;height:18px"></div></td>
+                  <td class="text-end pe-4"><div class="skeleton" style="width:80px;height:28px"></div></td>
+                </tr>`;
+            tbody.innerHTML = skel.repeat(5);
+        }
 
         const date = document.getElementById('filterDate').value;
-        const site = document.getElementById('filterSite').value;
+        const site = document.getElementById('filterSite')?.value || 'all';
         const perPage = document.getElementById('filterPerPage').value;
         const status = document.getElementById('filterStatus').value;
         const position = document.getElementById('filterPosition').value;
         const category = document.getElementById('filterCategory').value;
         const employer = document.getElementById('filterEmployer').value;
+        const quick = document.getElementById('filterQuick').value;
 
-        const params = new URLSearchParams({ page, per_page: perPage, date: date || '', site: site || 'all', status: status || '', position: position || 'all', category: category || 'all', employer: employer || 'all' });
+        const params = new URLSearchParams({
+            page, per_page: perPage, date: date || '',
+            site, status, position, category, employer, quick,
+        });
 
         try {
             const res = await fetch(`${API_URL}?${params}`);
             if (!res.ok) throw new Error('Failed');
             const data = await res.json();
+            lastPayload = data;
 
-            // Stats
-            document.getElementById('stat-total').textContent = data.stats.total;
-            document.getElementById('stat-present').textContent = data.stats.present;
-            document.getElementById('stat-absent').textContent = data.stats.absent;
-            document.getElementById('stat-late').textContent = data.stats.late;
-
-            // Site Filter
-            if (!sitesLoaded && data.permissions.is_superuser) {
-                const siteSelect = document.getElementById('filterSite');
-                document.getElementById('siteFilterContainer').style.display = 'block';
-                siteSelect.innerHTML = '<option value="all">All Sites</option>';
-                data.sites.forEach(s => {
-                    const opt = document.createElement('option');
-                    opt.value = s.id; opt.textContent = s.name;
-                    siteSelect.appendChild(opt);
-                });
-                sitesLoaded = true;
-                if (data.selected_site && data.selected_site !== 'all') siteSelect.value = data.selected_site;
-            }
-
-            // Position Filter Population
-            const posSelect = document.getElementById('filterPosition');
-            if (posSelect.options.length <= 1 && data.positions) {
-                data.positions.forEach(p => {
-                    const opt = document.createElement('option');
-                    opt.value = p; opt.textContent = p;
-                    posSelect.appendChild(opt);
-                });
-            }
-
-            // Category Filter Population
-            const catSelect = document.getElementById('filterCategory');
-            if (catSelect.options.length <= 1 && data.categories) {
-                data.categories.forEach(c => {
-                    const opt = document.createElement('option');
-                    opt.value = c; opt.textContent = c;
-                    catSelect.appendChild(opt);
-                });
-            }
-
-            // Table
+            renderKpis(data.stats, data.comparison);
+            renderChips(data.stats);
+            renderAnomalies(data.anomalies);
+            renderHourly(data.hourly_histogram, data.comparison);
+            renderSiteBars(data.site_rows);
+            renderDept(data.dept_rows);
+            renderLists(data.late_list, data.missing_checkout_list, data.geofence_violation_list);
             renderTable(data.results);
             renderPagination(data.pagination);
-
-        } catch (error) {
-            console.error(error);
-            tbody.innerHTML = `<tr><td colspan="7" class="text-center py-5 text-danger"><i class="ri-error-warning-line fs-2 d-block mb-2"></i>Error loading data</td></tr>`;
+            populateDropdowns(data);
+            document.getElementById('lastSync').textContent = new Date().toLocaleTimeString();
+            if (!opts.silent) loadExecSummary(false);
+        } catch (e) {
+            console.error(e);
+            tbody.innerHTML = `<tr><td colspan="11" class="text-center py-5 text-danger"><i class="ri-error-warning-line fs-2 d-block mb-2"></i>Error loading data — ${e.message}</td></tr>`;
         }
     }
 
-    function renderTable(rows) {
-        const tbody = document.getElementById('reportTableBody');
-        if (rows.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="7" class="text-center py-5"><div class="text-muted"><i class="ri-file-search-line fs-1 d-block mb-3 opacity-25"></i>No records found</div></td></tr>`;
-            return;
+    /* ───────────── Dropdowns (one-shot) ──────────────────────────── */
+    function populateDropdowns(data) {
+        if (!sitesLoaded && data.permissions.is_superuser) {
+            const sel = document.getElementById('filterSite');
+            document.getElementById('siteFilterContainer').style.display = 'block';
+            sel.innerHTML = '<option value="all">All Sites</option>';
+            (data.sites || []).forEach(s => {
+                const o = document.createElement('option');
+                o.value = s.id; o.textContent = s.name;
+                sel.appendChild(o);
+            });
+            sitesLoaded = true;
+            if (data.selected_site && data.selected_site !== 'all') sel.value = data.selected_site;
         }
+        const ps = document.getElementById('filterPosition');
+        if (ps.options.length <= 1 && data.positions) {
+            data.positions.forEach(p => {
+                const o = document.createElement('option');
+                o.value = p; o.textContent = p; ps.appendChild(o);
+            });
+        }
+        const cs = document.getElementById('filterCategory');
+        if (cs.options.length <= 1 && data.categories) {
+            data.categories.forEach(c => {
+                const o = document.createElement('option');
+                o.value = c; o.textContent = c; cs.appendChild(o);
+            });
+        }
+    }
 
-        tbody.innerHTML = rows.map(item => `
-            <tr onclick="window.location='/api/attendance/dashboard/user/${item.id}/'"
-                style="cursor:pointer;"
-                title="Open ${item.name}'s detail page">
-                <td class="ps-4">
-                    <div class="d-flex align-items-center gap-3">
-                        <div class="avatar-circle">
-                            ${item.profile_picture ? `<img src="${item.profile_picture}" alt="${item.name}">` : item.name.charAt(0)}
-                        </div>
-                        <div>
-                            <div class="fw-bold text-dark">${item.name}</div>
-                            <div class="small text-secondary">${item.email || '-'}</div>
-                        </div>
-                    </div>
-                </td>
-                <td><span class="font-monospace fw-bold text-dark bg-secondary bg-opacity-10 px-2 py-1 rounded small">${item.badge_number || '-'}</span></td>
-                <td>${item.salary_grade || '<span class="text-muted">-</span>'}</td>
-                <td>${item.department || '<span class="text-muted">-</span>'}</td>
-                <td>${item.position || '<span class="text-muted">-</span>'}</td>
-                <td><div class="d-flex align-items-center gap-1"><i class="ri-building-line text-secondary"></i> ${item.site}</div></td>
-                <td>
-                    ${item.status === 'Present'
-                ? '<span class="badge-soft badge-present"><i class="ri-checkbox-circle-line me-1"></i>Present</span>'
-                : '<span class="badge-soft badge-absent"><i class="ri-close-circle-line me-1"></i>Absent</span>'}
-                </td>
-                 <td>
-                    <div class="d-flex flex-column small">
-                        <span class="text-success"><i class="ri-login-box-line me-1"></i>${item.check_in}</span>
-                        <span class="text-danger"><i class="ri-logout-box-line me-1"></i>${item.check_out}</span>
-                    </div>
-                </td>
-                <td class="text-end pe-4" onclick="event.stopPropagation()">
-                    ${(item.latitude && item.longitude && item.site_id)
-                ? `<button onclick="viewLocation(${item.site_id}, ${item.latitude}, ${item.longitude})"
-                                class="btn-view-map">
-                                <i class="ri-map-pin-2-line"></i> Location
-                           </button>`
-                : '<span class="text-muted small opacity-50">No Data</span>'}
-                </td>
-            </tr>
+    /* ───────────── KPI tiles ─────────────────────────────────────── */
+    function renderKpis(stats, cmp) {
+        const cm = cmp || {};
+        const tiles = [
+            { lbl: 'Total Employees', icn: 'ri-team-line', val: (stats.total || 0).toLocaleString(),
+              click: () => filterStatus('') },
+            { lbl: 'Present Today', icn: 'ri-check-double-line', val: (stats.present || 0).toLocaleString(),
+              delta: { v: cm.delta_yesterday, unit: '', vs: 'vs yest' },
+              extra: cm.same_weekday_avg_present !== undefined
+                       ? `<div class="page-sub" style="font-size:.7rem;margin-top:.2rem;">4-${shortWd()} avg ${cm.same_weekday_avg_present.toLocaleString()} (${cm.delta_baseline >= 0 ? '+' : ''}${cm.delta_baseline})</div>`
+                       : '',
+              click: () => filterStatus('Present') },
+            { lbl: 'Absent Today', icn: 'ri-close-circle-line', val: (stats.absent || 0).toLocaleString(),
+              click: () => filterStatus('Absent') },
+            { lbl: 'Late Arrivals', icn: 'ri-alarm-warning-line', val: (stats.late || 0).toLocaleString(),
+              click: () => setQuickFilter('late') },
+            { lbl: 'Missing Check-out', icn: 'ri-logout-box-line', val: (stats.missing_checkout || 0).toLocaleString(),
+              click: () => setQuickFilter('missing_checkout') },
+            { lbl: 'Geofence Issues', icn: 'ri-map-pin-2-line', val: (stats.geofence_violations || 0).toLocaleString(),
+              click: () => setQuickFilter('geofence') },
+        ];
+        document.getElementById('kpiGrid').innerHTML = tiles.map((t, i) => `
+            <div class="kpi" data-i="${i}" onclick='(${t.click.toString()})()'>
+                <div class="icn"><i class="${t.icn}"></i></div>
+                <div class="lbl">${t.lbl}</div>
+                <div class="val">${t.val}</div>
+                ${t.delta && t.delta.v !== undefined && t.delta.v !== null ? deltaPill(t.delta) : ''}
+                ${t.extra || ''}
+            </div>
         `).join('');
     }
+    function shortWd() {
+        return ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][new Date(document.getElementById('filterDate').value).getDay()];
+    }
+    function deltaPill(d) {
+        if (d.v === 0) return `<span class="delta flat">— ${d.vs}</span>`;
+        const positive = d.v > 0;
+        const cls = positive ? 'up' : 'down';
+        const arrow = positive ? 'ri-arrow-up-line' : 'ri-arrow-down-line';
+        const sign = positive ? '+' : '';
+        return `<span class="delta ${cls}"><i class="${arrow}"></i> ${sign}${d.v.toLocaleString()}${d.unit} ${d.vs}</span>`;
+    }
 
-    function renderPagination(pagination) {
-        const container = document.getElementById('paginationContainer');
-        if (pagination.num_pages <= 1) {
-            container.innerHTML = '';
+    /* ───────────── Quick filter chips ────────────────────────────── */
+    function renderChips(stats) {
+        document.getElementById('chipLateCount').textContent     = stats.late || 0;
+        document.getElementById('chipMissingCount').textContent  = stats.missing_checkout || 0;
+        document.getElementById('chipGeoCount').textContent      = stats.geofence_violations || 0;
+        document.getElementById('chipNowCount').textContent      = stats.checking_in_now || 0;
+        const q = document.getElementById('filterQuick').value;
+        document.querySelectorAll('#chipRow .chip').forEach(c => {
+            c.classList.toggle('active', (c.dataset.quick || '') === q);
+        });
+        const badge = document.getElementById('quickBadge');
+        if (q) { badge.textContent = `Quick: ${q.replace('_',' ')}`; badge.classList.remove('d-none'); }
+        else   { badge.classList.add('d-none'); }
+    }
+    function setQuickFilter(q) {
+        document.getElementById('filterQuick').value = q || '';
+        loadData(1);
+    }
+
+    /* ───────────── Anomalies ─────────────────────────────────────── */
+    function renderAnomalies(list) {
+        const c = document.getElementById('anomalyCallouts');
+        if (!list || !list.length) { c.innerHTML = ''; return; }
+        c.innerHTML = list.map(a => `
+            <div class="callout ${a.severity}">
+                <i class="${a.icon}"></i>
+                <div><span class="ttl">${a.title}:</span>${a.message}</div>
+            </div>`).join('');
+    }
+
+    /* ───────────── Hourly chart ──────────────────────────────────── */
+    function renderHourly(rows, cmp) {
+        const ctx = document.getElementById('hourlyChart').getContext('2d');
+        if (hourlyChart) hourlyChart.destroy();
+        // Trim to 4-23 hour range so the chart is readable
+        const trimmed = rows.filter(r => r.hour >= 4 && r.hour <= 23);
+        const labels = trimmed.map(r => fmtHour(r.hour));
+        hourlyChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels,
+                datasets: [{
+                    label: 'Check-ins',
+                    data: trimmed.map(r => r.count),
+                    backgroundColor: trimmed.map(r => (r.hour >= 5 && r.hour <= 9) ? '#10b981' : '#94a3b8'),
+                    borderRadius: 6,
+                }],
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { grid: { display: false }, ticks: { font: { size: 10 }, color: '#94a3b8' } },
+                    y: { beginAtZero: true, grid: { color: '#f1f5f9' }, ticks: { font: { size: 10 }, color: '#94a3b8' } }
+                }
+            }
+        });
+        const lbl = document.getElementById('checkinAvgLabel');
+        if (cmp && cmp.avg_checkin_today) {
+            const delta = cmp.avg_checkin_delta_min;
+            let suffix = '';
+            if (delta !== null && delta !== undefined && cmp.avg_checkin_baseline) {
+                const direction = delta > 0 ? 'later' : 'earlier';
+                const arrow = delta > 0 ? '↑' : '↓';
+                suffix = ` · ${arrow} ${Math.abs(delta)} min ${direction} than 7-day avg (${cmp.avg_checkin_baseline})`;
+            }
+            lbl.textContent = `Avg check-in today: ${cmp.avg_checkin_today}${suffix}`;
+        } else { lbl.textContent = '—'; }
+    }
+    function fmtHour(h) {
+        const ampm = h < 12 ? 'AM' : 'PM';
+        const h12 = (h % 12) || 12;
+        return `${h12}${ampm}`;
+    }
+
+    /* ───────────── Site bars ─────────────────────────────────────── */
+    function renderSiteBars(rows) {
+        const cont = document.getElementById('siteBars');
+        if (!rows || !rows.length) {
+            cont.innerHTML = `<div class="page-sub py-3 text-center">No site activity yet.</div>`;
             return;
         }
-
-        container.innerHTML = `
-            <nav>
-                <ul class="pagination justify-content-center mb-0 gap-2">
-                    <li class="page-item ${!pagination.has_previous ? 'disabled' : ''}">
-                        <button class="btn btn-light border" onclick="loadData(${pagination.current_page - 1})" ${!pagination.has_previous ? 'disabled' : ''}>
-                            <i class="ri-arrow-left-s-line"></i> Prev
-                        </button>
-                    </li>
-                    <li class="page-item disabled">
-                        <span class="btn border-0 fw-bold">Page ${pagination.current_page} of ${pagination.num_pages}</span>
-                    </li>
-                    <li class="page-item ${!pagination.has_next ? 'disabled' : ''}">
-                        <button class="btn btn-light border" onclick="loadData(${pagination.current_page + 1})" ${!pagination.has_next ? 'disabled' : ''}>
-                            Next <i class="ri-arrow-right-s-line"></i>
-                        </button>
-                    </li>
-                </ul>
-            </nav>
-        `;
+        cont.innerHTML = rows.map(r => {
+            const cls = r.pct >= 70 ? '' : r.pct >= 40 ? 'warn' : 'danger';
+            return `
+                <div class="site-bar ${cls}" onclick="filterBySite(${r.site_id || 'null'})">
+                    <span class="nm" title="${esc(r.name)}">${esc(r.name)}</span>
+                    <div class="track"><div class="fill" style="width:${Math.min(100, r.pct)}%"></div></div>
+                    <span class="pct-label">${r.pct}% <span class="page-sub" style="font-weight:500;">(${r.present}/${r.total})</span></span>
+                </div>`;
+        }).join('');
+        const lbl = document.getElementById('siteAvgLabel');
+        const avg = rows.reduce((a, r) => a + r.pct, 0) / rows.length;
+        lbl.textContent = `${rows.length} sites · avg ${avg.toFixed(1)}%`;
+    }
+    function filterBySite(siteId) {
+        if (!siteId) return;
+        const sel = document.getElementById('filterSite');
+        if (sel) { sel.value = siteId; loadData(1); }
     }
 
-    function filterStatus(status) {
-        document.getElementById('filterStatus').value = status;
-        const badge = document.getElementById('statusBadge');
-        if (status) {
-            badge.textContent = status;
-            badge.classList.remove('d-none');
-        } else {
-            badge.classList.add('d-none');
+    /* ───────────── Department donut ──────────────────────────────── */
+    function renderDept(rows) {
+        const ctx = document.getElementById('deptChart').getContext('2d');
+        if (deptChart) deptChart.destroy();
+        if (!rows || !rows.length) {
+            ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+            return;
         }
+        const palette = ['#10b981','#0ea5e9','#6366f1','#f59e0b','#8b5cf6','#ec4899','#14b8a6','#ef4444','#a855f7','#22c55e','#3b82f6','#eab308'];
+        deptChart = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: rows.map(r => r.department),
+                datasets: [{
+                    data: rows.map(r => r.present),
+                    backgroundColor: rows.map((_, i) => palette[i % palette.length]),
+                    borderWidth: 0,
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false, cutout: '60%',
+                plugins: {
+                    legend: { position: 'right', labels: { font: { size: 11 }, boxWidth: 10, padding: 8 } },
+                    tooltip: { callbacks: {
+                        label: ctx => `${ctx.label}: ${ctx.parsed} present (${rows[ctx.dataIndex].pct}%)`
+                    } }
+                }
+            }
+        });
+    }
+
+    /* ───────────── Lists ─────────────────────────────────────────── */
+    function renderLists(late, missing, geofence) {
+        document.getElementById('lateListPanel').innerHTML     = late.length     ? late.map(rowEmp).join('')     : emptyList('No late arrivals 🎉');
+        document.getElementById('missingListPanel').innerHTML  = missing.length  ? missing.map(rowMissing).join('') : emptyList('Everyone checked out');
+        document.getElementById('geofenceListPanel').innerHTML = geofence.length ? geofence.map(rowGeo).join('') : emptyList('No geofence violations');
+        document.getElementById('lateCount').textContent       = `(${late.length})`;
+        document.getElementById('missingCount').textContent    = `(${missing.length})`;
+        document.getElementById('geofenceCount').textContent   = `(${geofence.length})`;
+    }
+    function rowEmp(e) {
+        const img = e.profile_picture ? `<img src="${e.profile_picture}">` : (e.name || '?').charAt(0);
+        return `
+            <div class="list-row" onclick="goToUser(${e.id})">
+                <div class="avatar">${img}</div>
+                <div>
+                    <div class="nm">${esc(e.name)}</div>
+                    <div class="sub">${esc(e.site)} · ${esc(e.department)} · ${esc(e.check_in)}</div>
+                </div>
+                <div class="meta" style="color:#b45309">${e.late_minutes}m</div>
+            </div>`;
+    }
+    function rowMissing(e) {
+        const img = e.profile_picture ? `<img src="${e.profile_picture}">` : (e.name || '?').charAt(0);
+        return `
+            <div class="list-row" onclick="goToUser(${e.id})">
+                <div class="avatar">${img}</div>
+                <div>
+                    <div class="nm">${esc(e.name)}</div>
+                    <div class="sub">${esc(e.site)} · in @ ${esc(e.check_in)}</div>
+                </div>
+                <div class="meta" style="color:#b45309">No-out</div>
+            </div>`;
+    }
+    function rowGeo(e) {
+        const img = e.profile_picture ? `<img src="${e.profile_picture}">` : (e.name || '?').charAt(0);
+        return `
+            <div class="list-row" onclick="goToUser(${e.id})">
+                <div class="avatar">${img}</div>
+                <div>
+                    <div class="nm">${esc(e.name)}</div>
+                    <div class="sub">${esc(e.site)} · ${esc(e.check_in)}</div>
+                </div>
+                <div class="meta" style="color:#b91c1c">Off-site</div>
+            </div>`;
+    }
+    function emptyList(msg) { return `<div class="page-sub py-3 text-center">${msg}</div>`; }
+    function goToUser(id) { window.location = `/dashboard/user/${id}/`; }
+
+    /* ───────────── Table ─────────────────────────────────────────── */
+    function renderTable(rows) {
+        const tbody = document.getElementById('reportTableBody');
+        if (!rows || rows.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="11" class="text-center py-5"><div class="text-muted"><i class="ri-file-search-line fs-1 d-block mb-3 opacity-25"></i>No records found.</div></td></tr>`;
+            return;
+        }
+        tbody.innerHTML = rows.map(item => {
+            const img = item.profile_picture ? `<img src="${item.profile_picture}" alt="">` : (item.name || '?').charAt(0);
+            const status = item.status === 'Present'
+                ? `<span class="badge-soft badge-present"><i class="ri-checkbox-circle-line"></i> Present</span>`
+                : `<span class="badge-soft badge-absent"><i class="ri-close-circle-line"></i> Absent</span>`;
+            const lateBadge = item.late_minutes > 0
+                ? `<span class="badge-soft badge-late">${item.late_minutes}m</span>`
+                : '<span class="page-sub">—</span>';
+            const ot = item.overtime_hours > 0
+                ? `<span class="badge bg-info bg-opacity-10 text-info px-2 py-1 rounded-pill fw-bold">${item.overtime_hours}h</span>`
+                : '<span class="page-sub">—</span>';
+            const geoIcon = item.is_geofence_violation
+                ? '<i class="ri-error-warning-line text-danger" title="Geofence violation"></i> '
+                : '';
+            const checkout = item.check_out && item.check_out !== '-'
+                ? `<span class="text-danger small"><i class="ri-logout-box-line"></i> ${item.check_out}</span>`
+                : (item.status === 'Present' ? `<span class="text-warning small">Still in</span>` : '<span class="page-sub">—</span>');
+
+            return `
+                <tr style="cursor:pointer;" onclick="window.location='/dashboard/user/${item.id}/'">
+                    <td class="ps-4">
+                        <div class="d-flex align-items-center gap-3">
+                            <div class="avatar-circle">${img}</div>
+                            <div>
+                                <div class="fw-bold text-dark">${geoIcon}${esc(item.name)}</div>
+                                <div class="small page-sub">${esc(item.email || '—')}</div>
+                            </div>
+                        </div>
+                    </td>
+                    <td><span class="font-monospace fw-bold text-dark bg-secondary bg-opacity-10 px-2 py-1 rounded small">${esc(item.badge_number || '-')}</span></td>
+                    <td>${esc(item.salary_grade || '—')}</td>
+                    <td>${esc(item.department || '—')}</td>
+                    <td><div class="d-flex align-items-center gap-1 small"><i class="ri-building-line text-secondary"></i> ${esc(item.site)}</div></td>
+                    <td>${status}</td>
+                    <td><span class="small text-success"><i class="ri-login-box-line"></i> ${esc(item.check_in)}</span></td>
+                    <td>${checkout}</td>
+                    <td class="text-center">${lateBadge}</td>
+                    <td class="text-center">${ot}</td>
+                    <td class="text-end pe-4" onclick="event.stopPropagation()">
+                        ${(item.latitude && item.longitude && item.site_id)
+                            ? `<button onclick="viewLocation(${item.site_id}, ${item.latitude}, ${item.longitude})" class="btn-view-map"><i class="ri-map-pin-2-line"></i> Map</button>`
+                            : '<span class="page-sub small">—</span>'}
+                    </td>
+                </tr>`;
+        }).join('');
+        const p = lastPayload?.pagination;
+        document.getElementById('rowsSummary').textContent =
+            p ? `Showing ${p.start_index}–${p.end_index} of ${p.total_items}` : '';
+    }
+
+    function renderPagination(p) {
+        const c = document.getElementById('paginationContainer');
+        if (!p || p.num_pages <= 1) { c.innerHTML = ''; return; }
+        c.innerHTML = `
+            <nav><ul class="pagination justify-content-center mb-0 gap-2">
+                <li class="page-item ${!p.has_previous ? 'disabled' : ''}">
+                    <button class="btn btn-light border" onclick="loadData(${p.current_page - 1})" ${!p.has_previous ? 'disabled' : ''}><i class="ri-arrow-left-s-line"></i> Prev</button>
+                </li>
+                <li class="page-item disabled"><span class="btn border-0 fw-bold">Page ${p.current_page} of ${p.num_pages}</span></li>
+                <li class="page-item ${!p.has_next ? 'disabled' : ''}">
+                    <button class="btn btn-light border" onclick="loadData(${p.current_page + 1})" ${!p.has_next ? 'disabled' : ''}>Next <i class="ri-arrow-right-s-line"></i></button>
+                </li>
+            </ul></nav>`;
+    }
+
+    /* ───────────── Status filter (badge) ─────────────────────────── */
+    function filterStatus(status) {
+        document.getElementById('filterStatus').value = status || '';
+        const badge = document.getElementById('statusBadge');
+        if (status) { badge.textContent = `Status: ${status}`; badge.classList.remove('d-none'); }
+        else         { badge.classList.add('d-none'); }
         loadData(1);
     }
 
-    function resetFilters() {
-        document.getElementById('filterDate').value = new Date().toISOString().split('T')[0];
-        document.getElementById('filterSite').value = 'all';
-        document.getElementById('filterPosition').value = 'all';
-        document.getElementById('filterCategory').value = 'all';
-        document.getElementById('filterEmployer').value = 'all';
-        document.getElementById('filterStatus').value = '';
-        document.getElementById('statusBadge').classList.add('d-none');
-        loadData(1);
+    /* ───────────── Live mode ─────────────────────────────────────── */
+    function toggleLive() {
+        if (liveTimer) {
+            clearInterval(liveTimer); liveTimer = null;
+            document.getElementById('liveBtnTxt').textContent = 'Live OFF';
+            document.getElementById('lastSyncWrap').style.display = 'none';
+            return;
+        }
+        liveTimer = setInterval(() => loadData(currentPage, { silent: true }), 30000);
+        document.getElementById('liveBtnTxt').textContent = 'Live ON · 30s';
+        document.getElementById('lastSyncWrap').style.display = 'inline-block';
     }
 
+    /* ───────────── Exec summary ──────────────────────────────────── */
+    async function loadExecSummary(force) {
+        const body = document.getElementById('execBody');
+        body.classList.add('exec-skel');
+        body.innerHTML = `<div class="bar" style="width:92%"></div><div class="bar" style="width:85%"></div><div class="bar" style="width:78%"></div>`;
+        document.getElementById('aiBadge').style.display = 'none';
+
+        const params = new URLSearchParams({
+            date: document.getElementById('filterDate').value || '',
+            site: document.getElementById('filterSite')?.value || 'all',
+            employer: document.getElementById('filterEmployer').value || 'all',
+        });
+        try {
+            const res = await fetch(`${AI_URL}?${params}`);
+            const data = await res.json();
+            const bullets = data.narrative || [];
+            body.classList.remove('exec-skel');
+            body.innerHTML = `<ul>${bullets.map(b => `
+                <li class="sev-${b.severity || 'info'}">
+                    <i class="${b.icon || 'ri-information-line'}"></i>
+                    <span>${esc(b.text || '')}</span>
+                </li>`).join('')}</ul>`;
+            document.getElementById('aiBadge').style.display = data.ai_used ? 'inline-flex' : 'none';
+        } catch (e) {
+            body.classList.remove('exec-skel');
+            body.innerHTML = `<div class="text-warning">Could not generate summary: ${esc(e.message)}</div>`;
+        }
+    }
+
+    /* ───────────── Misc ──────────────────────────────────────────── */
     function downloadExcel() {
         const params = new URLSearchParams({
             date: document.getElementById('filterDate').value || '',
-            site: document.getElementById('filterSite').value || 'all',
+            site: document.getElementById('filterSite')?.value || 'all',
             status: document.getElementById('filterStatus').value || '',
             position: document.getElementById('filterPosition').value || 'all',
             category: document.getElementById('filterCategory').value || 'all',
             employer: document.getElementById('filterEmployer').value || 'all',
         });
-        window.location.href = `${EXPORT_URL}?${params.toString()}`;
+        window.location.href = `${EXPORT_URL}?${params}`;
     }
-
     function updateClock() {
         const now = new Date();
-        document.getElementById('liveClock').innerText = now.toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+        document.getElementById('liveClock').innerText =
+            now.toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'Asia/Dubai' });
+    }
+    function esc(s) {
+        if (s == null) return '';
+        return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     }
 
-    // Track auxiliary site-center marker across opens so we can clean it up
-    let currentSiteMarker = null;
-
+    /* ───────────── Map modal (existing) ──────────────────────────── */
     async function viewLocation(siteId, lat, lng) {
         mapModalInstance.show();
         setTimeout(async () => {
             const mapEl = document.getElementById("map");
             if (!currentMap) {
                 currentMap = new google.maps.Map(mapEl, {
-                    center: { lat: lat, lng: lng },
-                    zoom: 17,
+                    center: { lat, lng }, zoom: 17,
                     mapTypeId: google.maps.MapTypeId.HYBRID,
-                    mapTypeControl: true,
-                    fullscreenControl: true,
-                    zoomControl: true,
-                    streetViewControl: false,
+                    mapTypeControl: true, fullscreenControl: true, zoomControl: true, streetViewControl: false,
                 });
             } else {
-                currentMap.setCenter({ lat: lat, lng: lng });
+                currentMap.setCenter({ lat, lng });
                 currentMap.setZoom(17);
                 currentMap.setMapTypeId(google.maps.MapTypeId.HYBRID);
                 google.maps.event.trigger(currentMap, 'resize');
             }
-            // Clean up previous markers / polygon
             if (currentMarker) currentMarker.setMap(null);
             if (currentSiteMarker) currentSiteMarker.setMap(null);
             if (currentPolygon) currentPolygon.setMap(null);
 
-            // Employee marker — red, like the reference screenshot
             currentMarker = new google.maps.Marker({
-                position: { lat: lat, lng: lng },
-                map: currentMap,
+                position: { lat, lng }, map: currentMap,
                 title: "Employee check-in location",
                 icon: { url: "http://maps.google.com/mapfiles/ms/icons/red-dot.png" }
             });
 
             try {
-                const response = await fetch(`/api/attendance/api/sites/${siteId}/coordinates/`);
-                const data = await response.json();
-                if (data.success && data.has_coordinates && data.coordinates.length > 0) {
-                    const boundaryCoords = data.coordinates.slice();
-                    if (boundaryCoords[0].lat !== boundaryCoords[boundaryCoords.length - 1].lat) {
-                        boundaryCoords.push(boundaryCoords[0]);
-                    }
-                    // Geofence polygon — bright blue, visible on satellite imagery
+                const r = await fetch(`/api/attendance/api/sites/${siteId}/coordinates/`);
+                const d = await r.json();
+                if (d.success && d.has_coordinates && d.coordinates.length > 0) {
+                    const coords = d.coordinates.slice();
+                    if (coords[0].lat !== coords[coords.length - 1].lat) coords.push(coords[0]);
                     currentPolygon = new google.maps.Polygon({
-                        paths: boundaryCoords,
-                        strokeColor: "#2563eb",
-                        strokeOpacity: 1.0,
-                        strokeWeight: 3,
-                        fillColor: "#3b82f6",
-                        fillOpacity: 0.18,
-                        clickable: false,
+                        paths: coords, strokeColor: "#2563eb", strokeOpacity: 1.0,
+                        strokeWeight: 3, fillColor: "#3b82f6", fillOpacity: 0.18, clickable: false,
                     });
                     currentPolygon.setMap(currentMap);
-
-                    // Site-center marker — blue dot at the polygon centroid
-                    if (data.center && data.center.lat && data.center.lng) {
+                    if (d.center?.lat && d.center?.lng) {
                         currentSiteMarker = new google.maps.Marker({
-                            position: { lat: data.center.lat, lng: data.center.lng },
-                            map: currentMap,
-                            title: "Site geofence center",
+                            position: d.center, map: currentMap, title: "Site geofence center",
                             icon: { url: "http://maps.google.com/mapfiles/ms/icons/blue-dot.png" }
                         });
                     }
-
-                    // Fit viewport to show both the geofence and the user marker
                     const bounds = new google.maps.LatLngBounds();
-                    boundaryCoords.forEach(p => bounds.extend(p));
-                    bounds.extend({ lat: lat, lng: lng });
+                    coords.forEach(p => bounds.extend(p));
+                    bounds.extend({ lat, lng });
                     currentMap.fitBounds(bounds, 40);
                 }
-            } catch (error) { console.error("Map Error", error); }
+            } catch (e) { console.error("Map error", e); }
         }, 300);
     }
     function closeMapModal() { mapModalInstance.hide(); }

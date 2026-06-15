@@ -123,6 +123,8 @@ api_urlpatterns = [
     path('dashboard/download-salary-slip/<int:employee_id>/<int:month>/<int:year>/', DownloadSalarySlipView.as_view(), name='download-salary-slip'),
     path('dashboard/reports/export/',                export_reports_view,                       name='export-reports'),
     path('dashboard/monthly-report/export/',         export_monthly_report,                     name='export-monthly-report'),
+    path('dashboard/monthly-report/exec-summary/',   monthly_report_exec_summary,               name='monthly-report-exec-summary'),
+    path('dashboard/monthly-report/calendar/<int:employee_id>/', monthly_report_employee_calendar, name='monthly-report-employee-calendar'),
 
     # Site admin bulk delete (JSON)
     path('dashboard/site-admins/delete/bulk/',       admin_bulk_delete_site_admins,             name='admin-bulk-delete-site-admins'),
@@ -134,6 +136,7 @@ api_urlpatterns = [
     # Employee history + reports data (mobile)
     path('api/employees/<int:employee_id>/history/', EmployeeAttendanceHistoryView.as_view(),  name='employee-attendance-history'),
     path('api/reports/data/',                        AttendanceReportDataView.as_view(),        name='api-reports-data'),
+    path('api/reports/exec-summary/',                daily_report_exec_summary,                 name='api-reports-exec-summary'),
 ]
 
 
