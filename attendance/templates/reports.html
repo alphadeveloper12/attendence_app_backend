@@ -155,7 +155,14 @@
     @keyframes shimmer { 0%, 100% { opacity: .4; } 50% { opacity: .75; } }
 
     /* ───── Callouts ──────────────────────────────────────────────── */
-    .callouts { display: grid; gap: .65rem; margin-bottom: 1.4rem; }
+    .callouts {
+        display: grid; gap: .65rem; margin-bottom: 1.4rem;
+        max-height: 320px; overflow-y: auto; padding-right: .35rem;
+    }
+    .callouts::-webkit-scrollbar { width: 6px; }
+    .callouts::-webkit-scrollbar-track { background: transparent; }
+    .callouts::-webkit-scrollbar-thumb { background: var(--c-border); border-radius: 3px; }
+    .callouts::-webkit-scrollbar-thumb:hover { background: var(--c-text-3); }
     .callout {
         display: flex; gap: .85rem; padding: .9rem 1.05rem;
         border-radius: .85rem; border: 1px solid; background: var(--c-card);
@@ -207,7 +214,14 @@
     /* ───── List panels (Late / Missing / Geofence) ───────────────── */
     .list-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.25rem; }
     @media (max-width: 1100px) { .list-grid { grid-template-columns: 1fr; } }
-    .list-panel { display: flex; flex-direction: column; gap: .5rem; }
+    .list-panel {
+        display: flex; flex-direction: column; gap: .5rem;
+        max-height: 420px; overflow-y: auto; padding-right: .35rem;
+    }
+    .list-panel::-webkit-scrollbar { width: 6px; }
+    .list-panel::-webkit-scrollbar-track { background: transparent; }
+    .list-panel::-webkit-scrollbar-thumb { background: var(--c-border); border-radius: 3px; }
+    .list-panel::-webkit-scrollbar-thumb:hover { background: var(--c-text-3); }
     .list-row {
         display: grid; grid-template-columns: 32px 1fr auto; gap: .65rem;
         align-items: center; padding: .55rem .7rem; border-radius: .55rem;
