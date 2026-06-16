@@ -543,6 +543,43 @@
         .col-site { min-width: 110px; }
         .col-ids  { min-width: 200px; }
         @media (max-width: 1400px) { .table-modern.t-compact .col-hide-lg { display: none; } }
+        /* Department/Position dropdown triggers use Bootstrap's .btn, which sets a
+           transparent border — give them the same visible box as the other fields. */
+        #employeeDepartmentBtn, #employeePositionBtn {
+            border: 1px solid var(--border-default, #d1d5db) !important;
+            background-color: #fff;
+            font-weight: 400;
+        }
+        #employeeDepartmentBtn:hover, #employeePositionBtn:hover {
+            border-color: var(--border-default, #d1d5db) !important;
+        }
+        #employeeDepartmentBtn:focus, #employeePositionBtn:focus,
+        .dropdown.show > #employeeDepartmentBtn, .dropdown.show > #employeePositionBtn {
+            border-color: var(--brand, #2563eb) !important;
+            box-shadow: 0 0 0 0.2rem rgba(37, 99, 235, 0.15) !important;
+        }
+        /* Gross salary is auto-calculated — render it as a read-only/derived field. */
+        #addEmployeeForm input[name="gross_salary"][readonly] {
+            background-color: var(--surface-sunken, #f3f4f6);
+            font-weight: 600;
+            cursor: not-allowed;
+        }
+        /* Edit-modal loading overlay + shimmer skeleton. */
+        .edit-loading-overlay {
+            position: absolute; inset: 0; z-index: 20;
+            display: flex; align-items: center; justify-content: center;
+            background: rgba(255, 255, 255, 0.94);
+            -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
+            border-radius: 1.5rem;
+        }
+        .edit-loading-inner { width: 100%; max-width: 520px; text-align: center; }
+        .shimmer-bar {
+            height: 14px; border-radius: 7px; margin: 0 auto 14px;
+            background: linear-gradient(90deg, #eceff3 25%, #f6f7f9 37%, #eceff3 63%);
+            background-size: 400% 100%;
+            animation: shimmer 1.4s ease infinite;
+        }
+        @keyframes shimmer { 0% { background-position: 100% 0; } 100% { background-position: 0 0; } }
     </style>
     <div>
         <table class="table-modern t-compact" style="table-layout: auto;">
@@ -604,7 +641,23 @@
 <!-- Unified Add/Edit Form Modal -->
 <div class="modal fade" id="addModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
-        <div class="modal-content border-0 shadow-2xl" style="border-radius: 1.5rem;">
+        <div class="modal-content border-0 shadow-2xl" style="border-radius: 1.5rem; position: relative; overflow: hidden;">
+            <!-- Loading overlay — shown while an employee's data is being fetched
+                 so stale/partial values are never visible during edit. -->
+            <div id="editLoadingOverlay" class="edit-loading-overlay" style="display:none;">
+                <div class="edit-loading-inner">
+                    <div class="spinner-border text-primary mb-3" role="status"><span class="visually-hidden">Loading…</span></div>
+                    <div class="text-secondary small mb-4">Loading employee details…</div>
+                    <div class="w-100 px-4">
+                        <div class="shimmer-bar" style="width:40%"></div>
+                        <div class="shimmer-bar" style="width:92%"></div>
+                        <div class="shimmer-bar" style="width:78%"></div>
+                        <div class="shimmer-bar" style="width:88%"></div>
+                        <div class="shimmer-bar" style="width:64%"></div>
+                        <div class="shimmer-bar" style="width:80%"></div>
+                    </div>
+                </div>
+            </div>
             <div class="modal-header border-0 p-4 pb-0">
                 <div>
                     <h4 class="modal-title fw-bold text-dark" id="addModalTitle">Add New Employee</h4>
@@ -1000,21 +1053,21 @@
                             <!-- Current salary components -->
                             <div class="row g-3">
                                 <div class="col-md-4"><label class="form-label small fw-bold text-secondary text-uppercase" style="font-size:0.65rem;">Basic Salary</label>
-                                    <input type="number" step="0.01" name="basic_salary" class="form-control form-control-modern" placeholder="0.00"></div>
+                                    <input type="number" step="0.01" name="basic_salary" class="form-control form-control-modern" placeholder="0.00" oninput="recalcGrossSalary()"></div>
                                 <div class="col-md-4"><label class="form-label small fw-bold text-secondary text-uppercase" style="font-size:0.65rem;">Accommodation / CCA</label>
-                                    <input type="number" step="0.01" name="accommodation_allowance" class="form-control form-control-modern" placeholder="0.00"></div>
+                                    <input type="number" step="0.01" name="accommodation_allowance" class="form-control form-control-modern" placeholder="0.00" oninput="recalcGrossSalary()"></div>
                                 <div class="col-md-4"><label class="form-label small fw-bold text-secondary text-uppercase" style="font-size:0.65rem;">Transport Allowance</label>
-                                    <input type="number" step="0.01" name="transport_allowance" class="form-control form-control-modern" placeholder="0.00"></div>
+                                    <input type="number" step="0.01" name="transport_allowance" class="form-control form-control-modern" placeholder="0.00" oninput="recalcGrossSalary()"></div>
                                 <div class="col-md-4"><label class="form-label small fw-bold text-secondary text-uppercase" style="font-size:0.65rem;">Food Allowance</label>
-                                    <input type="number" step="0.01" name="food_allowance" class="form-control form-control-modern" placeholder="0.00"></div>
+                                    <input type="number" step="0.01" name="food_allowance" class="form-control form-control-modern" placeholder="0.00" oninput="recalcGrossSalary()"></div>
                                 <div class="col-md-4"><label class="form-label small fw-bold text-secondary text-uppercase" style="font-size:0.65rem;">Fixed OT Allowance</label>
-                                    <input type="number" step="0.01" name="fixed_ot_allowance" class="form-control form-control-modern" placeholder="0.00"></div>
+                                    <input type="number" step="0.01" name="fixed_ot_allowance" class="form-control form-control-modern" placeholder="0.00" oninput="recalcGrossSalary()"></div>
                                 <div class="col-md-4"><label class="form-label small fw-bold text-secondary text-uppercase" style="font-size:0.65rem;">Others</label>
-                                    <input type="number" step="0.01" name="other_allowance" class="form-control form-control-modern" placeholder="0.00"></div>
+                                    <input type="number" step="0.01" name="other_allowance" class="form-control form-control-modern" placeholder="0.00" oninput="recalcGrossSalary()"></div>
                                 <div class="col-md-4"><label class="form-label small fw-bold text-secondary text-uppercase" style="font-size:0.65rem;">Salary Reduction</label>
-                                    <input type="number" step="0.01" name="salary_reduction" class="form-control form-control-modern" placeholder="0.00"></div>
-                                <div class="col-md-4"><label class="form-label small fw-bold text-secondary text-uppercase" style="font-size:0.65rem;">Gross Salary</label>
-                                    <input type="number" step="0.01" name="gross_salary" class="form-control form-control-modern" placeholder="0.00"></div>
+                                    <input type="number" step="0.01" name="salary_reduction" class="form-control form-control-modern" placeholder="0.00" oninput="recalcGrossSalary()"></div>
+                                <div class="col-md-4"><label class="form-label small fw-bold text-secondary text-uppercase" style="font-size:0.65rem;">Gross Salary <span class="text-secondary" style="text-transform:none;font-weight:400;">(auto)</span></label>
+                                    <input type="number" step="0.01" name="gross_salary" class="form-control form-control-modern" placeholder="0.00" readonly title="Calculated automatically: Basic + Accommodation + Transport + Food + Fixed OT + Others − Salary Reduction"></div>
                                 <div class="col-md-12"><label class="form-label small fw-bold text-secondary text-uppercase" style="font-size:0.65rem;">Remarks</label>
                                     <textarea name="salary_remarks" rows="2" class="form-control form-control-modern" placeholder="Any notes about the current salary structure"></textarea></div>
                             </div>
@@ -2413,6 +2466,10 @@
         document.getElementById('saveEmployeeBtn').textContent = 'Update Employee';
         document.getElementById('editEmployeeId').value = empId;
         addModal.show();
+        // Cover the modal with a shimmer/loader until the real data arrives, so
+        // stale or partially-populated fields are never shown.
+        const overlay = document.getElementById('editLoadingOverlay');
+        if (overlay) overlay.style.display = 'flex';
         try {
             const res = await fetch(`/api/attendance/employees/edit/${empId}/`);
             const data = await res.json();
@@ -2487,7 +2544,34 @@
             loadAttachments(empId);
             // Load salary history timeline (visible only to superusers via the tab itself)
             loadSalaryHistory(empId);
-        } catch (e) { alert("Failed to load employee data."); }
+            // Derive Gross from the loaded components so the read-only field is correct
+            recalcGrossSalary();
+        } catch (e) {
+            alert("Failed to load employee data.");
+        } finally {
+            if (overlay) overlay.style.display = 'none';
+        }
+    }
+
+    // Gross Salary = Basic + Accommodation + Transport + Food + Fixed OT + Others − Salary Reduction.
+    // The Gross field is read-only and recomputed whenever a component changes.
+    function recalcGrossSalary() {
+        const f = document.getElementById('addEmployeeForm');
+        if (!f) return;
+        const num = n => {
+            const el = f.querySelector(`[name="${n}"]`);
+            const v = parseFloat(el && el.value);
+            return isNaN(v) ? 0 : v;
+        };
+        const gross = num('basic_salary')
+                    + num('accommodation_allowance')
+                    + num('transport_allowance')
+                    + num('food_allowance')
+                    + num('fixed_ot_allowance')
+                    + num('other_allowance')
+                    - num('salary_reduction');
+        const g = f.querySelector('[name="gross_salary"]');
+        if (g) g.value = gross.toFixed(2);
     }
 
     // ---- Salary History ----
@@ -3117,6 +3201,9 @@
         populateCategoryDatalist();
         originalEmployeeStatus = null; // No original — adding new employee
         toggleResumptionDate('Active'); // Always hidden when adding new
+        recalcGrossSalary(); // Reset the read-only Gross field to 0.00
+        const _ov = document.getElementById('editLoadingOverlay');
+        if (_ov) _ov.style.display = 'none'; // No async load for Add New
         addModal.show();
     }
 
