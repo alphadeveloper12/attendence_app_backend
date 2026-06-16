@@ -1542,6 +1542,12 @@
 
             const list = document.getElementById('siteDropdown');
             const siteSelect = document.getElementById('employeeSiteSelect');
+            // Preserve the edit modal's currently-selected site before we rebuild
+            // the options. loadStats() runs on a 60s timer and on every filter
+            // change; without this, a refresh while the Edit modal is open wipes
+            // the option list and silently resets the Project/Site selection to
+            // the first entry (wrong site).
+            const prevSiteVal = siteSelect ? siteSelect.value : '';
 
             list.innerHTML = `<li><a class="dropdown-item" href="#" onclick="filterSite('all', 'All Sites')"><i class="ri-history-line text-secondary"></i> All Sites</a></li>`;
             if (siteSelect) siteSelect.innerHTML = '';
@@ -1554,6 +1560,9 @@
                     siteSelect.appendChild(option);
                 }
             });
+            // Restore the previous selection after the rebuild so an open edit
+            // modal keeps showing the right site across stats refreshes.
+            if (siteSelect && prevSiteVal) siteSelect.value = prevSiteVal;
 
             // Load statuses
             const statusList = document.getElementById('statusDropdown');
@@ -2408,10 +2417,42 @@
             const res = await fetch(`/api/attendance/employees/edit/${empId}/`);
             const data = await res.json();
             const f = document.querySelector('#addEmployeeForm');
+
+            // The Project/Site options are normally filled by loadStats(), which
+            // runs async — on a fast open it may not have completed yet. Ensure
+            // they exist before we assign the value, otherwise the assignment
+            // finds no matching <option> and the select shows the wrong site.
+            const siteSelect = document.getElementById('employeeSiteSelect');
+            if (siteSelect && siteSelect.options.length === 0) {
+                try {
+                    const sres = await fetch('/api/attendance/stats/');
+                    const sdata = await sres.json();
+                    (sdata.sites || []).forEach(s => {
+                        const o = document.createElement('option');
+                        o.value = s.id;
+                        o.textContent = s.name;
+                        siteSelect.appendChild(o);
+                    });
+                } catch (_) { /* fall through to the fallback option below */ }
+            }
+
             Object.keys(data).forEach(key => {
                 const el = f.querySelector(`[name="${key}"]`);
                 if (el && el.type !== 'file') el.value = data[key] || '';
             });
+
+            // Guarantee the employee's own site is shown even if it isn't in the
+            // options list (e.g. a site-scoped admin whose dropdown excludes it).
+            if (siteSelect && data.site) {
+                siteSelect.value = String(data.site);
+                if (siteSelect.value !== String(data.site)) {
+                    const o = document.createElement('option');
+                    o.value = String(data.site);
+                    o.textContent = data.site_name || ('Site #' + data.site);
+                    siteSelect.appendChild(o);
+                    siteSelect.value = String(data.site);
+                }
+            }
             // Department + Position are Bootstrap-dropdown widgets, not normal inputs —
             // restore their label/value pairs explicitly.
             await populateDepartmentDatalist();

@@ -1335,6 +1335,7 @@ class AdminEditEmployeeView(APIView):
                 'sponsor': emp.sponsor or '',
                 'employer': emp.employer or '',
                 'site': emp.site.id if emp.site else '',
+                'site_name': emp.site.name if emp.site else '',
                 'camp': emp.camp,
                 'transportation': emp.transportation,
                 # Document URLs (frontend uses these for "View" buttons)
