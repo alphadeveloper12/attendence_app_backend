@@ -38,6 +38,7 @@ web_urlpatterns = [
     path('dashboard/manpower-recommendations/', admin_manpower_recommendations_view, name='admin-manpower-recommendations'),
     path('dashboard/ask-data/',               admin_ask_data_view,              name='admin-ask-data'),
     path('dashboard/geofence-tuning/',        admin_geofence_tuning_view,       name='admin-geofence-tuning'),
+    path('dashboard/settings/',               admin_settings_view,              name='admin-settings'),
 
     # Sites management (template views)
     path('dashboard/sites/',                      admin_sites_view,        name='admin-sites'),
@@ -94,6 +95,11 @@ api_urlpatterns = [
     path('admin-departments/<int:dept_id>/',         AdminDepartmentDetailView.as_view(),   name='admin-department-detail'),
     path('admin-positions/',                         AdminPositionsView.as_view(),          name='admin-positions'),
     path('admin-positions/<int:pos_id>/',            AdminPositionDetailView.as_view(),     name='admin-position-detail'),
+
+    # Settings (global app configuration — superuser only)
+    path('settings/',                                AppSettingsView.as_view(),             name='app-settings'),
+    path('settings/holidays/',                       PublicHolidayView.as_view(),           name='public-holidays'),
+    path('settings/holidays/<int:holiday_id>/',      PublicHolidayView.as_view(),           name='public-holiday-detail'),
 
     # Analytics
     path('analytics/attrition-risk/',                AttritionRiskView.as_view(),           name='analytics-attrition-risk'),

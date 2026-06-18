@@ -477,56 +477,87 @@
 
             <nav class="sidebar-nav">
                 <div class="nav-section-label">Overview</div>
+                {% if nav_visible.dashboard %}
                 <a href="{% url 'admin-dashboard' %}" class="nav-item {% if request.path == '/api/attendance/dashboard/' %}active{% endif %}">
                     <span class="nav-icon"><i class="ri-dashboard-3-line"></i></span> Dashboard
                 </a>
+                {% endif %}
+                {% if nav_visible.reports %}
                 <a href="{% url 'admin-reports' %}" class="nav-item {% if '/dashboard/reports/' in request.path and 'salary' not in request.path %}active{% endif %}">
                     <span class="nav-icon"><i class="ri-line-chart-line"></i></span> Reports
                 </a>
+                {% endif %}
+                {% if nav_visible.monthly_report %}
                 <a href="{% url 'monthly-report' %}" class="nav-item {% if 'monthly-report' in request.path %}active{% endif %}">
                     <span class="nav-icon"><i class="ri-calendar-2-line"></i></span> Monthly Report
                 </a>
+                {% endif %}
 
                 <div class="nav-section-label">Workforce</div>
+                {% if nav_visible.distribution_list %}
                 <a href="{% url 'admin-distribution-list' %}" class="nav-item {% if 'distribution-list' in request.path %}active{% endif %}">
                     <span class="nav-icon"><i class="ri-bar-chart-grouped-line"></i></span> Distribution List
                 </a>
+                {% endif %}
+                {% if nav_visible.departments %}
                 <a href="{% url 'admin-departments-management' %}" class="nav-item {% if 'departments-management' in request.path %}active{% endif %}">
                     <span class="nav-icon"><i class="ri-building-line"></i></span> Departments
                 </a>
+                {% endif %}
+                {% if nav_visible.user_face %}
                 <a href="{% url 'admin-user-face' %}" class="nav-item {% if 'user-face' in request.path %}active{% endif %}">
                     <span class="nav-icon"><i class="ri-user-search-line"></i></span> User Face
                 </a>
+                {% endif %}
 
                 <div class="nav-section-label">Analytics <span class="pill pill--brand" style="font-size:0.55rem; margin-left:6px;">AI</span></div>
+                {% if nav_visible.attrition_risk %}
                 <a href="{% url 'admin-attrition-risk' %}" class="nav-item {% if 'attrition-risk' in request.path %}active{% endif %}">
                     <span class="nav-icon"><i class="ri-pulse-line"></i></span> Attrition Risk
                 </a>
+                {% endif %}
+                {% if nav_visible.document_expiry %}
                 <a href="{% url 'admin-document-expiry' %}" class="nav-item {% if 'document-expiry' in request.path %}active{% endif %}">
                     <span class="nav-icon"><i class="ri-time-line"></i></span> Document Expiry
                 </a>
+                {% endif %}
+                {% if nav_visible.manpower_recs %}
                 <a href="{% url 'admin-manpower-recommendations' %}" class="nav-item {% if 'manpower-recommendations' in request.path %}active{% endif %}">
                     <span class="nav-icon"><i class="ri-scales-3-line"></i></span> Manpower Recs
                 </a>
+                {% endif %}
+                {% if nav_visible.ask_data %}
                 <a href="{% url 'admin-ask-data' %}" class="nav-item {% if 'ask-data' in request.path %}active{% endif %}">
                     <span class="nav-icon"><i class="ri-question-answer-line"></i></span> Ask the Data
                 </a>
+                {% endif %}
+                {% if nav_visible.geofence_tuning %}
                 <a href="{% url 'admin-geofence-tuning' %}" class="nav-item {% if 'geofence-tuning' in request.path %}active{% endif %}">
                     <span class="nav-icon"><i class="ri-focus-3-line"></i></span> Geofence Tuning
                 </a>
+                {% endif %}
 
                 <div class="nav-section-label">Operations</div>
-                {% if user.is_superuser %}
+                {% if user.is_superuser and nav_visible.salary %}
                 <a href="{% url 'admin-salary-report' %}" class="nav-item {% if 'salary-report' in request.path %}active{% endif %}">
                     <span class="nav-icon"><i class="ri-money-dollar-circle-line"></i></span> Salary
                 </a>
                 {% endif %}
+                {% if nav_visible.sites %}
                 <a href="{% url 'admin-sites' %}" class="nav-item {% if '/sites/' in request.path and 'site-admins' not in request.path %}active{% endif %}">
                     <span class="nav-icon"><i class="ri-map-pin-line"></i></span> Sites
                 </a>
+                {% endif %}
+                {% if nav_visible.site_admins %}
                 <a href="{% url 'admin-site-admins' %}" class="nav-item {% if 'site-admins' in request.path %}active{% endif %}">
                     <span class="nav-icon"><i class="ri-shield-user-line"></i></span> Site Admins
                 </a>
+                {% endif %}
+                {% if user.is_superuser %}
+                <a href="{% url 'admin-settings' %}" class="nav-item {% if '/settings/' in request.path %}active{% endif %}">
+                    <span class="nav-icon"><i class="ri-settings-3-line"></i></span> Settings
+                </a>
+                {% endif %}
             </nav>
 
             <div class="sidebar-footer">

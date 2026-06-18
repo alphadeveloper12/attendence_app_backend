@@ -1,0 +1,406 @@
+{% extends 'base.html' %}
+
+{% block title %}Settings - Admin Dashboard{% endblock %}
+
+{% block content %}
+<style>
+    .settings-card { background:#fff; border:1px solid var(--border-default,#e5e7eb); border-radius:14px; }
+    .settings-card .sc-body { padding:1.25rem 1.5rem; }
+    .set-label { font-size:0.65rem; font-weight:700; letter-spacing:0.03em; text-transform:uppercase; color:var(--text-muted,#6b7280); }
+    .chip { display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius:999px;
+            background:var(--surface-sunken,#f1f5f9); font-size:0.8rem; font-weight:500; margin:0 6px 6px 0; }
+    .chip button { border:0; background:transparent; color:#94a3b8; cursor:pointer; line-height:1; padding:0; }
+    .chip button:hover { color:#dc2626; }
+    .nav-toggle-row { display:flex; align-items:center; justify-content:space-between;
+                      padding:0.6rem 0.25rem; border-bottom:1px solid #f1f5f9; }
+    .nav-toggle-row:last-child { border-bottom:0; }
+    .save-bar { position:sticky; bottom:0; background:#fff; border-top:1px solid var(--border-default,#e5e7eb);
+                padding:0.85rem 0; margin-top:1.5rem; display:flex; justify-content:flex-end; gap:0.5rem; z-index:5; }
+    .form-control-modern, .form-select-modern { border-radius:10px; }
+    #settingsTabs .nav-link { color:var(--text-muted,#6b7280); font-weight:600; font-size:0.85rem; }
+    #settingsTabs .nav-link.active { background:var(--brand,#2563eb); color:#fff; }
+</style>
+
+{% csrf_token %}
+
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+        <h2 class="fw-bold mb-1"><i class="ri-settings-3-line" style="color:var(--brand,#2563eb)"></i> Settings</h2>
+        <div class="small text-secondary">Organization-wide configuration. Changes apply to everyone.
+            <span id="lastSaved" class="ms-2"></span></div>
+    </div>
+</div>
+
+<ul class="nav nav-pills mb-4 bg-light p-1 rounded-3 flex-wrap" id="settingsTabs" role="tablist">
+    <li class="nav-item flex-fill"><button class="nav-link active w-100 py-2" data-bs-toggle="pill" data-bs-target="#tab-attendance">Attendance &amp; Shift</button></li>
+    <li class="nav-item flex-fill"><button class="nav-link w-100 py-2" data-bs-toggle="pill" data-bs-target="#tab-geofence">Geofence</button></li>
+    <li class="nav-item flex-fill"><button class="nav-link w-100 py-2" data-bs-toggle="pill" data-bs-target="#tab-master">Master Lists</button></li>
+    <li class="nav-item flex-fill"><button class="nav-link w-100 py-2" data-bs-toggle="pill" data-bs-target="#tab-salary">Salary</button></li>
+    <li class="nav-item flex-fill"><button class="nav-link w-100 py-2" data-bs-toggle="pill" data-bs-target="#tab-docs">Documents</button></li>
+    <li class="nav-item flex-fill"><button class="nav-link w-100 py-2" data-bs-toggle="pill" data-bs-target="#tab-nav">Navigation</button></li>
+</ul>
+
+<div class="tab-content">
+    <!-- ───── 1. Attendance & Shift Rules ───── -->
+    <div class="tab-pane fade show active" id="tab-attendance">
+        <div class="settings-card mb-3"><div class="sc-body">
+            <h6 class="fw-bold mb-3">Default Shift Times <span class="text-secondary fw-normal small">— used as defaults for new sites; per-site times override these</span></h6>
+            <div class="row g-3">
+                <div class="col-md-3"><label class="set-label">Office Start</label><input type="time" id="default_office_start_time" class="form-control form-control-modern"></div>
+                <div class="col-md-3"><label class="set-label">Office End</label><input type="time" id="default_office_end_time" class="form-control form-control-modern"></div>
+                <div class="col-md-3"><label class="set-label">Worker Start</label><input type="time" id="default_worker_start_time" class="form-control form-control-modern"></div>
+                <div class="col-md-3"><label class="set-label">Worker End</label><input type="time" id="default_worker_end_time" class="form-control form-control-modern"></div>
+                <div class="col-md-3"><label class="set-label">Office Day Off</label>
+                    <select id="default_office_day_off" class="form-select form-select-modern">
+                        {% for d in days_of_week %}<option value="{{ d }}">{{ d }}</option>{% endfor %}
+                    </select></div>
+                <div class="col-md-3"><label class="set-label">Worker Day Off</label>
+                    <select id="default_worker_day_off" class="form-select form-select-modern">
+                        {% for d in days_of_week %}<option value="{{ d }}">{{ d }}</option>{% endfor %}
+                    </select></div>
+            </div>
+        </div></div>
+
+        <div class="settings-card mb-3"><div class="sc-body">
+            <h6 class="fw-bold mb-3">Late, Half-day &amp; Overtime</h6>
+            <div class="row g-3">
+                <div class="col-md-4"><label class="set-label">Late Grace Period (minutes)</label>
+                    <input type="number" min="0" id="late_grace_minutes" class="form-control form-control-modern">
+                    <div class="form-text">Minutes after shift start before a check-in counts as late.</div></div>
+                <div class="col-md-4"><label class="set-label">Half-day Threshold (hours)</label>
+                    <input type="number" min="0" step="0.5" id="half_day_threshold_hours" class="form-control form-control-modern">
+                    <div class="form-text">Less than this many worked hours is treated as a half day.</div></div>
+                <div class="col-md-4"><label class="set-label">Normal OT Threshold (minutes)</label>
+                    <input type="number" min="0" id="normal_ot_threshold_minutes" class="form-control form-control-modern">
+                    <div class="form-text">Extra minutes past shift end before overtime starts.</div></div>
+            </div>
+            <label class="set-label mt-3 d-block">Weekend Days</label>
+            <div id="weekendDays" class="d-flex flex-wrap gap-3">
+                {% for d in days_of_week %}
+                <div class="form-check"><input class="form-check-input weekend-day" type="checkbox" value="{{ d }}" id="wd_{{ d }}">
+                    <label class="form-check-label small" for="wd_{{ d }}">{{ d }}</label></div>
+                {% endfor %}
+            </div>
+        </div></div>
+
+        <div class="settings-card"><div class="sc-body">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h6 class="fw-bold mb-0">Public Holidays</h6>
+                <span class="badge bg-light text-secondary" id="holidayCount">0</span>
+            </div>
+            <div class="row g-2 align-items-end mb-3">
+                <div class="col-md-5"><label class="set-label">Holiday Name</label><input type="text" id="holName" class="form-control form-control-sm" placeholder="e.g. Eid al-Fitr"></div>
+                <div class="col-md-3"><label class="set-label">Date</label><input type="date" id="holDate" class="form-control form-control-sm"></div>
+                <div class="col-md-2"><div class="form-check mt-3"><input class="form-check-input" type="checkbox" id="holRecurring"><label class="form-check-label small" for="holRecurring">Yearly</label></div></div>
+                <div class="col-md-2"><button class="btn btn-sm btn-primary w-100" onclick="addHoliday()"><i class="ri-add-line"></i> Add</button></div>
+            </div>
+            <div id="holidayList" class="small text-secondary">Loading…</div>
+        </div></div>
+    </div>
+
+    <!-- ───── 2. Geofence / Location ───── -->
+    <div class="tab-pane fade" id="tab-geofence">
+        <div class="settings-card mb-3"><div class="sc-body">
+            <h6 class="fw-bold mb-3">Location Defaults</h6>
+            <div class="row g-3">
+                <div class="col-md-6"><label class="set-label">Default Check-in Radius (meters)</label>
+                    <input type="number" min="0" id="default_geofence_radius_meters" class="form-control form-control-modern">
+                    <div class="form-text">Applied to new sites and as a fallback when a site has no radius set.</div></div>
+                <div class="col-md-6"><label class="set-label">GPS Accuracy Tolerance (meters)</label>
+                    <input type="number" min="0" id="gps_accuracy_tolerance_meters" class="form-control form-control-modern">
+                    <div class="form-text">Extra slack added to the radius to absorb GPS jitter.</div></div>
+            </div>
+        </div></div>
+        <div class="settings-card"><div class="sc-body">
+            <h6 class="fw-bold mb-2">Per-site Geofence</h6>
+            <p class="small text-secondary">Each site keeps its own radius, coordinates, and boundary. Edit these on the
+                <a href="{% url 'admin-sites' %}">Sites</a> page or fine-tune with
+                <a href="{% url 'admin-geofence-tuning' %}">Geofence Tuning</a>.</p>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle mb-0">
+                    <thead><tr class="small text-secondary"><th>Site</th><th>Radius (m)</th></tr></thead>
+                    <tbody>
+                        {% for s in sites %}
+                        <tr><td class="small fw-semibold">{{ s.name }}</td><td class="small font-monospace">{{ s.geofence_radius_meters|default:"—" }}</td></tr>
+                        {% empty %}
+                        <tr><td colspan="2" class="text-secondary small">No sites yet.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div></div>
+    </div>
+
+    <!-- ───── 4. Master Lists ───── -->
+    <div class="tab-pane fade" id="tab-master">
+        <div class="row g-3">
+            <div class="col-md-6"><div class="settings-card h-100"><div class="sc-body">
+                <h6 class="fw-bold mb-3">Sponsors</h6>
+                <div class="input-group input-group-sm mb-3">
+                    <input type="text" id="sponsorInput" class="form-control" placeholder="Add a sponsor…" onkeydown="if(event.key==='Enter'){addChip('sponsors','sponsorInput');event.preventDefault();}">
+                    <button class="btn btn-outline-primary" onclick="addChip('sponsors','sponsorInput')">Add</button>
+                </div>
+                <div id="sponsorsChips"></div>
+            </div></div></div>
+            <div class="col-md-6"><div class="settings-card h-100"><div class="sc-body">
+                <h6 class="fw-bold mb-3">Employers</h6>
+                <div class="input-group input-group-sm mb-3">
+                    <input type="text" id="employerInput" class="form-control" placeholder="Add an employer…" onkeydown="if(event.key==='Enter'){addChip('employers','employerInput');event.preventDefault();}">
+                    <button class="btn btn-outline-primary" onclick="addChip('employers','employerInput')">Add</button>
+                </div>
+                <div id="employersChips"></div>
+            </div></div></div>
+        </div>
+        <div class="settings-card mt-3"><div class="sc-body">
+            <h6 class="fw-bold mb-2">Departments, Positions &amp; Sites</h6>
+            <p class="small text-secondary mb-3">These have their own management screens with full history and per-record options.</p>
+            <a href="{% url 'admin-departments-management' %}" class="btn btn-sm btn-outline-secondary me-2"><i class="ri-building-line"></i> Departments &amp; Positions</a>
+            <a href="{% url 'admin-sites' %}" class="btn btn-sm btn-outline-secondary"><i class="ri-map-pin-line"></i> Sites / Projects</a>
+        </div></div>
+    </div>
+
+    <!-- ───── 5. Salary ───── -->
+    <div class="tab-pane fade" id="tab-salary">
+        <div class="settings-card mb-3"><div class="sc-body">
+            <h6 class="fw-bold mb-3">General</h6>
+            <div class="row g-3">
+                <div class="col-md-4"><label class="set-label">Currency Code</label>
+                    <input type="text" id="currency_code" maxlength="8" class="form-control form-control-modern" placeholder="AED"></div>
+                <div class="col-md-8 d-flex align-items-end">
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="salary_superuser_only">
+                        <label class="form-check-label small" for="salary_superuser_only">Salary visible to super admins only</label>
+                    </div>
+                </div>
+            </div>
+        </div></div>
+        <div class="settings-card"><div class="sc-body">
+            <h6 class="fw-bold mb-1">Gross Salary Formula</h6>
+            <p class="small text-secondary mb-3">Choose how each component affects the auto-calculated Gross Salary.</p>
+            <div id="grossFormula" class="row g-2"></div>
+        </div></div>
+    </div>
+
+    <!-- ───── 6. Documents & Compliance ───── -->
+    <div class="tab-pane fade" id="tab-docs">
+        <div class="settings-card mb-3"><div class="sc-body">
+            <h6 class="fw-bold mb-3">Expiry Reminder Lead Time (days)</h6>
+            <div class="row g-3">
+                <div class="col-md-3"><label class="set-label">Passport</label><input type="number" min="0" id="passport_reminder_lead_days" class="form-control form-control-modern"></div>
+                <div class="col-md-3"><label class="set-label">Visa</label><input type="number" min="0" id="visa_reminder_lead_days" class="form-control form-control-modern"></div>
+                <div class="col-md-3"><label class="set-label">Labour Card</label><input type="number" min="0" id="labour_card_reminder_lead_days" class="form-control form-control-modern"></div>
+                <div class="col-md-3"><label class="set-label">MOL</label><input type="number" min="0" id="mol_reminder_lead_days" class="form-control form-control-modern"></div>
+            </div>
+        </div></div>
+        <div class="settings-card"><div class="sc-body">
+            <h6 class="fw-bold mb-3">Expiry Alert Recipients</h6>
+            <div class="input-group input-group-sm mb-3" style="max-width:480px;">
+                <input type="email" id="recipientInput" class="form-control" placeholder="name@company.com" onkeydown="if(event.key==='Enter'){addChip('expiry_alert_recipients','recipientInput');event.preventDefault();}">
+                <button class="btn btn-outline-primary" onclick="addChip('expiry_alert_recipients','recipientInput')">Add</button>
+            </div>
+            <div id="expiry_alert_recipientsChips"></div>
+        </div></div>
+    </div>
+
+    <!-- ───── Navigation visibility ───── -->
+    <div class="tab-pane fade" id="tab-nav">
+        <div class="settings-card"><div class="sc-body">
+            <h6 class="fw-bold mb-1">Sidebar Links for Site Admins</h6>
+            <p class="small text-secondary mb-3">Toggle which sidebar links non-super admins can see. Super admins always see every link.</p>
+            <div>
+                {% for key, label in nav_links %}
+                <div class="nav-toggle-row">
+                    <span class="small fw-semibold">{{ label }}</span>
+                    <div class="form-check form-switch mb-0">
+                        <input class="form-check-input nav-vis" type="checkbox" data-key="{{ key }}" id="nav_{{ key }}">
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div></div>
+    </div>
+</div>
+
+<div class="save-bar">
+    <span id="saveStatus" class="align-self-center small text-secondary me-2"></span>
+    <button class="btn btn-light" onclick="loadSettings()">Reset</button>
+    <button class="btn btn-primary px-4" id="saveBtn" onclick="saveSettings()"><i class="ri-save-3-line"></i> Save Settings</button>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const SETTINGS = {{ settings_json|safe }};
+    const GROSS_COMPONENTS = [
+        ['basic_salary', 'Basic Salary'], ['accommodation_allowance', 'Accommodation / CCA'],
+        ['transport_allowance', 'Transport Allowance'], ['food_allowance', 'Food Allowance'],
+        ['fixed_ot_allowance', 'Fixed OT Allowance'], ['other_allowance', 'Others'],
+        ['salary_reduction', 'Salary Reduction'],
+    ];
+    // Mutable working copy of the array fields
+    const lists = { sponsors: [], employers: [], expiry_alert_recipients: [] };
+
+    function csrf() {
+        const el = document.querySelector('[name=csrfmiddlewaretoken]');
+        return el ? el.value : '';
+    }
+
+    function renderChips(field) {
+        const box = document.getElementById(field + 'Chips');
+        box.innerHTML = lists[field].map((v, i) =>
+            `<span class="chip">${escapeHtml(v)}<button title="Remove" onclick="removeChip('${field}',${i})">&times;</button></span>`
+        ).join('') || '<span class="text-secondary small">None yet.</span>';
+    }
+    function addChip(field, inputId) {
+        const inp = document.getElementById(inputId);
+        const v = (inp.value || '').trim();
+        if (!v) return;
+        if (!lists[field].some(x => x.toLowerCase() === v.toLowerCase())) lists[field].push(v);
+        inp.value = '';
+        renderChips(field);
+    }
+    function removeChip(field, i) { lists[field].splice(i, 1); renderChips(field); }
+    function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+    function renderGrossFormula() {
+        const box = document.getElementById('grossFormula');
+        const f = SETTINGS.gross_formula || {};
+        box.innerHTML = GROSS_COMPONENTS.map(([key, label]) => {
+            const sign = key in f ? f[key] : (key === 'salary_reduction' ? -1 : 1);
+            return `<div class="col-md-6 d-flex align-items-center justify-content-between border rounded-3 p-2">
+                <span class="small fw-semibold">${label}</span>
+                <select class="form-select form-select-sm gross-sign" data-key="${key}" style="width:auto">
+                    <option value="1" ${sign === 1 ? 'selected' : ''}>Add (+)</option>
+                    <option value="-1" ${sign === -1 ? 'selected' : ''}>Subtract (−)</option>
+                    <option value="0" ${sign === 0 ? 'selected' : ''}>Ignore</option>
+                </select></div>`;
+        }).join('');
+    }
+
+    function loadSettings() {
+        const S = SETTINGS;
+        const setVal = (id, v) => { const el = document.getElementById(id); if (el) el.value = (v ?? ''); };
+        ['default_office_start_time','default_office_end_time','default_worker_start_time','default_worker_end_time',
+         'default_office_day_off','default_worker_day_off','late_grace_minutes','half_day_threshold_hours',
+         'normal_ot_threshold_minutes','default_geofence_radius_meters','gps_accuracy_tolerance_meters',
+         'currency_code','passport_reminder_lead_days','visa_reminder_lead_days',
+         'labour_card_reminder_lead_days','mol_reminder_lead_days'].forEach(k => setVal(k, S[k]));
+
+        document.getElementById('salary_superuser_only').checked = !!S.salary_superuser_only;
+
+        // Weekend days
+        const wd = S.weekend_days || [];
+        document.querySelectorAll('.weekend-day').forEach(c => { c.checked = wd.includes(c.value); });
+
+        // Nav visibility
+        const nv = S.nav_visibility || {};
+        document.querySelectorAll('.nav-vis').forEach(c => {
+            const k = c.getAttribute('data-key');
+            c.checked = (k in nv) ? !!nv[k] : (k !== 'settings');
+        });
+
+        // Lists
+        lists.sponsors = (S.sponsors || []).slice();
+        lists.employers = (S.employers || []).slice();
+        lists.expiry_alert_recipients = (S.expiry_alert_recipients || []).slice();
+        ['sponsors','employers','expiry_alert_recipients'].forEach(renderChips);
+
+        renderGrossFormula();
+        document.getElementById('saveStatus').textContent = '';
+        if (S.updated_at) document.getElementById('lastSaved').innerHTML =
+            `<span class="text-secondary">· last saved ${S.updated_at.slice(0,16)}</span>`;
+    }
+
+    async function saveSettings() {
+        const num = id => document.getElementById(id).value;
+        const formula = {};
+        document.querySelectorAll('.gross-sign').forEach(s => formula[s.getAttribute('data-key')] = parseInt(s.value, 10));
+        const nav = {};
+        document.querySelectorAll('.nav-vis').forEach(c => nav[c.getAttribute('data-key')] = c.checked);
+        const weekend = Array.from(document.querySelectorAll('.weekend-day')).filter(c => c.checked).map(c => c.value);
+
+        const payload = {
+            default_office_start_time: num('default_office_start_time'),
+            default_office_end_time: num('default_office_end_time'),
+            default_worker_start_time: num('default_worker_start_time'),
+            default_worker_end_time: num('default_worker_end_time'),
+            default_office_day_off: num('default_office_day_off'),
+            default_worker_day_off: num('default_worker_day_off'),
+            late_grace_minutes: num('late_grace_minutes'),
+            half_day_threshold_hours: num('half_day_threshold_hours'),
+            normal_ot_threshold_minutes: num('normal_ot_threshold_minutes'),
+            weekend_days: weekend,
+            default_geofence_radius_meters: num('default_geofence_radius_meters'),
+            gps_accuracy_tolerance_meters: num('gps_accuracy_tolerance_meters'),
+            sponsors: lists.sponsors,
+            employers: lists.employers,
+            currency_code: num('currency_code'),
+            salary_superuser_only: document.getElementById('salary_superuser_only').checked,
+            gross_formula: formula,
+            passport_reminder_lead_days: num('passport_reminder_lead_days'),
+            visa_reminder_lead_days: num('visa_reminder_lead_days'),
+            labour_card_reminder_lead_days: num('labour_card_reminder_lead_days'),
+            mol_reminder_lead_days: num('mol_reminder_lead_days'),
+            expiry_alert_recipients: lists.expiry_alert_recipients,
+            nav_visibility: nav,
+        };
+        const btn = document.getElementById('saveBtn');
+        btn.disabled = true;
+        document.getElementById('saveStatus').textContent = 'Saving…';
+        try {
+            const res = await fetch('/api/attendance/settings/', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf() },
+                body: JSON.stringify(payload),
+            });
+            const data = await res.json();
+            if (res.ok) {
+                Object.assign(SETTINGS, data.settings || {});
+                document.getElementById('saveStatus').innerHTML = '<span class="text-success">Saved ✓</span>';
+                loadSettings();
+            } else {
+                document.getElementById('saveStatus').innerHTML = `<span class="text-danger">${data.error || 'Save failed'}</span>`;
+            }
+        } catch (e) {
+            document.getElementById('saveStatus').innerHTML = '<span class="text-danger">Network error</span>';
+        } finally { btn.disabled = false; }
+    }
+
+    // ── Public holidays (own endpoint, immediate) ──
+    async function loadHolidays() {
+        try {
+            const res = await fetch('/api/attendance/settings/holidays/');
+            const data = await res.json();
+            const rows = data.holidays || [];
+            document.getElementById('holidayCount').textContent = rows.length;
+            document.getElementById('holidayList').innerHTML = rows.length ? rows.map(h =>
+                `<div class="d-flex justify-content-between align-items-center py-2 border-bottom">
+                    <span><span class="fw-semibold">${escapeHtml(h.name)}</span>
+                        <span class="text-secondary ms-2 font-monospace">${h.date}</span>
+                        ${h.recurring_annually ? '<span class="badge bg-light text-secondary ms-2">Yearly</span>' : ''}</span>
+                    <button class="btn btn-sm btn-link text-danger p-0" onclick="deleteHoliday(${h.id})"><i class="ri-delete-bin-line"></i></button>
+                </div>`).join('') : '<span class="text-secondary">No holidays added.</span>';
+        } catch (e) { document.getElementById('holidayList').textContent = 'Failed to load holidays.'; }
+    }
+    async function addHoliday() {
+        const name = document.getElementById('holName').value.trim();
+        const date = document.getElementById('holDate').value;
+        const recurring = document.getElementById('holRecurring').checked;
+        if (!name || !date) { alert('Holiday name and date are required.'); return; }
+        const res = await fetch('/api/attendance/settings/holidays/', {
+            method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf() },
+            body: JSON.stringify({ name, date, recurring_annually: recurring }),
+        });
+        if (res.ok) { document.getElementById('holName').value=''; document.getElementById('holDate').value=''; document.getElementById('holRecurring').checked=false; loadHolidays(); }
+        else { const d = await res.json(); alert(d.error || 'Failed to add holiday'); }
+    }
+    async function deleteHoliday(id) {
+        if (!confirm('Remove this holiday?')) return;
+        await fetch(`/api/attendance/settings/holidays/${id}/`, { method: 'DELETE', headers: { 'X-CSRFToken': csrf() } });
+        loadHolidays();
+    }
+
+    loadSettings();
+    loadHolidays();
+</script>
+{% endblock %}

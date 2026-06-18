@@ -45,7 +45,7 @@ from .utils import (
     THRESH, MARGIN, get_image_bytes
 )
 from .geofence import check_geofence
-from .models import Employee, Attendance, Site, FaceTemplate, AdminProfile, AppBuild, EmployeeStatusHistory, EmployeeSiteHistory, EmployeeAttachment, EmployeeSalaryHistory, JobCategory, Department
+from .models import Employee, Attendance, Site, FaceTemplate, AdminProfile, AppBuild, EmployeeStatusHistory, EmployeeSiteHistory, EmployeeAttachment, EmployeeSalaryHistory, JobCategory, Department, AppSettings, PublicHoliday
 from .serializers import *
 from .permissions import IsSiteAdmin
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -9267,3 +9267,221 @@ class SiteActivityView(APIView):
             'sites':           rows,
             'inactive_sites':  inactive_sites,
         })
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  SETTINGS — global app configuration (superuser only)
+# ══════════════════════════════════════════════════════════════════════════
+from datetime import datetime as _dt
+
+
+def _fmt_time(t):
+    """Serialize a TimeField value to 'HH:MM' for the settings form."""
+    if not t:
+        return ''
+    try:
+        return t.strftime('%H:%M')
+    except Exception:
+        return str(t)[:5]
+
+
+def _parse_time(val, fallback=None):
+    """Parse 'HH:MM' or 'HH:MM:SS' into a time, else return fallback."""
+    if not val:
+        return fallback
+    for fmt in ('%H:%M', '%H:%M:%S'):
+        try:
+            return _dt.strptime(str(val).strip(), fmt).time()
+        except (ValueError, TypeError):
+            continue
+    return fallback
+
+
+def _settings_to_dict(s):
+    """Full JSON representation of AppSettings for the settings page + dashboard."""
+    return {
+        # Attendance & shift rules
+        'default_office_start_time': _fmt_time(s.default_office_start_time),
+        'default_office_end_time':   _fmt_time(s.default_office_end_time),
+        'default_worker_start_time': _fmt_time(s.default_worker_start_time),
+        'default_worker_end_time':   _fmt_time(s.default_worker_end_time),
+        'default_office_day_off':    s.default_office_day_off or '',
+        'default_worker_day_off':    s.default_worker_day_off or '',
+        'late_grace_minutes':        s.late_grace_minutes,
+        'half_day_threshold_hours':  float(s.half_day_threshold_hours or 0),
+        'normal_ot_threshold_minutes': s.normal_ot_threshold_minutes,
+        'weekend_days':              s.weekend_days or [],
+        # Geofence / location
+        'default_geofence_radius_meters': s.default_geofence_radius_meters,
+        'gps_accuracy_tolerance_meters':  s.gps_accuracy_tolerance_meters,
+        # Master lists
+        'sponsors':  s.sponsors or [],
+        'employers': s.employers or [],
+        # Salary
+        'currency_code':         s.currency_code or 'AED',
+        'salary_superuser_only': s.salary_superuser_only,
+        'gross_formula':         s.gross_formula or {},
+        # Documents & compliance
+        'passport_reminder_lead_days':    s.passport_reminder_lead_days,
+        'visa_reminder_lead_days':        s.visa_reminder_lead_days,
+        'labour_card_reminder_lead_days': s.labour_card_reminder_lead_days,
+        'mol_reminder_lead_days':         s.mol_reminder_lead_days,
+        'expiry_alert_recipients':        s.expiry_alert_recipients or [],
+        # Navigation
+        'nav_visibility': s.nav_visibility or {},
+        'updated_at': str(s.updated_at) if s.updated_at else '',
+    }
+
+
+@login_required(login_url="admin-login")
+def admin_settings_view(request):
+    """Settings page — superuser only."""
+    if not request.user.is_superuser:
+        return redirect("admin-dashboard")
+    s = AppSettings.load()
+    DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+    return render(request, "settings.html", {
+        'is_superuser': True,
+        'settings_json': json.dumps(_settings_to_dict(s)),
+        'sites': Site.objects.all().order_by('name'),
+        'days_of_week': DAYS,
+        'nav_links': [
+            ('dashboard', 'Dashboard'), ('reports', 'Reports'),
+            ('monthly_report', 'Monthly Report'), ('distribution_list', 'Distribution List'),
+            ('departments', 'Departments'), ('user_face', 'User Face'),
+            ('attrition_risk', 'Attrition Risk'), ('document_expiry', 'Document Expiry'),
+            ('manpower_recs', 'Manpower Recs'), ('ask_data', 'Ask the Data'),
+            ('geofence_tuning', 'Geofence Tuning'), ('salary', 'Salary'),
+            ('sites', 'Sites'), ('site_admins', 'Site Admins'), ('settings', 'Settings'),
+        ],
+    })
+
+
+class AppSettingsView(APIView):
+    """GET / PUT the global AppSettings singleton (superuser only)."""
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        if not request.user.is_superuser:
+            return Response({'error': 'Permission denied'}, status=403)
+        return Response(_settings_to_dict(AppSettings.load()))
+
+    def put(self, request):
+        if not request.user.is_superuser:
+            return Response({'error': 'Permission denied'}, status=403)
+        s = AppSettings.load()
+        d = request.data
+
+        # --- Times ---
+        for f in ('default_office_start_time', 'default_office_end_time',
+                  'default_worker_start_time', 'default_worker_end_time'):
+            if f in d:
+                parsed = _parse_time(d.get(f), getattr(s, f))
+                if parsed is not None:
+                    setattr(s, f, parsed)
+
+        # --- Plain char / day-off ---
+        for f in ('default_office_day_off', 'default_worker_day_off', 'currency_code'):
+            if f in d:
+                setattr(s, f, (d.get(f) or '').strip())
+
+        # --- Non-negative integers ---
+        for f in ('late_grace_minutes', 'normal_ot_threshold_minutes',
+                  'passport_reminder_lead_days', 'visa_reminder_lead_days',
+                  'labour_card_reminder_lead_days', 'mol_reminder_lead_days'):
+            if f in d:
+                try:
+                    setattr(s, f, max(0, int(d.get(f))))
+                except (ValueError, TypeError):
+                    pass
+
+        # --- Floats ---
+        for f in ('default_geofence_radius_meters', 'gps_accuracy_tolerance_meters'):
+            if f in d:
+                try:
+                    setattr(s, f, max(0.0, float(d.get(f))))
+                except (ValueError, TypeError):
+                    pass
+
+        if 'half_day_threshold_hours' in d:
+            try:
+                s.half_day_threshold_hours = max(0, float(d.get('half_day_threshold_hours')))
+            except (ValueError, TypeError):
+                pass
+
+        # --- Booleans ---
+        if 'salary_superuser_only' in d:
+            s.salary_superuser_only = bool(d.get('salary_superuser_only'))
+
+        # --- Lists (sponsors / employers / recipients / weekend days) ---
+        def _clean_list(val):
+            if not isinstance(val, list):
+                return None
+            seen, out = set(), []
+            for x in val:
+                x = (str(x) or '').strip()
+                if x and x.lower() not in seen:
+                    seen.add(x.lower())
+                    out.append(x)
+            return out
+
+        for f in ('sponsors', 'employers', 'expiry_alert_recipients', 'weekend_days'):
+            if f in d:
+                cleaned = _clean_list(d.get(f))
+                if cleaned is not None:
+                    setattr(s, f, cleaned)
+
+        # --- JSON dicts (gross formula, nav visibility) ---
+        if 'gross_formula' in d and isinstance(d.get('gross_formula'), dict):
+            gf = {}
+            for k, v in d['gross_formula'].items():
+                try:
+                    gf[k] = 1 if int(v) > 0 else (-1 if int(v) < 0 else 0)
+                except (ValueError, TypeError):
+                    gf[k] = 0
+            s.gross_formula = gf
+
+        if 'nav_visibility' in d and isinstance(d.get('nav_visibility'), dict):
+            s.nav_visibility = {k: bool(v) for k, v in d['nav_visibility'].items()}
+
+        s.updated_by = request.user
+        s.save()
+        return Response({'success': True, 'settings': _settings_to_dict(s)})
+
+
+class PublicHolidayView(APIView):
+    """List / create / delete org-wide public holidays (superuser only)."""
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        rows = PublicHoliday.objects.all()
+        return Response({'holidays': [
+            {'id': h.id, 'name': h.name, 'date': str(h.date),
+             'recurring_annually': h.recurring_annually}
+            for h in rows
+        ]})
+
+    def post(self, request):
+        if not request.user.is_superuser:
+            return Response({'error': 'Permission denied'}, status=403)
+        name = (request.data.get('name') or '').strip()
+        date = (request.data.get('date') or '').strip()
+        if not name or not date:
+            return Response({'error': 'Name and date are required.'}, status=400)
+        try:
+            parsed = _dt.strptime(date, '%Y-%m-%d').date()
+        except ValueError:
+            return Response({'error': 'Invalid date (use YYYY-MM-DD).'}, status=400)
+        h = PublicHoliday.objects.create(
+            name=name, date=parsed,
+            recurring_annually=bool(request.data.get('recurring_annually')),
+        )
+        return Response({'success': True, 'id': h.id,
+                         'name': h.name, 'date': str(h.date),
+                         'recurring_annually': h.recurring_annually}, status=201)
+
+    def delete(self, request, holiday_id=None):
+        if not request.user.is_superuser:
+            return Response({'error': 'Permission denied'}, status=403)
+        PublicHoliday.objects.filter(id=holiday_id).delete()
+        return Response({'success': True})

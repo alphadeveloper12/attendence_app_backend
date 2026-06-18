@@ -921,13 +921,7 @@
                                         style="font-size: 0.65rem;">Sponsor</label>
                                     <select name="sponsor" class="form-select form-select-modern">
                                         <option value="">— Select —</option>
-                                        <option value="Parkway">Parkway</option>
-                                        <option value="Katilink">Katilink</option>
-                                        <option value="ReadyMix">ReadyMix</option>
-                                        <option value="Mayadan">Mayadan</option>
-                                        <option value="Jafza">Jafza</option>
-                                        <option value="Golden">Golden</option>
-                                        <option value="Old Emp">Old Emp</option>
+                                        {% for sp in app_settings.sponsors %}<option value="{{ sp }}">{{ sp }}</option>{% endfor %}
                                     </select>
                                 </div>
                                 <div class="col-md-4"><label
@@ -935,10 +929,7 @@
                                         style="font-size: 0.65rem;">Employer</label>
                                     <select name="employer" class="form-select form-select-modern">
                                         <option value="">— Select —</option>
-                                        <option value="PIC">PIC</option>
-                                        <option value="KFD">KFD</option>
-                                        <option value="Kami">Kami</option>
-                                        <option value="PRMC">PRMC</option>
+                                        {% for emp in app_settings.employers %}<option value="{{ emp }}">{{ emp }}</option>{% endfor %}
                                     </select>
                                 </div>
                                 <div class="col-md-6"><label
@@ -1400,6 +1391,10 @@
 <script
     src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDSFQyDq5VpsbAXjsie3xZKvah0__PCyBc&libraries=geometry"></script>
 <script>
+    // Gross-salary formula + currency, configured in Settings → Salary.
+    const GROSS_FORMULA = {{ app_settings.gross_formula|default:"{}"|safe }};
+    const CURRENCY_CODE = "{{ currency_code|default:'AED' }}";
+
     // Parity State & Logic
     let currentSiteId = 'all';
     let currentStatus = 'all';
@@ -2553,23 +2548,24 @@
         }
     }
 
-    // Gross Salary = Basic + Accommodation + Transport + Food + Fixed OT + Others − Salary Reduction.
-    // The Gross field is read-only and recomputed whenever a component changes.
+    // Gross Salary is the signed sum of its components. Each component's sign
+    // (+1 add / -1 subtract / 0 ignore) is configured in Settings → Salary and
+    // injected as GROSS_FORMULA. Falls back to the standard formula if unset.
+    const DEFAULT_GROSS_FORMULA = {
+        basic_salary: 1, accommodation_allowance: 1, transport_allowance: 1,
+        food_allowance: 1, fixed_ot_allowance: 1, other_allowance: 1, salary_reduction: -1,
+    };
     function recalcGrossSalary() {
         const f = document.getElementById('addEmployeeForm');
         if (!f) return;
+        const formula = (GROSS_FORMULA && Object.keys(GROSS_FORMULA).length) ? GROSS_FORMULA : DEFAULT_GROSS_FORMULA;
         const num = n => {
             const el = f.querySelector(`[name="${n}"]`);
             const v = parseFloat(el && el.value);
             return isNaN(v) ? 0 : v;
         };
-        const gross = num('basic_salary')
-                    + num('accommodation_allowance')
-                    + num('transport_allowance')
-                    + num('food_allowance')
-                    + num('fixed_ot_allowance')
-                    + num('other_allowance')
-                    - num('salary_reduction');
+        let gross = 0;
+        Object.keys(formula).forEach(key => { gross += (Number(formula[key]) || 0) * num(key); });
         const g = f.querySelector('[name="gross_salary"]');
         if (g) g.value = gross.toFixed(2);
     }

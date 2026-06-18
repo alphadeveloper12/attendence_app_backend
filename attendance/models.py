@@ -319,9 +319,34 @@ class Attendance(models.Model):
         if not start_time or not end_time:
             return
 
-        # Check if today is a special day (off day)
+        # Org-wide config (late grace, OT threshold, weekend days, holidays).
+        # Defaults keep legacy behaviour if the settings row doesn't exist yet.
+        try:
+            cfg = AppSettings.load()
+            grace_minutes = cfg.late_grace_minutes or 0
+            ot_threshold_seconds = (cfg.normal_ot_threshold_minutes or 60) * 60
+            weekend_days = [d.lower() for d in (cfg.weekend_days or [])]
+        except Exception:
+            cfg = None
+            grace_minutes = 0
+            ot_threshold_seconds = 3600
+            weekend_days = []
+
+        # A "special day" (all hours = special OT) is the site day-off, a
+        # configured weekend day, or an org public holiday.
         day_name = self.date.strftime('%A')
         is_special_day = day_name.lower() == (day_off or "").lower()
+        if not is_special_day and day_name.lower() in weekend_days:
+            is_special_day = True
+        if not is_special_day:
+            try:
+                if PublicHoliday.objects.filter(date=self.date).exists() or \
+                   PublicHoliday.objects.filter(
+                       recurring_annually=True,
+                       date__month=self.date.month, date__day=self.date.day).exists():
+                    is_special_day = True
+            except Exception:
+                pass
 
         # Expected check-in
         if self.check_in_time:
@@ -330,7 +355,8 @@ class Attendance(models.Model):
                 timezone.get_current_timezone()
             )
             diff = (self.check_in_time - expected_check_in).total_seconds() / 60
-            self.late_minutes = max(0, int(diff))
+            # Within the grace period → not late.
+            self.late_minutes = max(0, int(diff - grace_minutes))
 
         # Expected check-out and Overtime
         if self.check_out_time:
@@ -354,9 +380,9 @@ class Attendance(models.Model):
                     self.special_ot_hours = round(max(0.0, total_work_minutes), 2)
                     self.normal_ot_hours = 0.0
             else:
-                # Normal working day
+                # Normal working day — OT only counts past the configured threshold.
                 ot_diff_seconds = (self.check_out_time - expected_check_out).total_seconds()
-                if ot_diff_seconds >= 3600: # First hour threshold (3600 seconds = 1 hour)
+                if ot_diff_seconds >= ot_threshold_seconds:
                     self.normal_ot_hours = round(ot_diff_seconds / 3600, 2)
                 else:
                     self.normal_ot_hours = 0.0
@@ -386,3 +412,116 @@ class AppBuild(models.Model):
 
     def __str__(self):
         return f"{self.get_app_type_display()} - {self.uploaded_at}"
+
+
+# ── Global configuration ──────────────────────────────────────────────────
+# Default factories for JSON fields. Kept as named module-level functions so
+# migrations stay stable (lambdas can't be serialized by Django migrations).
+def _default_gross_formula():
+    """Sign of each component in the Gross Salary sum. +1 adds, -1 subtracts."""
+    return {
+        'basic_salary': 1,
+        'accommodation_allowance': 1,
+        'transport_allowance': 1,
+        'food_allowance': 1,
+        'fixed_ot_allowance': 1,
+        'other_allowance': 1,
+        'salary_reduction': -1,
+    }
+
+
+def _default_sponsors():
+    return ['Parkway', 'Katilink', 'ReadyMix', 'Mayadan', 'Jafza', 'Golden', 'Old Emp']
+
+
+def _default_employers():
+    return ['PIC', 'KFD', 'Kami', 'PRMC']
+
+
+def _default_weekend_days():
+    return ['Friday', 'Saturday']
+
+
+def _default_nav_visibility():
+    """Nav links visible to NON-superuser admins. Superusers always see all.
+    Missing keys default to visible (True)."""
+    return {
+        'dashboard': True, 'reports': True, 'monthly_report': True,
+        'distribution_list': True, 'departments': True, 'user_face': True,
+        'attrition_risk': True, 'document_expiry': True, 'manpower_recs': True,
+        'ask_data': True, 'geofence_tuning': True, 'salary': True,
+        'sites': True, 'site_admins': True, 'settings': False,
+    }
+
+
+class AppSettings(models.Model):
+    """Singleton holding org-wide configuration (always pk=1). Use
+    AppSettings.load() to fetch/create it."""
+
+    # --- 1. Attendance & shift rules (org defaults; per-site values live on Site) ---
+    default_office_start_time   = models.TimeField(default="09:00:00")
+    default_office_end_time     = models.TimeField(default="18:00:00")
+    default_worker_start_time   = models.TimeField(default="08:00:00")
+    default_worker_end_time     = models.TimeField(default="17:00:00")
+    default_office_day_off      = models.CharField(max_length=20, default="Sunday")
+    default_worker_day_off      = models.CharField(max_length=20, default="Sunday")
+    late_grace_minutes          = models.PositiveIntegerField(default=0)
+    half_day_threshold_hours    = models.DecimalField(max_digits=4, decimal_places=2, default=4.00)
+    normal_ot_threshold_minutes = models.PositiveIntegerField(default=60)
+    weekend_days                = models.JSONField(default=_default_weekend_days, blank=True)
+
+    # --- 2. Geofence / location ---
+    default_geofence_radius_meters = models.FloatField(default=100.0)
+    gps_accuracy_tolerance_meters  = models.FloatField(default=50.0)
+
+    # --- 4. Master lists (only the ones without their own model) ---
+    sponsors  = models.JSONField(default=_default_sponsors, blank=True)
+    employers = models.JSONField(default=_default_employers, blank=True)
+
+    # --- 5. Salary ---
+    currency_code         = models.CharField(max_length=8, default="AED")
+    salary_superuser_only = models.BooleanField(default=True)
+    gross_formula         = models.JSONField(default=_default_gross_formula, blank=True)
+
+    # --- 6. Documents & compliance ---
+    passport_reminder_lead_days    = models.PositiveIntegerField(default=60)
+    visa_reminder_lead_days        = models.PositiveIntegerField(default=60)
+    labour_card_reminder_lead_days = models.PositiveIntegerField(default=60)
+    mol_reminder_lead_days         = models.PositiveIntegerField(default=60)
+    expiry_alert_recipients        = models.JSONField(default=list, blank=True)
+
+    # --- Navigation visibility (for non-superuser admins) ---
+    nav_visibility = models.JSONField(default=_default_nav_visibility, blank=True)
+
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+
+    class Meta:
+        verbose_name = "App Settings"
+        verbose_name_plural = "App Settings"
+
+    def __str__(self):
+        return "App Settings"
+
+    def save(self, *args, **kwargs):
+        self.pk = 1  # enforce singleton
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def load(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+
+class PublicHoliday(models.Model):
+    """Org-wide public holidays — treated as off/special-OT days by the engine."""
+    name               = models.CharField(max_length=120)
+    date               = models.DateField()
+    recurring_annually = models.BooleanField(default=False)
+    created_at         = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['date']
+
+    def __str__(self):
+        return f"{self.name} ({self.date})"
