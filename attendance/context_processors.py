@@ -26,15 +26,14 @@ def app_settings(request):
     raw = settings_obj.nav_visibility or {}
     is_super = bool(getattr(getattr(request, 'user', None), 'is_superuser', False))
 
-    # Superusers always see every link (they need access to manage them).
-    # Non-superusers see a link only if it's enabled; missing keys default to
-    # visible, except 'settings' which is superuser-only.
+    # Visibility toggles apply to EVERYONE, including super admins, so the
+    # effect is visible immediately. Missing keys default to visible. The one
+    # exception is 'settings': it stays visible to super admins no matter what,
+    # so they can always get back here to re-enable links.
     nav_visible = {}
     for key in NAV_KEYS:
-        if is_super:
-            nav_visible[key] = True
-        elif key == 'settings':
-            nav_visible[key] = False
+        if key == 'settings':
+            nav_visible[key] = is_super
         else:
             nav_visible[key] = bool(raw.get(key, True))
 

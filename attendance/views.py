@@ -9337,6 +9337,7 @@ def _settings_to_dict(s):
 @login_required(login_url="admin-login")
 def admin_settings_view(request):
     """Settings page — superuser only."""
+    import json
     if not request.user.is_superuser:
         return redirect("admin-dashboard")
     s = AppSettings.load()
