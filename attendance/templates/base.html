@@ -214,6 +214,8 @@
             padding: 1.5rem 2rem 4rem;
             min-width: 0;
         }
+        /* No sidebar (e.g. login) → reclaim the full width so content centers. */
+        .app-main--full { margin-left: 0; }
 
         /* ─────────────────────────────────────────────────────────────────
            COMPONENT CLASSES — read once, used everywhere
@@ -583,7 +585,7 @@
         </aside>
         {% endif %}
 
-        <main class="app-main">
+        <main class="app-main {% if hide_sidebar %}app-main--full{% endif %}">
             {% if not hide_sidebar %}
             <!-- Mobile menu trigger -->
             <button @click="sidebarOpen = !sidebarOpen"
