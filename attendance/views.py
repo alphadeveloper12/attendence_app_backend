@@ -661,6 +661,12 @@ BULK_EDIT_COLUMNS = [
     'Leave Ticket Price',
     # Optional salary fields (only applied if request user is superuser)
     'Basic Salary',
+    'Accommodation Allowance',
+    'Transport Allowance',
+    'Food Allowance',
+    'Fixed OT Allowance',
+    'Other Allowance',
+    'Salary Reduction',
     'Gross Salary',
 ]
 
@@ -691,17 +697,47 @@ class BulkEditTemplateView(APIView):
             ws.column_dimensions[cell.column_letter].width = max(16, len(BULK_EDIT_COLUMNS[col_idx - 1]) + 2)
         ws.freeze_panes = 'A2'
 
-        # Instruction row
-        instruction = (
-            "Fill Badge ID for each row. Leave any other cell blank to keep the existing value. "
-            "When you change Status, also fill the conditional date(s) per Status. "
-            "Dates: YYYY-MM-DD."
+        # Guidance note attached to the Badge ID header so it travels with the file.
+        from openpyxl.comments import Comment
+        note = (
+            "Fill Badge ID for each row. Leave any cell blank to keep the existing value.\n"
+            "Dates: YYYY-MM-DD (e.g. 2026-05-24). A time part like 00:00:00 is fine.\n"
+            "When you set Status to Leave, also fill Leave Approval/Start/End Date and Leave Type.\n"
+            "Salary columns are applied for super admins only.\n"
+            "The SAMPLE rows below are examples — DELETE them before uploading."
         )
-        ws.cell(row=2, column=1).value = instruction
-        ws.cell(row=2, column=1).alignment = Alignment(wrap_text=True, vertical='top')
-        ws.cell(row=2, column=1).font = Font(italic=True, color='6B7280')
-        ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=min(8, len(BULK_EDIT_COLUMNS)))
-        ws.row_dimensions[2].height = 32
+        cmt = Comment(note, "RocketAttendance")
+        cmt.width, cmt.height = 340, 170
+        ws.cell(row=1, column=1).comment = cmt
+
+        # Two example rows so admins can see the expected format. They use
+        # placeholder Badge IDs that won't match real employees, so an accidental
+        # upload won't change anyone — but they are meant to be deleted.
+        sample_rows = [
+            {  # 1) updating salary for an active employee
+                'Badge ID': 'SAMPLE-001', 'Name': 'John Doe', 'Email': 'john.doe@example.com',
+                'Phone': '0500000000', 'Division (Department)': 'GRC Dep', 'Position': 'Mason',
+                'Category': 'Worker', 'Site Name': 'City Walk', 'Sponsor': 'Jafza', 'Employer': 'PIC',
+                'Status': 'Active', 'Nationality': 'India', 'Gender': 'Male', 'Marital Status': 'Single',
+                'Date of Birth': '1990-04-15', 'Date of Joining': '2022-01-10',
+                'Passport Number': 'EF1234567', 'Passport Expiry': '2028-03-01',
+                'L.Card/CEC Nr': '94266036', 'MOL ID': '30112058037135',
+                'Basic Salary': 1200, 'Accommodation Allowance': 300, 'Transport Allowance': 150,
+                'Food Allowance': 100, 'Fixed OT Allowance': 0, 'Other Allowance': 0,
+                'Salary Reduction': 0, 'Gross Salary': 1750,
+            },
+            {  # 2) putting an employee on Leave (note the required leave fields)
+                'Badge ID': 'SAMPLE-002', 'Name': 'Jane Smith', 'Status': 'Leave',
+                'Leave Approval Date': '2026-05-20', 'Leave Start Date': '2026-05-24',
+                'Leave End Date': '2026-06-10', 'Leave Type': 'Annual',
+                'Leave Ticket Eligible': 'Eligible', 'Leave Ticket Price': 1500,
+            },
+        ]
+        sample_font = Font(italic=True, color='9CA3AF')
+        for r in sample_rows:
+            ws.append([r.get(col, '') for col in BULK_EDIT_COLUMNS])
+            for col_idx in range(1, len(BULK_EDIT_COLUMNS) + 1):
+                ws.cell(row=ws.max_row, column=col_idx).font = sample_font
 
         output = io.BytesIO()
         wb.save(output)
@@ -750,8 +786,20 @@ class BulkEditEmployeesView(APIView):
     }
     _DECIMAL_FIELD_MAP = {
         'Basic Salary': 'basic_salary',
+        'Accommodation Allowance': 'accommodation_allowance',
+        'Transport Allowance': 'transport_allowance',
+        'Food Allowance': 'food_allowance',
+        'Fixed OT Allowance': 'fixed_ot_allowance',
+        'Other Allowance': 'other_allowance',
+        'Salary Reduction': 'salary_reduction',
         'Gross Salary': 'gross_salary',
         'Leave Ticket Price': 'leave_ticket_price',
+    }
+    # All salary-component fields are restricted to superusers on import.
+    _SALARY_FIELDS = {
+        'basic_salary', 'accommodation_allowance', 'transport_allowance',
+        'food_allowance', 'fixed_ot_allowance', 'other_allowance',
+        'salary_reduction', 'gross_salary',
     }
 
     def post(self, request):
@@ -797,9 +845,20 @@ class BulkEditEmployeesView(APIView):
                 return s.date()
             if isinstance(s, date):
                 return s
-            for fmt in ('%Y-%m-%d', '%d/%m/%Y', '%m/%d/%Y'):
+            txt = str(s).strip()
+            if not txt:
+                return None
+            # Excel/openpyxl often hands dates back as "2026-05-24 00:00:00"
+            # (a datetime stringified). Drop any time component first so a plain
+            # date parse succeeds, then try a wide range of common formats.
+            txt = txt.replace('T', ' ').split(' ')[0]
+            for fmt in (
+                '%Y-%m-%d', '%d/%m/%Y', '%m/%d/%Y', '%d-%m-%Y', '%m-%d-%Y',
+                '%Y/%m/%d', '%d.%m.%Y', '%d %b %Y', '%d %B %Y', '%b %d %Y',
+                '%d-%b-%Y', '%d-%b-%y',
+            ):
                 try:
-                    return datetime.strptime(str(s), fmt).date()
+                    return datetime.strptime(txt, fmt).date()
                 except ValueError:
                     continue
             return None
@@ -905,7 +964,7 @@ class BulkEditEmployeesView(APIView):
                     raw = get(row, col_name)
                     if raw is None:
                         continue
-                    if field_name in ('basic_salary', 'gross_salary') and not request.user.is_superuser:
+                    if field_name in self._SALARY_FIELDS and not request.user.is_superuser:
                         continue
                     dec = coerce_decimal(raw)
                     if dec is None:
