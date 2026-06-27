@@ -701,8 +701,8 @@ class BulkEditTemplateView(APIView):
         from openpyxl.comments import Comment
         note = (
             "Fill Badge ID for each row. Leave any cell blank to keep the existing value.\n"
-            "Dates: YYYY-MM-DD (e.g. 2026-05-24). A time part like 00:00:00 is fine.\n"
-            "When you set Status to Leave, also fill Leave Approval/Start/End Date and Leave Type.\n"
+            "Every column is independent — update any single column on its own.\n"
+            "Dates: DD-MM-YYYY (e.g. 24-05-2026).\n"
             "Salary columns are applied for super admins only.\n"
             "The SAMPLE rows below are examples — DELETE them before uploading."
         )
@@ -719,8 +719,8 @@ class BulkEditTemplateView(APIView):
                 'Phone': '0500000000', 'Division (Department)': 'GRC Dep', 'Position': 'Mason',
                 'Category': 'Worker', 'Site Name': 'City Walk', 'Sponsor': 'Jafza', 'Employer': 'PIC',
                 'Status': 'Active', 'Nationality': 'India', 'Gender': 'Male', 'Marital Status': 'Single',
-                'Date of Birth': '1990-04-15', 'Date of Joining': '2022-01-10',
-                'Passport Number': 'EF1234567', 'Passport Expiry': '2028-03-01',
+                'Date of Birth': '15-04-1990', 'Date of Joining': '10-01-2022',
+                'Passport Number': 'EF1234567', 'Passport Expiry': '01-03-2028',
                 'L.Card/CEC Nr': '94266036', 'MOL ID': '30112058037135',
                 'Basic Salary': 1200, 'Accommodation Allowance': 300, 'Transport Allowance': 150,
                 'Food Allowance': 100, 'Fixed OT Allowance': 0, 'Other Allowance': 0,
@@ -728,8 +728,8 @@ class BulkEditTemplateView(APIView):
             },
             {  # 2) putting an employee on Leave (note the required leave fields)
                 'Badge ID': 'SAMPLE-002', 'Name': 'Jane Smith', 'Status': 'Leave',
-                'Leave Approval Date': '2026-05-20', 'Leave Start Date': '2026-05-24',
-                'Leave End Date': '2026-06-10', 'Leave Type': 'Annual',
+                'Leave Approval Date': '20-05-2026', 'Leave Start Date': '24-05-2026',
+                'Leave End Date': '10-06-2026', 'Leave Type': 'Annual',
                 'Leave Ticket Eligible': 'Eligible', 'Leave Ticket Price': 1500,
             },
         ]
@@ -838,8 +838,18 @@ class BulkEditEmployeesView(APIView):
             s = str(v).strip()
             return s or None
 
+        def get_raw(row, name):
+            """Raw cell value (not stringified) — lets coerce_date handle real
+            Excel date cells as dates rather than strings."""
+            i = col_index.get(name)
+            if i is None or i >= len(row):
+                return None
+            return row[i]
+
         def coerce_date(s):
-            if not s:
+            # Real Excel date cells arrive as datetime/date objects — accept those
+            # as-is (display format in Excel doesn't matter).
+            if s is None:
                 return None
             if isinstance(s, datetime):
                 return s.date()
@@ -848,15 +858,11 @@ class BulkEditEmployeesView(APIView):
             txt = str(s).strip()
             if not txt:
                 return None
-            # Excel/openpyxl often hands dates back as "2026-05-24 00:00:00"
-            # (a datetime stringified). Drop any time component first so a plain
-            # date parse succeeds, then try a wide range of common formats.
+            # Typed text dates must be DD-MM-YYYY (or DD/MM/YYYY) — the agreed
+            # format. Unambiguous ISO (year-first) is also accepted because that
+            # is how Excel serialises a real date cell to text.
             txt = txt.replace('T', ' ').split(' ')[0]
-            for fmt in (
-                '%Y-%m-%d', '%d/%m/%Y', '%m/%d/%Y', '%d-%m-%Y', '%m-%d-%Y',
-                '%Y/%m/%d', '%d.%m.%Y', '%d %b %Y', '%d %B %Y', '%b %d %Y',
-                '%d-%b-%Y', '%d-%b-%y',
-            ):
+            for fmt in ('%d-%m-%Y', '%d/%m/%Y', '%Y-%m-%d'):
                 try:
                     return datetime.strptime(txt, fmt).date()
                 except ValueError:
@@ -943,20 +949,21 @@ class BulkEditEmployeesView(APIView):
                     if v is not None:
                         setattr(emp, field_name, v)
 
-                # ── Date fields ──────────────────────────────────────────────
+                # ── Date fields (each applied independently) ──────────────────
                 date_overrides = {}
                 for col_name, field_name in self._DATE_FIELD_MAP.items():
-                    raw = get(row, col_name)
-                    if raw is None:
+                    raw = get_raw(row, col_name)
+                    if raw is None or (isinstance(raw, str) and not raw.strip()):
                         continue
                     d = coerce_date(raw)
                     if d is None:
                         results['errors'].append({
                             'row': row_idx, 'badge_number': badge,
-                            'error': f'Could not parse date in column "{col_name}": "{raw}"',
+                            'error': f'Could not parse date in column "{col_name}": "{raw}". Use DD-MM-YYYY.',
                         })
                         raise ValueError('skip')
                     date_overrides[field_name] = d
+                    setattr(emp, field_name, d)   # apply immediately — no column is linked
 
                 # ── Decimal fields ───────────────────────────────────────────
                 # Salary fields only applied for superuser
@@ -1021,7 +1028,21 @@ class BulkEditEmployeesView(APIView):
                         raise ValueError('skip')
                     emp.site = s_obj
 
-                # ── Status + conditional fields ──────────────────────────────
+                # ── Leave Type (independent) ─────────────────────────────────
+                l_typ = get(row, 'Leave Type')
+                if l_typ is not None:
+                    emp.leave_type = l_typ
+
+                # ── Termination Reason (independent) ─────────────────────────
+                t_rsn = get(row, 'Termination Reason')
+                if t_rsn is not None:
+                    emp.termination_reason = t_rsn
+
+                # ── Status (independent) ─────────────────────────────────────
+                # Every column updates on its own. Changing Status no longer
+                # requires — or clears — any other column. The date/leave/reason
+                # columns above are already applied individually; here we only
+                # validate the status value and log the transition for history.
                 new_status = get(row, 'Status')
                 if new_status is not None:
                     if new_status not in MASTER_STATUSES:
@@ -1032,90 +1053,25 @@ class BulkEditEmployeesView(APIView):
                         raise ValueError('skip')
 
                     old_status = emp.status
-
-                    # Build the "effective" date values for this transition
-                    res_d = date_overrides.get('resumption_date')
-                    lwd   = date_overrides.get('last_working_date')
-                    l_app = date_overrides.get('leave_approval_date')
-                    l_st  = date_overrides.get('leave_start_date')
-                    l_en  = date_overrides.get('leave_end_date')
-                    l_typ = get(row, 'Leave Type')
-                    t_rsn = get(row, 'Termination Reason')
-
-                    is_resuming    = (old_status == 'Leave' and new_status == 'Active')
-                    is_terminating = (old_status not in TERMINAL_STATUSES and new_status in TERMINAL_STATUSES)
-                    is_starting_leave = (old_status != 'Leave' and new_status == 'Leave')
-                    is_resign_or_term = (old_status != new_status and new_status in ('Resigned', 'Terminated'))
-
-                    missing = []
-                    if is_resuming and not res_d:
-                        missing.append('Resumption Date')
-                    if is_terminating and not lwd:
-                        missing.append('Last Working Date')
-                    if is_resign_or_term and not t_rsn:
-                        missing.append('Termination Reason')
-                    if is_starting_leave:
-                        if not l_app: missing.append('Leave Approval Date')
-                        if not l_st:  missing.append('Leave Start Date')
-                        if not l_en:  missing.append('Leave End Date')
-                        if not l_typ: missing.append('Leave Type')
-                    if missing:
-                        results['errors'].append({
-                            'row': row_idx, 'badge_number': badge,
-                            'error': f'Status "{new_status}" requires: {", ".join(missing)}',
-                        })
-                        raise ValueError('skip')
-
                     emp.status = new_status
-                    if is_resuming:
-                        emp.resumption_date = res_d
-                    # Clear leave/terminal artefacts when moving out of those states
-                    if new_status in TERMINAL_STATUSES:
-                        emp.last_working_date = lwd
-                    else:
-                        emp.last_working_date = None
-                    if new_status in ('Resigned', 'Terminated') and t_rsn:
-                        emp.termination_reason = t_rsn
-                    elif new_status not in ('Resigned', 'Terminated'):
-                        emp.termination_reason = None
-                    if new_status == 'Leave':
-                        emp.leave_approval_date = l_app
-                        emp.leave_start_date    = l_st
-                        emp.leave_end_date      = l_en
-                        emp.leave_type          = l_typ
-                    else:
-                        emp.leave_approval_date = None
-                        emp.leave_start_date    = None
-                        emp.leave_end_date      = None
-                        emp.leave_type          = None
-                        emp.leave_ticket_eligible = None
-                        emp.leave_ticket_price    = None
 
-                    # History row for the transition
                     if old_status != new_status:
                         EmployeeStatusHistory.objects.create(
                             employee=emp,
                             old_status=old_status,
                             new_status=new_status,
-                            leave_approval_date=l_app if is_starting_leave else None,
-                            leave_start_date=l_st   if is_starting_leave else None,
-                            leave_end_date=l_en     if is_starting_leave else None,
-                            resumption_date=res_d   if is_resuming      else None,
-                            last_working_date=lwd   if is_terminating   else None,
-                            leave_type=l_typ        if is_starting_leave else None,
+                            leave_approval_date=date_overrides.get('leave_approval_date'),
+                            leave_start_date=date_overrides.get('leave_start_date'),
+                            leave_end_date=date_overrides.get('leave_end_date'),
+                            resumption_date=date_overrides.get('resumption_date'),
+                            last_working_date=date_overrides.get('last_working_date'),
+                            leave_type=l_typ,
                             note=(
                                 f"{old_status or '—'} → {new_status} (bulk edit)"
-                                + (f" — Reason: {t_rsn}"
-                                   if new_status in ('Resigned', 'Terminated') and t_rsn else '')
+                                + (f" — Reason: {t_rsn}" if t_rsn else '')
                             ),
                             changed_by=request.user if request.user.is_authenticated else None,
                         )
-                else:
-                    # Status not in the row — still apply non-status date overrides
-                    # (DoB / DoJ / passport expiry). Skip status-conditional ones.
-                    for f_name in ('date_of_birth', 'date_of_joining', 'passport_expiry'):
-                        if f_name in date_overrides:
-                            setattr(emp, f_name, date_overrides[f_name])
 
                 # ── Site change history ──────────────────────────────────────
                 site_changed = (
@@ -1124,20 +1080,17 @@ class BulkEditEmployeesView(APIView):
                     or (not old_site and emp.site)
                 )
                 if site_changed:
-                    eff_raw = get(row, 'Site Effective From')
-                    eff_from = coerce_date(eff_raw) if eff_raw else None
-                    if eff_raw and not eff_from:
+                    eff_raw = get_raw(row, 'Site Effective From')
+                    eff_from = coerce_date(eff_raw)
+                    if eff_raw not in (None, '') and not eff_from:
                         results['errors'].append({
                             'row': row_idx, 'badge_number': badge,
-                            'error': f'Could not parse "Site Effective From": "{eff_raw}"',
+                            'error': f'Could not parse "Site Effective From": "{eff_raw}". Use DD-MM-YYYY.',
                         })
                         raise ValueError('skip')
+                    # Optional now — default to today so Site Name can be changed on its own.
                     if not eff_from:
-                        results['errors'].append({
-                            'row': row_idx, 'badge_number': badge,
-                            'error': 'Site Effective From is required when Site Name changes',
-                        })
-                        raise ValueError('skip')
+                        eff_from = date.today()
                     EmployeeSiteHistory.objects.create(
                         employee=emp,
                         old_site=old_site,
