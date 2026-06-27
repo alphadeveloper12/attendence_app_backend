@@ -3880,6 +3880,13 @@ def admin_user_detail_view(request, user_id):
                     "longitude": record.longitude if record else None,
                 }
                 data['slots'] = slots
+                # Expose the record id + flags so the detail page can offer to
+                # fill in a missing check-in (checked out without checking in).
+                data['attendance_id'] = record.id if record else None
+                data['missing_check_in'] = bool(
+                    record and record.check_out_time and not record.check_in_time
+                )
+                data['can_edit_attendance'] = bool(request.user.is_superuser)
                 # Day-specific site assignment — used by the frontend to overlay the
                 # *correct* geofence polygon for this day, even if the employee has
                 # since been re-assigned to a different site.

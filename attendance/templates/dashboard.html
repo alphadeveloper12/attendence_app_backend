@@ -1720,7 +1720,7 @@
             c.innerHTML = rows.map(r => `
                 <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 py-2 border-bottom" id="mc-${r.id}">
                     <div>
-                        <span class="fw-bold">${r.employee}</span>
+                        <a href="/api/attendance/dashboard/user/${r.employee_id}/?date=${r.date}" class="fw-bold text-decoration-none">${r.employee}</a>
                         <span class="text-secondary small ms-2">${r.badge_number} · ${r.site}</span>
                         <div class="small text-secondary"><i class="ri-calendar-line"></i> ${r.date} · checked out ${r.check_out}</div>
                     </div>
