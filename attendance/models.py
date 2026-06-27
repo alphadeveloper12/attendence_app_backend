@@ -493,6 +493,10 @@ class AppSettings(models.Model):
     # --- Navigation visibility (for non-superuser admins) ---
     nav_visibility = models.JSONField(default=_default_nav_visibility, blank=True)
 
+    # --- Data retention ---
+    # How many months of daily Distribution List snapshots to keep. 0 = keep forever.
+    distribution_snapshot_retention_months = models.PositiveIntegerField(default=12)
+
     updated_at = models.DateTimeField(auto_now=True)
     updated_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
 
@@ -525,3 +529,26 @@ class PublicHoliday(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.date})"
+
+
+class DistributionSnapshot(models.Model):
+    """A frozen copy of the Distribution List for one day and one tab type.
+
+    The live distribution is computed from the current Employee table, which has
+    no per-field history (department/position aren't versioned). To let admins
+    view past-date distributions we store the fully-computed payload once per day
+    per type ('resource' / 'staff' / 'worker'). Reading a past date returns the
+    stored snapshot, so what you see is exactly what the roster looked like then.
+    """
+    date      = models.DateField()
+    dist_type = models.CharField(max_length=20)   # 'resource' | 'staff' | 'worker'
+    payload   = models.JSONField()                # same shape the live API returns
+    created_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('date', 'dist_type')
+        ordering = ['-date']
+        indexes = [models.Index(fields=['dist_type', 'date'])]
+
+    def __str__(self):
+        return f"Distribution {self.dist_type} @ {self.date}"

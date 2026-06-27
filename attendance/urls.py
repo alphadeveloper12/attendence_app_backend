@@ -66,6 +66,8 @@ api_urlpatterns = [
     path('stats/',                AttendanceStatsView.as_view(),         name='attendance-stats'),
     path('alerts/',               AttendanceAlertsView.as_view(),        name='attendance-alerts'),
     path('alerts/export/',        AttendanceAlertsExportView.as_view(),  name='attendance-alerts-export'),
+    path('missing-checkin/',      MissingCheckInView.as_view(),          name='missing-checkin'),
+    path('attendance/<int:attendance_id>/set-checkin/', SetCheckInView.as_view(), name='set-checkin'),
 
     # Employees CRUD + import/export
     path('employees/',                                EmployeeListView.as_view(),               name='employee-list'),

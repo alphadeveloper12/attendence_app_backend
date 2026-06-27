@@ -200,6 +200,14 @@
             </div>
             <div id="expiry_alert_recipientsChips"></div>
         </div></div>
+        <div class="settings-card mt-3"><div class="sc-body">
+            <h6 class="fw-bold mb-3">Data Retention</h6>
+            <div class="row g-3">
+                <div class="col-md-4"><label class="set-label">Distribution History (months)</label>
+                    <input type="number" min="0" id="distribution_snapshot_retention_months" class="form-control form-control-modern">
+                    <div class="form-text">How long to keep daily Distribution List snapshots. <strong>0 = keep forever.</strong></div></div>
+            </div>
+        </div></div>
     </div>
 
     <!-- ───── Navigation visibility ───── -->
@@ -284,7 +292,8 @@
          'default_office_day_off','default_worker_day_off','late_grace_minutes','half_day_threshold_hours',
          'normal_ot_threshold_minutes','default_geofence_radius_meters','gps_accuracy_tolerance_meters',
          'currency_code','passport_reminder_lead_days','visa_reminder_lead_days',
-         'labour_card_reminder_lead_days','mol_reminder_lead_days'].forEach(k => setVal(k, S[k]));
+         'labour_card_reminder_lead_days','mol_reminder_lead_days',
+         'distribution_snapshot_retention_months'].forEach(k => setVal(k, S[k]));
 
         document.getElementById('salary_superuser_only').checked = !!S.salary_superuser_only;
 
@@ -341,6 +350,7 @@
             visa_reminder_lead_days: num('visa_reminder_lead_days'),
             labour_card_reminder_lead_days: num('labour_card_reminder_lead_days'),
             mol_reminder_lead_days: num('mol_reminder_lead_days'),
+            distribution_snapshot_retention_months: num('distribution_snapshot_retention_months'),
             expiry_alert_recipients: lists.expiry_alert_recipients,
             nav_visibility: nav,
         };

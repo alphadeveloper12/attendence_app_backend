@@ -59,6 +59,15 @@
                 <option value="all">All Sites</option>
             </select>
         </div>
+        {% if is_superuser %}
+        <div>
+            <label class="form-label small fw-bold text-secondary text-uppercase mb-1">As of date</label>
+            <input type="date" id="asOfDate" class="form-select form-select-sm" onchange="onDateChange()">
+        </div>
+        <button id="todayBtn" class="btn btn-light border btn-sm" onclick="goToday()" title="Back to current">
+            <i class="ri-restart-line"></i> Today
+        </button>
+        {% endif %}
         <div id="resourceNote" class="small text-muted" style="display:none;">
             <i class="ri-information-line"></i> Manpower Resources is a roster summary — not broken down per site.
         </div>
@@ -66,6 +75,12 @@
         <button onclick="downloadExcel()" class="btn btn-success btn-sm">
             <i class="ri-file-excel-2-line"></i> Download Excel
         </button>
+    </div>
+    <div id="histBanner" class="px-3 pb-3" style="display:none;">
+        <div class="alert alert-warning py-2 px-3 mb-0 small d-flex align-items-center gap-2">
+            <i class="ri-history-line"></i>
+            <span id="histBannerText"></span>
+        </div>
     </div>
 </div>
 
@@ -83,6 +98,30 @@
 {% block scripts %}
 <script>
     let currentType = 'resource';
+    let currentDate = '';   // '' = live/today; 'YYYY-MM-DD' = historical
+
+    function onDateChange() {
+        const el = document.getElementById('asOfDate');
+        const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Dubai' }); // YYYY-MM-DD
+        currentDate = (el && el.value && el.value < today) ? el.value : '';
+        // Site filter doesn't apply to frozen historical snapshots
+        const siteWrap = document.getElementById('siteFilterWrapper');
+        if (siteWrap) siteWrap.style.opacity = currentDate ? '0.5' : '1';
+        const siteSel = document.getElementById('siteFilter');
+        if (siteSel) siteSel.disabled = !!currentDate;
+        loadDistribution();
+    }
+
+    function goToday() {
+        currentDate = '';
+        const el = document.getElementById('asOfDate');
+        if (el) el.value = '';
+        const siteWrap = document.getElementById('siteFilterWrapper');
+        if (siteWrap) siteWrap.style.opacity = '1';
+        const siteSel = document.getElementById('siteFilter');
+        if (siteSel) siteSel.disabled = false;
+        loadDistribution();
+    }
 
     document.addEventListener('DOMContentLoaded', () => {
         // Tab clicks
@@ -107,6 +146,9 @@
         // Apply initial visibility (the default tab is 'resource')
         document.getElementById('siteFilterWrapper').style.display = (currentType === 'resource') ? 'none' : '';
         document.getElementById('resourceNote').style.display = (currentType === 'resource') ? '' : 'none';
+        // Cap the history date picker at today (no future distributions)
+        const dEl = document.getElementById('asOfDate');
+        if (dEl) dEl.max = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Dubai' });
         startClock();
         loadDistribution();
     });
@@ -126,21 +168,46 @@
         const container = document.getElementById('distContainer');
         container.innerHTML = `<div class="text-center py-5"><div class="spinner-border text-primary spinner-border-sm"></div><div class="small mt-2 text-secondary">Loading…</div></div>`;
         const site = document.getElementById('siteFilter').value;
+        const dateParam = currentDate ? `&date=${currentDate}` : '';
         try {
-            const res = await fetch(`/api/attendance/distribution/?type=${currentType}&site=${site}`);
+            const res = await fetch(`/api/attendance/distribution/?type=${currentType}&site=${site}${dateParam}`);
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Failed');
 
-            // Populate the site filter once
+            // Historical banner
+            const banner = document.getElementById('histBanner');
+            const bannerText = document.getElementById('histBannerText');
+            if (banner) {
+                if (data.historical) {
+                    banner.style.display = '';
+                    if (data.no_data) {
+                        bannerText.textContent = data.message || 'No snapshot available for this date.';
+                    } else {
+                        const reqd = data.requested_date || currentDate;
+                        const snapd = data.snapshot_date || reqd;
+                        bannerText.textContent = (snapd === reqd)
+                            ? `Showing the saved distribution as of ${snapd} (all sites).`
+                            : `No snapshot on ${reqd}; showing the most recent one before it, from ${snapd} (all sites).`;
+                    }
+                } else {
+                    banner.style.display = 'none';
+                }
+            }
+
+            // Populate the site filter once (only from live data, which carries all sites)
             const sel = document.getElementById('siteFilter');
-            if (sel.options.length <= 1) {
-                data.sites.forEach(s => {
+            if (!data.historical && sel.options.length <= 1) {
+                (data.sites || []).forEach(s => {
                     const opt = document.createElement('option');
                     opt.value = s.id; opt.textContent = s.name;
                     sel.appendChild(opt);
                 });
             }
 
+            if (data.no_data) {
+                container.innerHTML = `<div class="text-center py-5 text-muted small">No saved data for this date.</div>`;
+                return;
+            }
             renderTable(data);
         } catch (e) {
             container.innerHTML = `<div class="text-center py-5 text-danger small">Failed to load distribution data.</div>`;
@@ -226,7 +293,8 @@
 
     function downloadExcel() {
         const site = document.getElementById('siteFilter').value;
-        window.location.href = `/api/attendance/distribution/export/?type=${currentType}&site=${site}`;
+        const dateParam = currentDate ? `&date=${currentDate}` : '';
+        window.location.href = `/api/attendance/distribution/export/?type=${currentType}&site=${site}${dateParam}`;
     }
 </script>
 {% endblock %}

@@ -46,7 +46,7 @@ from .utils import (
     THRESH, MARGIN, get_image_bytes
 )
 from .geofence import check_geofence
-from .models import Employee, Attendance, Site, FaceTemplate, AdminProfile, AppBuild, EmployeeStatusHistory, EmployeeSiteHistory, EmployeeAttachment, EmployeeSalaryHistory, JobCategory, Department, AppSettings, PublicHoliday
+from .models import Employee, Attendance, Site, FaceTemplate, AdminProfile, AppBuild, EmployeeStatusHistory, EmployeeSiteHistory, EmployeeAttachment, EmployeeSalaryHistory, JobCategory, Department, AppSettings, PublicHoliday, DistributionSnapshot
 from .serializers import *
 from .permissions import IsSiteAdmin
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -7364,10 +7364,66 @@ def _distribution_payload(request, employee_type):
     }
 
 
+class _AllAccessRequest:
+    """A minimal request-like object so distribution snapshots are computed for
+    ALL sites / ALL employees (superuser scope), independent of who triggers it."""
+    class _U:
+        is_superuser = True
+        is_staff = True
+        is_authenticated = True
+
+    def __init__(self):
+        self.user = self._U()
+        self.GET = {}   # no 'site' filter → every site
+
+
+def capture_distribution_snapshots(for_date=None):
+    """Freeze today's (or for_date's) distribution for all three tab types.
+
+    Stores the full all-sites payload so any past date can be reproduced exactly.
+    Safe to call repeatedly — it upserts the row for that date+type.
+    """
+    for_date = for_date or timezone.localdate()
+    shim = _AllAccessRequest()
+    saved = 0
+    for t in ('resource', 'staff', 'worker'):
+        try:
+            payload = _distribution_payload(shim, t)
+            DistributionSnapshot.objects.update_or_create(
+                date=for_date, dist_type=t, defaults={'payload': payload},
+            )
+            saved += 1
+        except Exception:  # noqa: BLE001 — never let snapshotting break a page load
+            logger.exception("capture_distribution_snapshots failed for type=%s", t)
+    prune_distribution_snapshots()
+    return saved
+
+
+def prune_distribution_snapshots():
+    """Delete snapshots older than the configured retention window.
+
+    Controlled by AppSettings.distribution_snapshot_retention_months
+    (0 = keep forever). Months are approximated as 30 days. Returns count deleted.
+    """
+    try:
+        months = AppSettings.load().distribution_snapshot_retention_months
+    except Exception:  # noqa: BLE001
+        months = 12
+    if not months or months <= 0:
+        return 0   # unlimited retention
+    from datetime import timedelta
+    cutoff = timezone.localdate() - timedelta(days=int(months) * 30)
+    deleted, _ = DistributionSnapshot.objects.filter(date__lt=cutoff).delete()
+    return deleted
+
+
 class ManpowerDistributionView(APIView):
-    """GET /api/attendance/distribution/?type=staff|worker|resource (&site=ID)
-    Returns a tabular JSON payload mirroring the PIC manpower sheets layout
-    but with sites read live from the Site table.
+    """GET /api/attendance/distribution/?type=staff|worker|resource (&site=ID&date=YYYY-MM-DD)
+
+    No date (or today) → live data from the current roster, and today's snapshot
+    is refreshed in passing so history accrues. A past date → the stored snapshot
+    for that day (or the most recent snapshot on/before it), so admins can see what
+    the distribution looked like back then.
     """
     permission_classes = [IsAdminUser | IsSiteAdmin]
 
@@ -7375,7 +7431,50 @@ class ManpowerDistributionView(APIView):
         t = (request.GET.get('type') or 'staff').lower()
         if t not in ('staff', 'worker', 'resource'):
             return Response({'error': "type must be 'staff', 'worker' or 'resource'"}, status=400)
-        return Response(_distribution_payload(request, t))
+
+        today = timezone.localdate()
+        date_str = (request.GET.get('date') or '').strip()
+        req_date = None
+        if date_str:
+            try:
+                from datetime import datetime as _dt
+                req_date = _dt.strptime(date_str, '%Y-%m-%d').date()
+            except ValueError:
+                req_date = None
+
+        # Past-date view (historical) — superuser only, since snapshots hold all
+        # sites and site-admin scoping can't be reapplied to a frozen payload.
+        if req_date and req_date < today and request.user.is_superuser:
+            snap = (DistributionSnapshot.objects
+                    .filter(dist_type=t, date__lte=req_date)
+                    .order_by('-date')
+                    .first())
+            if not snap:
+                return Response({
+                    'employee_type': t, 'sites': [], 'rows': [], 'grand_total': 0,
+                    'historical': True, 'no_data': True,
+                    'requested_date': str(req_date),
+                    'message': 'No saved snapshot on or before this date. History is kept from the day this feature was enabled.',
+                })
+            data = dict(snap.payload or {})
+            data['historical'] = True
+            data['requested_date'] = str(req_date)
+            data['snapshot_date'] = str(snap.date)
+            return Response(data)
+
+        # Live (current) view — unchanged behaviour, plus a passing snapshot
+        # capture so today's history is recorded even without the cron job.
+        data = _distribution_payload(request, t)
+        try:
+            DistributionSnapshot.objects.update_or_create(
+                date=today, dist_type=t,
+                defaults={'payload': _distribution_payload(_AllAccessRequest(), t)},
+            )
+        except Exception:  # noqa: BLE001
+            logger.exception("distribution snapshot upsert failed")
+        data['historical'] = False
+        data['snapshot_date'] = str(today)
+        return Response(data)
 
 
 class ManpowerDistributionExportView(APIView):
@@ -7399,7 +7498,28 @@ class ManpowerDistributionExportView(APIView):
         t = (request.GET.get('type') or 'staff').lower()
         if t not in ('staff', 'worker', 'resource'):
             return HttpResponse('Bad type', status=400)
-        data = _distribution_payload(request, t)
+
+        # Date-aware: a past date (superuser) exports the saved snapshot for that day.
+        today = timezone.localdate()
+        date_str = (request.GET.get('date') or '').strip()
+        req_date = None
+        if date_str:
+            try:
+                from datetime import datetime as _dt
+                req_date = _dt.strptime(date_str, '%Y-%m-%d').date()
+            except ValueError:
+                req_date = None
+        as_of = today
+        if req_date and req_date < today and request.user.is_superuser:
+            snap = (DistributionSnapshot.objects
+                    .filter(dist_type=t, date__lte=req_date)
+                    .order_by('-date').first())
+            if not snap:
+                return HttpResponse('No saved snapshot on or before that date.', status=404)
+            data = dict(snap.payload or {})
+            as_of = snap.date
+        else:
+            data = _distribution_payload(request, t)
 
         wb = openpyxl.Workbook()
         ws = wb.active
@@ -7419,7 +7539,7 @@ class ManpowerDistributionExportView(APIView):
         # Title row
         ws.cell(row=1, column=1, value=self._TITLE[t]).font = title_font
         # Date
-        ws.cell(row=1, column=4, value=f"Date: {timezone.localdate().isoformat()}")
+        ws.cell(row=1, column=4, value=f"Date: {as_of.isoformat()}")
 
         # Resource sheet uses a flat layout (no site columns / no leave column)
         if t == 'resource':
@@ -9340,6 +9460,8 @@ def _settings_to_dict(s):
         'labour_card_reminder_lead_days': s.labour_card_reminder_lead_days,
         'mol_reminder_lead_days':         s.mol_reminder_lead_days,
         'expiry_alert_recipients':        s.expiry_alert_recipients or [],
+        # Data retention
+        'distribution_snapshot_retention_months': s.distribution_snapshot_retention_months,
         # Navigation
         'nav_visibility': s.nav_visibility or {},
         'updated_at': str(s.updated_at) if s.updated_at else '',
@@ -9402,7 +9524,8 @@ class AppSettingsView(APIView):
         # --- Non-negative integers ---
         for f in ('late_grace_minutes', 'normal_ot_threshold_minutes',
                   'passport_reminder_lead_days', 'visa_reminder_lead_days',
-                  'labour_card_reminder_lead_days', 'mol_reminder_lead_days'):
+                  'labour_card_reminder_lead_days', 'mol_reminder_lead_days',
+                  'distribution_snapshot_retention_months'):
             if f in d:
                 try:
                     setattr(s, f, max(0, int(d.get(f))))
@@ -9499,3 +9622,99 @@ class PublicHolidayView(APIView):
             return Response({'error': 'Permission denied'}, status=403)
         PublicHoliday.objects.filter(id=holiday_id).delete()
         return Response({'success': True})
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  MISSING CHECK-IN — checked out without checking in (notify super admin)
+# ══════════════════════════════════════════════════════════════════════════
+class MissingCheckInView(APIView):
+    """List attendance rows where the person checked OUT but never checked IN.
+
+    GET /api/attendance/missing-checkin/?date=YYYY-MM-DD
+    No date → last 30 days. Site admins are scoped to their own sites.
+    """
+    permission_classes = [IsAdminUser | IsSiteAdmin]
+
+    def get(self, request):
+        from datetime import datetime as _dt, timedelta
+        qs = Attendance.objects.select_related('user', 'user__site').filter(
+            check_out_time__isnull=False, check_in_time__isnull=True,
+        )
+        if not request.user.is_superuser:
+            try:
+                profile = AdminProfile.objects.get(user=request.user)
+                qs = qs.filter(user__site__in=profile.sites.all())
+            except AdminProfile.DoesNotExist:
+                qs = qs.none()
+
+        date_str = (request.GET.get('date') or '').strip()
+        if date_str:
+            try:
+                qs = qs.filter(date=_dt.strptime(date_str, '%Y-%m-%d').date())
+            except ValueError:
+                pass
+        else:
+            qs = qs.filter(date__gte=timezone.localdate() - timedelta(days=30))
+
+        qs = qs.order_by('-date', 'user__name')
+        rows = [{
+            'id': a.id,
+            'employee': a.user.name,
+            'employee_id': a.user.id,
+            'badge_number': a.user.badge_number or '-',
+            'site': a.user.site.name if a.user.site else '-',
+            'date': str(a.date),
+            'check_out': timezone.localtime(a.check_out_time).strftime('%I:%M %p') if a.check_out_time else '-',
+        } for a in qs[:300]]
+        return Response({'count': len(rows), 'rows': rows})
+
+
+class SetCheckInView(APIView):
+    """Super-admin fills in a missing check-in time for one attendance row.
+
+    POST /api/attendance/attendance/<id>/set-checkin/  body: {"time": "HH:MM"}
+    """
+    permission_classes = [IsAdminUser]
+
+    def post(self, request, attendance_id):
+        if not request.user.is_superuser:
+            return Response({'error': 'Permission denied. Super admin only.'}, status=403)
+
+        from datetime import datetime as _dt
+        time_str = (request.data.get('time') or '').strip()
+        if not time_str:
+            return Response({'error': 'Provide a check-in time (HH:MM).'}, status=400)
+        parsed = None
+        for fmt in ('%H:%M', '%H:%M:%S', '%I:%M %p'):
+            try:
+                parsed = _dt.strptime(time_str, fmt).time()
+                break
+            except ValueError:
+                continue
+        if parsed is None:
+            return Response({'error': 'Invalid time. Use HH:MM (24-hour).'}, status=400)
+
+        try:
+            a = Attendance.objects.select_related('user').get(id=attendance_id)
+        except Attendance.DoesNotExist:
+            return Response({'error': 'Attendance record not found.'}, status=404)
+
+        aware = timezone.make_aware(
+            _dt.combine(a.date, parsed), timezone.get_current_timezone(),
+        )
+        if a.check_out_time and aware > a.check_out_time:
+            return Response(
+                {'error': 'Check-in time cannot be after the check-out time.'}, status=400,
+            )
+        a.check_in_time = aware
+        try:
+            a.calculate_late_and_early()
+        except Exception:  # noqa: BLE001
+            logger.exception('recompute after set-checkin failed for attendance=%s', a.id)
+        a.save()
+        return Response({
+            'success': True,
+            'employee': a.user.name,
+            'check_in': timezone.localtime(a.check_in_time).strftime('%I:%M %p'),
+            'late_minutes': a.late_minutes,
+        })

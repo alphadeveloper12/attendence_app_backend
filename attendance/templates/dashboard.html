@@ -421,6 +421,24 @@
     </div>
 </div>
 
+{% if is_superuser %}
+<!-- Missing Check-In — checked out without a check-in -->
+<div id="missingCheckinWrapper" class="d-none">
+    <div class="section-card mb-4">
+        <div class="section-card__head">
+            <h3 class="section-card__title" style="color:#b45309;">
+                <i class="ri-login-circle-line"></i> Missing Check-In
+                <span class="pill" style="background:var(--warning-soft,#fef3c7); color:#b45309;" id="missingCheckinCount">0</span>
+            </h3>
+            <div class="small text-secondary">Employees who checked out without a check-in. Add the missing time below.</div>
+        </div>
+        <div id="missingCheckinContainer" class="p-3" style="max-height: 380px; overflow-y: auto;">
+            <div class="empty-state" style="padding: 1rem;">Loading…</div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
 <style>
     .alert-card {
         cursor: pointer;
@@ -1427,11 +1445,13 @@
         loadStats();
         loadEmployees();
         loadAlerts();
+        loadMissingCheckin();           // Checked-out-without-check-in notifications (super admin)
         loadExecSummary();              // Daily executive summary card
         loadSiteActivity();             // Per-site activity panel
         // Auto-refresh every 60s so the dashboard stays live without manual reload
         setInterval(loadSiteActivity, 60000);
         setInterval(loadStats,         60000);
+        setInterval(loadMissingCheckin, 60000);
         populateCategoryDatalist();     // modal Position dropdown
         populateDepartmentDatalist();   // modal Department dropdown
         populateDepartmentDropdown();   // top-bar Department filter
@@ -1678,6 +1698,58 @@
             employer: currentEmployer,
         }).toString();
         window.location.href = `/api/attendance/alerts/export/?${qs}`;
+    }
+
+    function _csrfToken() {
+        const el = document.querySelector('[name=csrfmiddlewaretoken]');
+        return el ? el.value : '';
+    }
+
+    async function loadMissingCheckin() {
+        const wrap = document.getElementById('missingCheckinWrapper');
+        if (!wrap) return;   // not a superuser — card not rendered
+        try {
+            const res = await fetch('/api/attendance/missing-checkin/');
+            const data = await res.json();
+            const rows = data.rows || [];
+            const countEl = document.getElementById('missingCheckinCount');
+            if (countEl) countEl.textContent = rows.length;
+            const c = document.getElementById('missingCheckinContainer');
+            if (!rows.length) { wrap.classList.add('d-none'); return; }
+            wrap.classList.remove('d-none');
+            c.innerHTML = rows.map(r => `
+                <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 py-2 border-bottom" id="mc-${r.id}">
+                    <div>
+                        <span class="fw-bold">${r.employee}</span>
+                        <span class="text-secondary small ms-2">${r.badge_number} · ${r.site}</span>
+                        <div class="small text-secondary"><i class="ri-calendar-line"></i> ${r.date} · checked out ${r.check_out}</div>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <input type="time" id="mc-time-${r.id}" class="form-control form-control-sm" style="width:130px;">
+                        <button class="btn btn-sm btn-primary" onclick="setCheckin(${r.id})"><i class="ri-login-circle-line"></i> Save check-in</button>
+                    </div>
+                </div>`).join('');
+        } catch (e) { /* leave the card hidden on error */ }
+    }
+
+    async function setCheckin(id) {
+        const t = document.getElementById('mc-time-' + id);
+        if (!t || !t.value) { alert('Please pick a check-in time first.'); return; }
+        try {
+            const res = await fetch(`/api/attendance/attendance/${id}/set-checkin/`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': _csrfToken() },
+                body: JSON.stringify({ time: t.value }),
+            });
+            const data = await res.json();
+            if (res.ok) {
+                const el = document.getElementById('mc-' + id);
+                if (el) el.remove();
+                loadMissingCheckin();   // refresh count / hide card if empty
+            } else {
+                alert(data.error || 'Failed to set check-in.');
+            }
+        } catch (e) { alert('Network error.'); }
     }
 
     async function loadAlerts() {
