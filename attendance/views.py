@@ -3858,8 +3858,9 @@ def admin_user_detail_view(request, user_id):
                     "status": "present" if (record and record.check_in_time) else None,
                     "check_in": timezone.localtime(record.check_in_time).strftime("%I:%M %p") if (record and record.check_in_time) else None,
                     "late_minutes": record.late_minutes if record else 0,
-                    "latitude": record.latitude if record else None,
-                    "longitude": record.longitude if record else None,
+                    # Only show a location pin when this punch actually happened.
+                    "latitude": record.latitude if (record and record.check_in_time) else None,
+                    "longitude": record.longitude if (record and record.check_in_time) else None,
                 }
                 if request.user.is_superuser:
                     data['employee']['gross_salary'] = str(employee.gross_salary) if employee.gross_salary else None
@@ -3876,8 +3877,9 @@ def admin_user_detail_view(request, user_id):
                     "status": "present" if (record and record.check_out_time) else None,
                     "check_in": timezone.localtime(record.check_out_time).strftime("%I:%M %p") if (record and record.check_out_time) else None,
                     "early_minutes": record.early_minutes if record else 0,
-                    "latitude": record.latitude if record else None,
-                    "longitude": record.longitude if record else None,
+                    # Only show a location pin when this punch actually happened.
+                    "latitude": record.latitude if (record and record.check_out_time) else None,
+                    "longitude": record.longitude if (record and record.check_out_time) else None,
                 }
                 data['slots'] = slots
                 # Expose the record id + flags so the detail page can offer to
@@ -4581,6 +4583,12 @@ class SiteCoordinatesView(APIView):
                 except Exception as e:
                     print(f"Error processing coordinates: {e}")
             
+            # If there's no KML polygon, fall back to the circular geofence
+            # (center + radius) so the map can still show the boundary.
+            if not map_coords and site.geofence_lat is not None and site.geofence_lng is not None:
+                center_lat = site.geofence_lat
+                center_lng = site.geofence_lng
+
             return Response({
                 'success': True,
                 'coordinates': map_coords,
@@ -4588,7 +4596,11 @@ class SiteCoordinatesView(APIView):
                     'lat': center_lat,
                     'lng': center_lng
                 },
-                'has_coordinates': len(map_coords) > 0
+                'has_coordinates': len(map_coords) > 0,
+                # Circular-geofence fallback (used when there's no KML polygon)
+                'geofence_lat': site.geofence_lat,
+                'geofence_lng': site.geofence_lng,
+                'geofence_radius_meters': site.geofence_radius_meters,
             }, status=200)
             
         except Site.DoesNotExist:

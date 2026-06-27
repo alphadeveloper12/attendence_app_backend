@@ -1458,10 +1458,16 @@
         html += '</div>';
         content.innerHTML = html;
 
-        // Init Maps
+        // Init Maps. Try the day's site first, then the employee's current site —
+        // a historical site may not have a KML even though the current one does.
+        const siteIds = [...new Set([
+            siteId,
+            meta && meta.day_site_id,
+            meta && meta.employee && meta.employee.site_id,
+        ].filter(Boolean))];
         Object.entries(slots).forEach(([name, s]) => {
             if (s.latitude && s.longitude) {
-                initSlotMap(`map-${name.replace(' ', '-')}`, s.latitude, s.longitude, siteId);
+                initSlotMap(`map-${name.replace(' ', '-')}`, s.latitude, s.longitude, siteIds);
             }
         });
     }
@@ -1547,9 +1553,10 @@
         content.innerHTML = html;
     }
 
-    async function initSlotMap(elementId, lat, lng, siteId) {
+    async function initSlotMap(elementId, lat, lng, siteIds) {
         const element = document.getElementById(elementId);
         if (!element) return;
+        const candidates = Array.isArray(siteIds) ? siteIds : [siteIds];
 
         // Hybrid (satellite + labels) by default — admins usually want to see
         // the actual terrain when reviewing geofence breaches. All standard
@@ -1573,30 +1580,47 @@
             title: 'Attendance marked here',
         });
 
-        if (!siteId) return;
-        try {
-            const res = await fetch(`/api/attendance/api/sites/${siteId}/coordinates/`);
-            const data = await res.json();
-            if (!data.success || !data.has_coordinates) return;
+        for (const sid of candidates) {
+            if (!sid) continue;
+            try {
+                const res = await fetch(`/api/attendance/api/sites/${sid}/coordinates/`);
+                const data = await res.json();
+                if (!data.success) continue;
 
-            // Bright outline + translucent fill so the polygon is obvious on satellite
-            const poly = new google.maps.Polygon({
-                paths: data.coordinates,
-                strokeColor: '#2563eb',
-                strokeOpacity: 1.0,
-                strokeWeight: 3,
-                fillColor: '#3b82f6',
-                fillOpacity: 0.18,
-                clickable: false,
-            });
-            poly.setMap(map);
+                const bounds = new google.maps.LatLngBounds();
+                bounds.extend({ lat: lat, lng: lng });
+                let drewGeofence = false;
 
-            // Fit the viewport to include BOTH the geofence and the user marker
-            const bounds = new google.maps.LatLngBounds();
-            data.coordinates.forEach(p => bounds.extend(p));
-            bounds.extend({ lat: lat, lng: lng });
-            map.fitBounds(bounds, 40);
-        } catch (e) { /* network or parse failure — fall back to the default view */ }
+                if (data.has_coordinates && data.coordinates.length) {
+                    // KML polygon — bright outline + translucent fill (obvious on satellite)
+                    const poly = new google.maps.Polygon({
+                        paths: data.coordinates,
+                        strokeColor: '#2563eb', strokeOpacity: 1.0, strokeWeight: 3,
+                        fillColor: '#3b82f6', fillOpacity: 0.18, clickable: false,
+                    });
+                    poly.setMap(map);
+                    data.coordinates.forEach(p => bounds.extend(p));
+                    drewGeofence = true;
+                } else if (data.geofence_lat != null && data.geofence_lng != null) {
+                    // No polygon — draw the circular geofence (center + radius) instead
+                    const radius = data.geofence_radius_meters || 100;
+                    const circle = new google.maps.Circle({
+                        center: { lat: data.geofence_lat, lng: data.geofence_lng },
+                        radius: radius,
+                        strokeColor: '#2563eb', strokeOpacity: 1.0, strokeWeight: 3,
+                        fillColor: '#3b82f6', fillOpacity: 0.18, clickable: false,
+                    });
+                    circle.setMap(map);
+                    bounds.union(circle.getBounds());
+                    drewGeofence = true;
+                }
+
+                if (drewGeofence) {
+                    map.fitBounds(bounds, 40);
+                    return;   // boundary found & drawn — stop trying other sites
+                }
+            } catch (e) { /* try the next candidate site */ }
+        }
     }
 
     function setFilter(type) {

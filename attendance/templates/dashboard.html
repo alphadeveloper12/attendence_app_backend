@@ -370,34 +370,6 @@
     </div>
 </div>
 
-<!-- Employment status breakdown -->
-<div class="status-bar" id="statusBreakdown" style="display:none;">
-    <button type="button" data-status-pill="all" onclick="filterStatus('all', 'All Statuses')" class="status-pill">
-        <i class="ri-list-check"></i> All
-    </button>
-    <button type="button" data-status-pill="Active" onclick="filterStatus('Active', 'Active')" class="status-pill" style="color:#047857;">
-        <i class="ri-checkbox-circle-line"></i> Active <span class="count" id="status-count-Active">0</span>
-    </button>
-    <button type="button" data-status-pill="Leave" onclick="filterStatus('Leave', 'Leave')" class="status-pill" style="color:#b45309;">
-        <i class="ri-flight-takeoff-line"></i> Leave <span class="count" id="status-count-Leave">0</span>
-    </button>
-    <button type="button" data-status-pill="Resigned" onclick="filterStatus('Resigned', 'Resigned')" class="status-pill" style="color:#b91c1c;">
-        <i class="ri-logout-box-r-line"></i> Resigned <span class="count" id="status-count-Resigned">0</span>
-    </button>
-    <button type="button" data-status-pill="Terminated" onclick="filterStatus('Terminated', 'Terminated')" class="status-pill" style="color:#b91c1c;">
-        <i class="ri-close-circle-line"></i> Terminated <span class="count" id="status-count-Terminated">0</span>
-    </button>
-    <button type="button" data-status-pill="No Renewal" onclick="filterStatus('No Renewal', 'No Renewal')" class="status-pill" style="color:#374151;">
-        <i class="ri-file-history-line"></i> No Renewal <span class="count" id="status-count-No-Renewal">0</span>
-    </button>
-    <button type="button" data-status-pill="Absconding" onclick="filterStatus('Absconding', 'Absconding')" class="status-pill" style="color:#111827;">
-        <i class="ri-user-unfollow-line"></i> Absconding <span class="count" id="status-count-Absconding">0</span>
-    </button>
-    <button type="button" data-status-pill="Other" onclick="filterStatus('Other', 'Other')" class="status-pill" style="color:#4338ca;">
-        <i class="ri-more-line"></i> Other <span class="count" id="status-count-Other">0</span>
-    </button>
-</div>
-
 <!-- Geofence Alerts -->
 <div id="alertsWrapper" class="d-none">
     <div class="section-card mb-4">
@@ -483,6 +455,34 @@
             </div>
         </div>
     </div>
+</div>
+
+<!-- Employment status breakdown -->
+<div class="status-bar" id="statusBreakdown" style="display:none;">
+    <button type="button" data-status-pill="all" onclick="filterStatus('all', 'All Statuses')" class="status-pill">
+        <i class="ri-list-check"></i> All
+    </button>
+    <button type="button" data-status-pill="Active" onclick="filterStatus('Active', 'Active')" class="status-pill" style="color:#047857;">
+        <i class="ri-checkbox-circle-line"></i> Active <span class="count" id="status-count-Active">0</span>
+    </button>
+    <button type="button" data-status-pill="Leave" onclick="filterStatus('Leave', 'Leave')" class="status-pill" style="color:#b45309;">
+        <i class="ri-flight-takeoff-line"></i> Leave <span class="count" id="status-count-Leave">0</span>
+    </button>
+    <button type="button" data-status-pill="Resigned" onclick="filterStatus('Resigned', 'Resigned')" class="status-pill" style="color:#b91c1c;">
+        <i class="ri-logout-box-r-line"></i> Resigned <span class="count" id="status-count-Resigned">0</span>
+    </button>
+    <button type="button" data-status-pill="Terminated" onclick="filterStatus('Terminated', 'Terminated')" class="status-pill" style="color:#b91c1c;">
+        <i class="ri-close-circle-line"></i> Terminated <span class="count" id="status-count-Terminated">0</span>
+    </button>
+    <button type="button" data-status-pill="No Renewal" onclick="filterStatus('No Renewal', 'No Renewal')" class="status-pill" style="color:#374151;">
+        <i class="ri-file-history-line"></i> No Renewal <span class="count" id="status-count-No-Renewal">0</span>
+    </button>
+    <button type="button" data-status-pill="Absconding" onclick="filterStatus('Absconding', 'Absconding')" class="status-pill" style="color:#111827;">
+        <i class="ri-user-unfollow-line"></i> Absconding <span class="count" id="status-count-Absconding">0</span>
+    </button>
+    <button type="button" data-status-pill="Other" onclick="filterStatus('Other', 'Other')" class="status-pill" style="color:#4338ca;">
+        <i class="ri-more-line"></i> Other <span class="count" id="status-count-Other">0</span>
+    </button>
 </div>
 
 <!-- Recent Employees -->
