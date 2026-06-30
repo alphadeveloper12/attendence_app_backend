@@ -132,9 +132,11 @@ class Employee(models.Model):
     medical_insurance_card_number  = models.CharField(max_length=80, null=True, blank=True)
     medical_insurance_status       = models.CharField(max_length=20, null=True, blank=True)
     medical_insurance_premium_cost = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
-    # End of Service
-    eos_status = models.CharField(max_length=30, null=True, blank=True)  # Pending / Processing / Settled / Not Applicable
-    eos_note   = models.TextField(null=True, blank=True)
+    # End of Service (EOS) — lives under the Employment Status tab; the employee's
+    # status field already conveys the state, so EOS only needs subject/date/note.
+    eos_subject = models.CharField(max_length=150, null=True, blank=True)
+    eos_date    = models.DateField(null=True, blank=True)
+    eos_note    = models.TextField(null=True, blank=True)
 
     def __str__(self):
         return self.name

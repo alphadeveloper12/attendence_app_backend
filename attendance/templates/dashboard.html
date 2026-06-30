@@ -1145,6 +1145,18 @@
 
                         <!-- 6. Employment Status — non-leave status change history -->
                         <div class="tab-pane fade" id="employmentStatus">
+                            <!-- End of Service (EOS) — note/date/subject; the status above already applies -->
+                            <div class="border rounded-3 p-3 mb-3">
+                                <h6 class="fw-bold mb-3"><i class="ri-logout-circle-line text-secondary"></i> End of Service (EOS)</h6>
+                                <div class="row g-3">
+                                    <div class="col-md-6"><label class="form-label small fw-bold text-secondary text-uppercase" style="font-size:0.65rem;">Subject</label>
+                                        <input type="text" name="eos_subject" class="form-control form-control-modern" placeholder="e.g. Final settlement, Gratuity"></div>
+                                    <div class="col-md-6"><label class="form-label small fw-bold text-secondary text-uppercase" style="font-size:0.65rem;">Date</label>
+                                        <input type="date" name="eos_date" class="form-control form-control-modern"></div>
+                                    <div class="col-md-12"><label class="form-label small fw-bold text-secondary text-uppercase" style="font-size:0.65rem;">Note</label>
+                                        <textarea name="eos_note" rows="2" class="form-control form-control-modern" placeholder="Notes about end-of-service"></textarea></div>
+                                </div>
+                            </div>
                             <div id="employmentStatusContainer">
                                 <div class="text-center py-4">
                                     <div class="spinner-border spinner-border-sm text-secondary"></div>
@@ -1259,8 +1271,9 @@
                                         <select name="wc_insurance_status" class="form-select form-select-modern">
                                             <option value="">—</option>
                                             <option value="Active">Active</option>
-                                            <option value="Inactive">Inactive</option>
-                                            <option value="Expired">Expired</option>
+                                            <option value="To be added">To be added</option>
+                                            <option value="To be cancelled">To be cancelled</option>
+                                            <option value="Not Applicable">Not Applicable</option>
                                         </select></div>
                                     <div class="col-md-3"><label class="form-label small fw-bold text-secondary text-uppercase" style="font-size:0.65rem;">Premium Cost</label>
                                         <input type="number" step="0.01" name="wc_insurance_premium_cost" class="form-control form-control-modern" placeholder="0.00"></div>
@@ -1283,8 +1296,9 @@
                                         <select name="medical_insurance_status" class="form-select form-select-modern">
                                             <option value="">—</option>
                                             <option value="Active">Active</option>
-                                            <option value="Inactive">Inactive</option>
-                                            <option value="Expired">Expired</option>
+                                            <option value="To be added">To be added</option>
+                                            <option value="To be cancelled">To be cancelled</option>
+                                            <option value="Not Applicable">Not Applicable</option>
                                         </select></div>
                                     <div class="col-md-4"><label class="form-label small fw-bold text-secondary text-uppercase" style="font-size:0.65rem;">Premium Cost</label>
                                         <input type="number" step="0.01" name="medical_insurance_premium_cost" class="form-control form-control-modern" placeholder="0.00"></div>
@@ -1292,23 +1306,6 @@
                                         <input type="date" name="medical_insurance_start_date" class="form-control form-control-modern"></div>
                                     <div class="col-md-4"><label class="form-label small fw-bold text-secondary text-uppercase" style="font-size:0.65rem;">End Date</label>
                                         <input type="date" name="medical_insurance_end_date" class="form-control form-control-modern"></div>
-                                </div>
-                            </div>
-
-                            <!-- End of Service (EOS) -->
-                            <div class="border rounded-3 p-3">
-                                <h6 class="fw-bold mb-3"><i class="ri-logout-circle-line text-secondary"></i> End of Service (EOS)</h6>
-                                <div class="row g-3">
-                                    <div class="col-md-4"><label class="form-label small fw-bold text-secondary text-uppercase" style="font-size:0.65rem;">Status</label>
-                                        <select name="eos_status" class="form-select form-select-modern">
-                                            <option value="">—</option>
-                                            <option value="Pending">Pending</option>
-                                            <option value="Processing">Processing</option>
-                                            <option value="Settled">Settled</option>
-                                            <option value="Not Applicable">Not Applicable</option>
-                                        </select></div>
-                                    <div class="col-md-8"><label class="form-label small fw-bold text-secondary text-uppercase" style="font-size:0.65rem;">Note</label>
-                                        <textarea name="eos_note" rows="2" class="form-control form-control-modern" placeholder="Notes about end-of-service settlement"></textarea></div>
                                 </div>
                             </div>
                         </div>

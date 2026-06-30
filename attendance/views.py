@@ -1403,7 +1403,8 @@ class AdminEditEmployeeView(APIView):
                 'medical_insurance_card_number': emp.medical_insurance_card_number or '',
                 'medical_insurance_status': emp.medical_insurance_status or '',
                 'medical_insurance_premium_cost': str(emp.medical_insurance_premium_cost) if emp.medical_insurance_premium_cost is not None else '',
-                'eos_status': emp.eos_status or '',
+                'eos_subject': emp.eos_subject or '',
+                'eos_date': str(emp.eos_date) if emp.eos_date else '',
                 'eos_note': emp.eos_note or '',
             }
             if request.user.is_superuser:
@@ -1637,7 +1638,8 @@ class AdminEditEmployeeView(APIView):
             if 'medical_insurance_card_number' in data:  emp.medical_insurance_card_number = _txt('medical_insurance_card_number')
             if 'medical_insurance_status' in data:       emp.medical_insurance_status = _txt('medical_insurance_status')
             if 'medical_insurance_premium_cost' in data: emp.medical_insurance_premium_cost = parse_decimal(data.get('medical_insurance_premium_cost'))
-            if 'eos_status' in data:  emp.eos_status = _txt('eos_status')
+            if 'eos_subject' in data: emp.eos_subject = _txt('eos_subject')
+            if 'eos_date' in data:    emp.eos_date = parse_date(data.get('eos_date'))
             if 'eos_note' in data:    emp.eos_note = _txt('eos_note')
 
             emp.save()
