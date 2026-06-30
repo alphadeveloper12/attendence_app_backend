@@ -1,4 +1,5 @@
 from django.db import models
+from django.db.models import Q
 from datetime import datetime, time
 from django.utils import timezone
 from django.contrib.auth.models import User
@@ -317,8 +318,18 @@ class Attendance(models.Model):
     
     class Meta:
         unique_together = ['user', 'date']  # Prevent duplicate records for same user and date
+        indexes = [
+            # Speeds up "checked out without a check-in" lookups (Missing Check-In),
+            # which otherwise scan the whole attendance table.
+            models.Index(
+                fields=['-date'],
+                name='att_missing_checkin_idx',
+                condition=Q(check_in_time__isnull=True, check_out_time__isnull=False),
+            ),
+            models.Index(fields=['date'], name='att_date_idx'),
+        ]
 
-    
+
     def __str__(self):
         return f"{self.user.name} - {self.status} ({self.date})"
 

@@ -1145,9 +1145,9 @@
 
                         <!-- 6. Employment Status — non-leave status change history -->
                         <div class="tab-pane fade" id="employmentStatus">
-                            <!-- End of Service (EOS) — note/date/subject; the status above already applies -->
+                            <!-- General Notes — note/date/subject; the status above already applies -->
                             <div class="border rounded-3 p-3 mb-3">
-                                <h6 class="fw-bold mb-3"><i class="ri-logout-circle-line text-secondary"></i> End of Service (EOS)</h6>
+                                <h6 class="fw-bold mb-3"><i class="ri-sticky-note-line text-secondary"></i> General Notes</h6>
                                 <div class="row g-3">
                                     <div class="col-md-6"><label class="form-label small fw-bold text-secondary text-uppercase" style="font-size:0.65rem;">Subject</label>
                                         <input type="text" name="eos_subject" class="form-control form-control-modern" placeholder="e.g. Final settlement, Gratuity"></div>
@@ -1516,7 +1516,7 @@
         // Auto-refresh every 60s so the dashboard stays live without manual reload
         setInterval(loadSiteActivity, 60000);
         setInterval(loadStats,         60000);
-        setInterval(loadMissingCheckin, 60000);
+        setInterval(loadMissingCheckin, 600000);  // every 10 min — this query scans attendance; don't hammer it
         populateCategoryDatalist();     // modal Position dropdown
         populateDepartmentDatalist();   // modal Department dropdown
         populateDepartmentDropdown();   // top-bar Department filter
