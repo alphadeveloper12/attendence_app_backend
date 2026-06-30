@@ -46,6 +46,17 @@ class EmployeeSerializer(serializers.ModelSerializer):
             return request.build_absolute_uri(obj.profile_picture.url)
         return None
 
+
+class EmployeeListLightSerializer(EmployeeSerializer):
+    """Same as EmployeeSerializer but WITHOUT the heavy `face_embedding` field.
+
+    The 512-float embedding dominates the payload size; list screens (mobile +
+    web table) never need it, so dropping it makes lists load far faster. The
+    offline face-sync path keeps using the full serializer."""
+    class Meta(EmployeeSerializer.Meta):
+        fields = [f for f in EmployeeSerializer.Meta.fields if f != 'face_embedding']
+
+
 class EnrollSerializer(serializers.Serializer):
     id = serializers.IntegerField(required=False)
     name = serializers.CharField(max_length=100)

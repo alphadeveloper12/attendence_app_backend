@@ -3333,6 +3333,12 @@ class EmployeeListView(APIView):
         # Default to a large number if not specified, but dashboard specifically sends per_page
         paginator.page_size = int(request.GET.get('per_page', 1000))
 
+        # Light mode (mobile/web lists): skip the heavy face_embedding field both
+        # in the DB query and the response, so big lists load fast.
+        light_mode = str(request.GET.get('light', '')).lower() in ('1', 'true', 'yes')
+        if light_mode:
+            employees = employees.defer('face_embedding')
+
         # Attendance Filter (Present / Late / Absent) — applied after other
         # filters but before pagination so the table reflects the KPI card
         # the admin clicked.
@@ -3353,8 +3359,9 @@ class EmployeeListView(APIView):
             employees = employees.filter(status__iexact='Active').exclude(id__in=today_ids)
 
         result_page = paginator.paginate_queryset(employees, request)
-        
-        serializer = EmployeeSerializer(
+
+        serializer_cls = EmployeeListLightSerializer if light_mode else EmployeeSerializer
+        serializer = serializer_cls(
             result_page,
             many=True,
             context={"request": request},
