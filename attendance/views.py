@@ -1391,6 +1391,20 @@ class AdminEditEmployeeView(APIView):
                 'passport_document_url': emp.passport_document.url if emp.passport_document else '',
                 'visa_document_url': emp.visa_document.url if emp.visa_document else '',
                 'labour_card_document_url': emp.labour_card_document.url if emp.labour_card_document else '',
+                # Insurance & End-of-Service
+                'wc_insurance_name': emp.wc_insurance_name or '',
+                'wc_insurance_start_date': str(emp.wc_insurance_start_date) if emp.wc_insurance_start_date else '',
+                'wc_insurance_end_date': str(emp.wc_insurance_end_date) if emp.wc_insurance_end_date else '',
+                'wc_insurance_status': emp.wc_insurance_status or '',
+                'wc_insurance_premium_cost': str(emp.wc_insurance_premium_cost) if emp.wc_insurance_premium_cost is not None else '',
+                'medical_insurance_name': emp.medical_insurance_name or '',
+                'medical_insurance_start_date': str(emp.medical_insurance_start_date) if emp.medical_insurance_start_date else '',
+                'medical_insurance_end_date': str(emp.medical_insurance_end_date) if emp.medical_insurance_end_date else '',
+                'medical_insurance_card_number': emp.medical_insurance_card_number or '',
+                'medical_insurance_status': emp.medical_insurance_status or '',
+                'medical_insurance_premium_cost': str(emp.medical_insurance_premium_cost) if emp.medical_insurance_premium_cost is not None else '',
+                'eos_status': emp.eos_status or '',
+                'eos_note': emp.eos_note or '',
             }
             if request.user.is_superuser:
                 data['gross_salary'] = str(emp.gross_salary) if emp.gross_salary else ''
@@ -1608,6 +1622,23 @@ class AdminEditEmployeeView(APIView):
                 if 'salary_remarks' in data:
                     emp.salary_remarks = data.get('salary_remarks') or None
                 emp.salary_grade = data.get('salary_grade', emp.salary_grade)
+
+            # ── Insurance (WC + Medical) and End-of-Service ──────────────────
+            def _txt(k):
+                return (data.get(k) or '').strip() or None
+            if 'wc_insurance_name' in data:         emp.wc_insurance_name = _txt('wc_insurance_name')
+            if 'wc_insurance_start_date' in data:   emp.wc_insurance_start_date = parse_date(data.get('wc_insurance_start_date'))
+            if 'wc_insurance_end_date' in data:     emp.wc_insurance_end_date = parse_date(data.get('wc_insurance_end_date'))
+            if 'wc_insurance_status' in data:       emp.wc_insurance_status = _txt('wc_insurance_status')
+            if 'wc_insurance_premium_cost' in data: emp.wc_insurance_premium_cost = parse_decimal(data.get('wc_insurance_premium_cost'))
+            if 'medical_insurance_name' in data:         emp.medical_insurance_name = _txt('medical_insurance_name')
+            if 'medical_insurance_start_date' in data:   emp.medical_insurance_start_date = parse_date(data.get('medical_insurance_start_date'))
+            if 'medical_insurance_end_date' in data:     emp.medical_insurance_end_date = parse_date(data.get('medical_insurance_end_date'))
+            if 'medical_insurance_card_number' in data:  emp.medical_insurance_card_number = _txt('medical_insurance_card_number')
+            if 'medical_insurance_status' in data:       emp.medical_insurance_status = _txt('medical_insurance_status')
+            if 'medical_insurance_premium_cost' in data: emp.medical_insurance_premium_cost = parse_decimal(data.get('medical_insurance_premium_cost'))
+            if 'eos_status' in data:  emp.eos_status = _txt('eos_status')
+            if 'eos_note' in data:    emp.eos_note = _txt('eos_note')
 
             emp.save()
 

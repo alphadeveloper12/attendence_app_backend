@@ -706,6 +706,8 @@
                             data-bs-target="#siteHistory">8. Site History</button></li>
                     <li class="nav-item flex-fill"><button class="nav-link w-100 py-2" data-bs-toggle="pill"
                             data-bs-target="#attachments">9. Attachments</button></li>
+                    <li class="nav-item flex-fill"><button class="nav-link w-100 py-2" data-bs-toggle="pill"
+                            data-bs-target="#insurance">10. Insurance</button></li>
                 </ul>
 
                 <form id="addEmployeeForm">
@@ -1241,6 +1243,72 @@
                                 <div class="text-center py-4">
                                     <div class="spinner-border spinner-border-sm text-secondary"></div>
                                     <p class="text-muted small mt-2 mb-0">Loading attachments…</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 10. Insurance — WC + Medical + End of Service -->
+                        <div class="tab-pane fade" id="insurance">
+                            <!-- WC Insurance -->
+                            <div class="border rounded-3 p-3 mb-3">
+                                <h6 class="fw-bold mb-3"><i class="ri-shield-cross-line text-primary"></i> WC Insurance <span class="text-secondary fw-normal small">(Workmen's Compensation)</span></h6>
+                                <div class="row g-3">
+                                    <div class="col-md-6"><label class="form-label small fw-bold text-secondary text-uppercase" style="font-size:0.65rem;">Insurance Name</label>
+                                        <input type="text" name="wc_insurance_name" class="form-control form-control-modern" placeholder="Provider / policy name"></div>
+                                    <div class="col-md-3"><label class="form-label small fw-bold text-secondary text-uppercase" style="font-size:0.65rem;">Status</label>
+                                        <select name="wc_insurance_status" class="form-select form-select-modern">
+                                            <option value="">—</option>
+                                            <option value="Active">Active</option>
+                                            <option value="Inactive">Inactive</option>
+                                            <option value="Expired">Expired</option>
+                                        </select></div>
+                                    <div class="col-md-3"><label class="form-label small fw-bold text-secondary text-uppercase" style="font-size:0.65rem;">Premium Cost</label>
+                                        <input type="number" step="0.01" name="wc_insurance_premium_cost" class="form-control form-control-modern" placeholder="0.00"></div>
+                                    <div class="col-md-6"><label class="form-label small fw-bold text-secondary text-uppercase" style="font-size:0.65rem;">Start Date</label>
+                                        <input type="date" name="wc_insurance_start_date" class="form-control form-control-modern"></div>
+                                    <div class="col-md-6"><label class="form-label small fw-bold text-secondary text-uppercase" style="font-size:0.65rem;">End Date</label>
+                                        <input type="date" name="wc_insurance_end_date" class="form-control form-control-modern"></div>
+                                </div>
+                            </div>
+
+                            <!-- Medical Insurance -->
+                            <div class="border rounded-3 p-3 mb-3">
+                                <h6 class="fw-bold mb-3"><i class="ri-heart-pulse-line text-danger"></i> Medical Insurance</h6>
+                                <div class="row g-3">
+                                    <div class="col-md-6"><label class="form-label small fw-bold text-secondary text-uppercase" style="font-size:0.65rem;">Insurance Name</label>
+                                        <input type="text" name="medical_insurance_name" class="form-control form-control-modern" placeholder="Provider / policy name"></div>
+                                    <div class="col-md-3"><label class="form-label small fw-bold text-secondary text-uppercase" style="font-size:0.65rem;">Card Number</label>
+                                        <input type="text" name="medical_insurance_card_number" class="form-control form-control-modern" placeholder="Card #"></div>
+                                    <div class="col-md-3"><label class="form-label small fw-bold text-secondary text-uppercase" style="font-size:0.65rem;">Status</label>
+                                        <select name="medical_insurance_status" class="form-select form-select-modern">
+                                            <option value="">—</option>
+                                            <option value="Active">Active</option>
+                                            <option value="Inactive">Inactive</option>
+                                            <option value="Expired">Expired</option>
+                                        </select></div>
+                                    <div class="col-md-4"><label class="form-label small fw-bold text-secondary text-uppercase" style="font-size:0.65rem;">Premium Cost</label>
+                                        <input type="number" step="0.01" name="medical_insurance_premium_cost" class="form-control form-control-modern" placeholder="0.00"></div>
+                                    <div class="col-md-4"><label class="form-label small fw-bold text-secondary text-uppercase" style="font-size:0.65rem;">Start Date</label>
+                                        <input type="date" name="medical_insurance_start_date" class="form-control form-control-modern"></div>
+                                    <div class="col-md-4"><label class="form-label small fw-bold text-secondary text-uppercase" style="font-size:0.65rem;">End Date</label>
+                                        <input type="date" name="medical_insurance_end_date" class="form-control form-control-modern"></div>
+                                </div>
+                            </div>
+
+                            <!-- End of Service (EOS) -->
+                            <div class="border rounded-3 p-3">
+                                <h6 class="fw-bold mb-3"><i class="ri-logout-circle-line text-secondary"></i> End of Service (EOS)</h6>
+                                <div class="row g-3">
+                                    <div class="col-md-4"><label class="form-label small fw-bold text-secondary text-uppercase" style="font-size:0.65rem;">Status</label>
+                                        <select name="eos_status" class="form-select form-select-modern">
+                                            <option value="">—</option>
+                                            <option value="Pending">Pending</option>
+                                            <option value="Processing">Processing</option>
+                                            <option value="Settled">Settled</option>
+                                            <option value="Not Applicable">Not Applicable</option>
+                                        </select></div>
+                                    <div class="col-md-8"><label class="form-label small fw-bold text-secondary text-uppercase" style="font-size:0.65rem;">Note</label>
+                                        <textarea name="eos_note" rows="2" class="form-control form-control-modern" placeholder="Notes about end-of-service settlement"></textarea></div>
                                 </div>
                             </div>
                         </div>

@@ -118,6 +118,24 @@ class Employee(models.Model):
     salary_reduction        = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     salary_remarks          = models.TextField(null=True, blank=True)
 
+    # ── Insurance & End-of-Service ───────────────────────────────────────────
+    # WC (Workmen's Compensation) insurance
+    wc_insurance_name         = models.CharField(max_length=150, null=True, blank=True)
+    wc_insurance_start_date   = models.DateField(null=True, blank=True)
+    wc_insurance_end_date     = models.DateField(null=True, blank=True)
+    wc_insurance_status       = models.CharField(max_length=20, null=True, blank=True)  # Active / Inactive / Expired
+    wc_insurance_premium_cost = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    # Medical insurance
+    medical_insurance_name         = models.CharField(max_length=150, null=True, blank=True)
+    medical_insurance_start_date   = models.DateField(null=True, blank=True)
+    medical_insurance_end_date     = models.DateField(null=True, blank=True)
+    medical_insurance_card_number  = models.CharField(max_length=80, null=True, blank=True)
+    medical_insurance_status       = models.CharField(max_length=20, null=True, blank=True)
+    medical_insurance_premium_cost = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    # End of Service
+    eos_status = models.CharField(max_length=30, null=True, blank=True)  # Pending / Processing / Settled / Not Applicable
+    eos_note   = models.TextField(null=True, blank=True)
+
     def __str__(self):
         return self.name
 
