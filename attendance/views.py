@@ -922,6 +922,14 @@ class BulkEditEmployeesView(APIView):
             'errors': [],
         }
 
+        # Suspend the per-save FAISS index rebuild during the import. Otherwise
+        # every emp.save() triggers a full index rebuild over ALL employees'
+        # templates — thousands of rebuilds for a big file, which hangs the
+        # worker (504) or OOM-kills it (502). We rebuild ONCE at the end below.
+        from . import signals as _signals_mod
+        _signals_mod.suspend_employee_index_sync = True
+        any_site_changed = False
+
         # Skip the instruction row if it happens to come after the header (our
         # generated template leaves cell A2 with text — but it has no Badge ID
         # so the lookup will naturally fail; we treat it as a no-op skip).
@@ -1091,6 +1099,7 @@ class BulkEditEmployeesView(APIView):
                     or (not old_site and emp.site)
                 )
                 if site_changed:
+                    any_site_changed = True
                     eff_raw = get_raw(row, 'Site Effective From')
                     eff_from = coerce_date(eff_raw)
                     if eff_raw not in (None, '') and not eff_from:
@@ -1125,6 +1134,22 @@ class BulkEditEmployeesView(APIView):
                     'row': row_idx, 'badge_number': badge,
                     'error': str(e),
                 })
+
+        # Re-enable index sync and rebuild the FAISS index ONCE (only needed if a
+        # site assignment changed — that's the only thing affecting the partition).
+        _signals_mod.suspend_employee_index_sync = False
+        if any_site_changed:
+            try:
+                qs = FaceTemplate.objects.all().select_related('employee').only(
+                    "id", "employee_id", "embedding", "employee__site_id"
+                )
+                tuples = [
+                    (t.id, t.employee_id, t.employee.site_id, np.array(t.embedding, dtype=np.float32))
+                    for t in qs
+                ]
+                ENGINE.rebuild_index(tuples)
+            except Exception:  # noqa: BLE001
+                logger.exception("FAISS rebuild after bulk edit failed")
 
         results['success'] = True
         return Response(results)
