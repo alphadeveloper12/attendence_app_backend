@@ -1641,6 +1641,11 @@
             // Load statuses
             const statusList = document.getElementById('statusDropdown');
             const statusSelect = document.getElementById('employeeStatusSelect');
+            // Preserve the edit modal's current Status before rebuilding options.
+            // loadStats() runs on a 60s timer; without this, a refresh while the
+            // Edit modal is open wipes the options and resets Status to the first
+            // entry ("Active").
+            const prevStatusVal = statusSelect ? statusSelect.value : '';
 
             statusList.innerHTML = `<li><a class="dropdown-item" href="#" onclick="filterStatus('all', 'All Statuses')"><i class="ri-history-line text-secondary"></i> All Statuses</a></li>`;
 
@@ -1655,6 +1660,9 @@
                         statusSelect.appendChild(option);
                     }
                 });
+                // Restore the previous selection so an open edit modal keeps the
+                // right Status across stats refreshes.
+                if (statusSelect && prevStatusVal) statusSelect.value = prevStatusVal;
             }
 
             // Load categories — keep the search input pinned at the top,
