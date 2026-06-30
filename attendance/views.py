@@ -901,6 +901,17 @@ class BulkEditEmployeesView(APIView):
         # Cache for site name lookups (case-insensitive)
         site_cache = {s.name.lower(): s for s in Site.objects.all()}
 
+        # Prefetch every employee referenced in the file in ONE query (instead of
+        # one SELECT per row) — big speedup that helps avoid gateway timeouts on
+        # large department uploads.
+        _all_badges = {
+            str(get(r, 'Badge ID')) for r in rows[1:] if get(r, 'Badge ID')
+        }
+        emp_cache = {
+            str(e.badge_number): e
+            for e in Employee.objects.filter(badge_number__in=_all_badges)
+        }
+
         TERMINAL_STATUSES = {'Resigned', 'Terminated', 'No Renewal', 'Absconding'}
         MASTER_STATUSES = {'Active', 'Leave', 'Resigned', 'Terminated', 'No Renewal', 'Absconding', 'Other'}
 
@@ -926,7 +937,7 @@ class BulkEditEmployeesView(APIView):
                 continue
 
             try:
-                emp = Employee.objects.filter(badge_number=str(badge)).first()
+                emp = emp_cache.get(str(badge))
                 if not emp:
                     results['errors'].append({
                         'row': row_idx, 'badge_number': badge,
