@@ -46,7 +46,7 @@ from .utils import (
     THRESH, MARGIN, get_image_bytes
 )
 from .geofence import check_geofence
-from .models import Employee, Attendance, Site, FaceTemplate, AdminProfile, AppBuild, EmployeeStatusHistory, EmployeeSiteHistory, EmployeeAttachment, EmployeeSalaryHistory, JobCategory, Department, AppSettings, PublicHoliday, DistributionSnapshot
+from .models import Employee, Attendance, Site, FaceTemplate, AdminProfile, AppBuild, EmployeeStatusHistory, EmployeeSiteHistory, EmployeeAttachment, EmployeeSalaryHistory, JobCategory, Department, AppSettings, PublicHoliday, DistributionSnapshot, EmployeeGeneralNote
 from .serializers import *
 from .permissions import IsSiteAdmin
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -9825,3 +9825,76 @@ class SetCheckInView(APIView):
             'check_in': timezone.localtime(a.check_in_time).strftime('%I:%M %p'),
             'late_minutes': a.late_minutes,
         })
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  EMPLOYEE GENERAL NOTES — multiple dated notes per employee
+# ══════════════════════════════════════════════════════════════════════════
+class EmployeeGeneralNotesView(APIView):
+    """List / add / delete general notes for an employee.
+
+    GET    /api/attendance/employees/<id>/general-notes/            → list
+    POST   /api/attendance/employees/<id>/general-notes/            → add: subject, date, note
+    DELETE /api/attendance/employees/<id>/general-notes/?id=<note>  → remove one
+    """
+    permission_classes = [IsAdminUser | IsSiteAdmin]
+
+    def get(self, request, employee_id):
+        try:
+            emp = Employee.objects.get(id=employee_id)
+        except Employee.DoesNotExist:
+            return Response({'error': 'Employee not found'}, status=404)
+        rows = emp.general_notes.select_related('created_by').all()
+        items = [{
+            'id': n.id,
+            'subject': n.subject or '',
+            'date': str(n.date) if n.date else '',
+            'note': n.note or '',
+            'created_at': n.created_at.isoformat() if n.created_at else None,
+            'created_by': n.created_by.username if n.created_by else None,
+        } for n in rows]
+        return Response({'employee_id': emp.id, 'count': len(items), 'notes': items})
+
+    def post(self, request, employee_id):
+        try:
+            emp = Employee.objects.get(id=employee_id)
+        except Employee.DoesNotExist:
+            return Response({'error': 'Employee not found'}, status=404)
+        subject = (request.data.get('subject') or '').strip()
+        note = (request.data.get('note') or '').strip()
+        date_raw = (request.data.get('date') or '').strip()
+        if not subject and not note:
+            return Response({'error': 'Enter a subject or a note.'}, status=400)
+        from datetime import datetime as _dt
+        d = None
+        if date_raw:
+            for fmt in ('%Y-%m-%d', '%d-%m-%Y', '%d/%m/%Y'):
+                try:
+                    d = _dt.strptime(date_raw, fmt).date()
+                    break
+                except ValueError:
+                    continue
+        n = EmployeeGeneralNote.objects.create(
+            employee=emp,
+            subject=(subject[:200] or None),
+            date=d,
+            note=(note or None),
+            created_by=request.user if request.user.is_authenticated else None,
+        )
+        return Response({
+            'success': True, 'id': n.id,
+            'subject': n.subject or '', 'date': str(n.date) if n.date else '',
+            'note': n.note or '', 'created_at': n.created_at.isoformat(),
+            'created_by': n.created_by.username if n.created_by else None,
+        }, status=201)
+
+    def delete(self, request, employee_id):
+        note_id = request.query_params.get('id') or request.data.get('id')
+        if not note_id:
+            return Response({'error': 'Note id is required.'}, status=400)
+        try:
+            n = EmployeeGeneralNote.objects.get(id=note_id, employee_id=employee_id)
+        except EmployeeGeneralNote.DoesNotExist:
+            return Response({'error': 'Note not found'}, status=404)
+        n.delete()
+        return Response({'success': True})

@@ -88,6 +88,7 @@ api_urlpatterns = [
     path('employees/<int:employee_id>/attachments/',     EmployeeAttachmentsView.as_view(),     name='admin-employee-attachments'),
     path('employees/<int:employee_id>/salary-history/',  EmployeeSalaryHistoryView.as_view(),   name='admin-employee-salary-history'),
     path('employees/<int:employee_id>/sick-leave/',      EmployeeSickLeaveView.as_view(),       name='admin-employee-sick-leave'),
+    path('employees/<int:employee_id>/general-notes/',   EmployeeGeneralNotesView.as_view(),    name='admin-employee-general-notes'),
     path('employees/<int:employee_id>/mark-day/',        MarkDayView.as_view(),                 name='admin-employee-mark-day'),
 
     # Job categories + departments (catalogue)
