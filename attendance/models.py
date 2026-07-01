@@ -583,3 +583,19 @@ class DistributionSnapshot(models.Model):
 
     def __str__(self):
         return f"Distribution {self.dist_type} @ {self.date}"
+
+
+class EmployeeGeneralNote(models.Model):
+    """Free-form dated notes for an employee — multiple per employee."""
+    employee   = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name='general_notes')
+    subject    = models.CharField(max_length=200, null=True, blank=True)
+    date       = models.DateField(null=True, blank=True)
+    note       = models.TextField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='general_notes_created')
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Note for {self.employee_id}: {self.subject or ''}"

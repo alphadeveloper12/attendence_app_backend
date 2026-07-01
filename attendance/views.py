@@ -3361,15 +3361,27 @@ class EmployeeListView(APIView):
                 Q(badge_number__icontains=search)
             )
 
-        # Pagination
-        paginator = PageNumberPagination()
-        # Default to a large number if not specified, but dashboard specifically sends per_page
-        paginator.page_size = int(request.GET.get('per_page', 1000))
+        # The huge field is face_embedding (~512 floats/employee). Only the offline
+        # face-sync (has_face=true) or an explicit light=0 actually needs it; every
+        # other caller — including OLD app builds that pull the whole list — now
+        # gets the light payload, so responses drop from ~8 MB to a few hundred KB.
+        _light_raw = str(request.GET.get('light', '')).lower()
+        include_embedding = (request.GET.get('has_face') == 'true') or (_light_raw in ('0', 'false', 'no'))
+        use_light = not include_embedding
 
-        # Light mode (mobile/web lists): skip the heavy face_embedding field both
-        # in the DB query and the response, so big lists load fast.
-        light_mode = str(request.GET.get('light', '')).lower() in ('1', 'true', 'yes')
-        if light_mode:
+        # Pagination — cap list pages hard so no single request can pull thousands
+        # of rows (old apps sent no per_page → 1000). Embedding/sync callers keep
+        # their requested page size so paginated sync still works.
+        try:
+            per_page = int(request.GET.get('per_page', 50))
+        except (ValueError, TypeError):
+            per_page = 50
+        if not include_embedding:
+            per_page = min(per_page, 100)
+        paginator = PageNumberPagination()
+        paginator.page_size = max(1, per_page)
+
+        if use_light:
             employees = employees.defer('face_embedding')
 
         # Attendance Filter (Present / Late / Absent) — applied after other
@@ -3393,7 +3405,7 @@ class EmployeeListView(APIView):
 
         result_page = paginator.paginate_queryset(employees, request)
 
-        serializer_cls = EmployeeListLightSerializer if light_mode else EmployeeSerializer
+        serializer_cls = EmployeeSerializer if include_embedding else EmployeeListLightSerializer
         serializer = serializer_cls(
             result_page,
             many=True,
