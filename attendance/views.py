@@ -7803,10 +7803,20 @@ class AdminDepartmentsView(APIView):
         name = _norm_dept_name(request.data.get('name'))
         if not name:
             return Response({'error': 'Department name is required.'}, status=400)
-        # Case-insensitive dedupe.
+        # Case-insensitive dedupe. Revive a soft-deleted department instead of
+        # erroring (its name is still in the table with is_active=False).
         existing = Department.objects.filter(name__iexact=name).first()
         if existing:
-            return Response({'error': f'Department "{existing.name}" already exists.'}, status=400)
+            if existing.is_active:
+                return Response({'error': f'Department "{existing.name}" already exists.'}, status=400)
+            existing.is_active = True
+            if request.data.get('manager_name') is not None:
+                existing.manager_name = _norm_dept_name(request.data.get('manager_name')) or None
+            existing.save(update_fields=['is_active', 'manager_name'])
+            return Response({
+                'success': True, 'id': existing.id, 'name': existing.name,
+                'manager_name': existing.manager_name or '', 'is_active': True,
+            }, status=200)
         manager = _norm_dept_name(request.data.get('manager_name')) or None
         from django.db.models import Max as _Max
         order = Department.objects.aggregate(m=_Max('sheet_order'))['m'] or 0
@@ -7916,10 +7926,29 @@ class AdminPositionsView(APIView):
         emp_type = (request.data.get('employee_type') or 'worker').strip().lower()
         if emp_type not in ('staff', 'worker', 'resource'):
             emp_type = 'worker'
-        # Case-insensitive dedupe within the same employee_type.
+        # Case-insensitive dedupe within the same employee_type. The DB also has a
+        # unique_together(name, employee_type), so even a SOFT-DELETED clash would
+        # block a fresh insert. If the clash is active → error; if it was deleted →
+        # revive it and reassign it to this department (that's what "add again" means).
         clash = JobCategory.objects.filter(name__iexact=name, employee_type=emp_type).first()
         if clash:
-            return Response({'error': f'Position "{clash.name}" already exists under {clash.get_employee_type_display()}.'}, status=400)
+            if clash.is_active:
+                where = f" under {clash.department_fk.name}" if clash.department_fk else ""
+                return Response(
+                    {'error': f'Position "{clash.name}" ({clash.get_employee_type_display()}) already exists{where}.'},
+                    status=400,
+                )
+            clash.is_active = True
+            clash.name = name
+            clash.department = dept.name if dept else None
+            clash.department_fk = dept
+            clash.save(update_fields=['is_active', 'name', 'department', 'department_fk'])
+            return Response({
+                'success': True, 'id': clash.id, 'name': clash.name,
+                'employee_type': clash.employee_type,
+                'department_id': dept.id if dept else None,
+                'department_name': dept.name if dept else '',
+            }, status=200)
         from django.db.models import Max as _Max
         order = JobCategory.objects.aggregate(m=_Max('sheet_order'))['m'] or 0
         p = JobCategory.objects.create(
