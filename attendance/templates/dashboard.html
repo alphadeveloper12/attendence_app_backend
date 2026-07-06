@@ -160,9 +160,11 @@
         </div>
     </div>
     <div class="d-flex gap-2 align-items-center">
+        {% if can_write %}
         <button onclick="openAddModal()" class="btn-modern btn-modern--primary">
             <i class="ri-user-add-line"></i> Add Employee
         </button>
+        {% endif %}
     </div>
 </div>
 
@@ -242,24 +244,30 @@
         <button onclick="openBuildModal()" class="btn-modern btn-modern--ghost">
             <i class="ri-smartphone-line"></i> Update App Build
         </button>
+        {% if can_write %}
         <button onclick="openImportModal()" class="btn-modern btn-modern--ghost">
             <i class="ri-file-upload-line"></i> Import Employees
         </button>
+        {% endif %}
         <a href="{% url 'download-employee-template' %}" class="btn-modern btn-modern--ghost">
             <i class="ri-file-text-line"></i> Download Template
         </a>
+        {% if can_write %}
         <button onclick="openBulkEditModal()" class="btn-modern btn-modern--ghost">
             <i class="ri-edit-2-line"></i> Edit in Bulk
         </button>
+        {% endif %}
     </div>
     <!-- Bulk Actions (visible when rows are selected) -->
     <div id="bulkActions" class="d-none d-flex gap-2">
         <button onclick="downloadSelected()" class="btn-modern btn-modern--success">
             <i class="ri-file-excel-2-line"></i> Download Selected (<span id="selectedCountDl">0</span>)
         </button>
+        {% if can_write %}
         <button onclick="bulkDelete()" class="btn-modern btn-modern--danger">
             <i class="ri-delete-bin-line"></i> Delete Selected (<span id="selectedCount">0</span>)
         </button>
+        {% endif %}
     </div>
 </div>
 
@@ -1487,6 +1495,7 @@
     src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDSFQyDq5VpsbAXjsie3xZKvah0__PCyBc&libraries=geometry"></script>
 <script>
     // Gross-salary formula + currency, configured in Settings → Salary.
+    const isReadonly = {% if is_readonly %}true{% else %}false{% endif %};
     const GROSS_FORMULA = {{ app_settings.gross_formula|default:"{}"|safe }};
     const CURRENCY_CODE = "{{ currency_code|default:'AED' }}";
 
@@ -2101,10 +2110,10 @@
                     </td>
                     <td style="text-align: right; padding-right: 1.25rem;">
                         <div class="row-actions">
-                            <button onclick="editEmployee(${emp.id})" title="Edit"><i class="ri-edit-line"></i></button>
+                            ${isReadonly ? '' : `<button onclick="editEmployee(${emp.id})" title="Edit"><i class="ri-edit-line"></i></button>`}
                             <a href="/api/attendance/dashboard/user/${emp.id}/" title="Report"><i class="ri-file-chart-line"></i></a>
                             <button onclick="viewEmployee(${emp.id})" title="Quick View"><i class="ri-eye-line"></i></button>
-                            <button class="row-danger" onclick="deleteSingle(${emp.id}, '${_esc(emp.name).replace(/'/g,"\\'")}')" title="Delete"><i class="ri-delete-bin-line"></i></button>
+                            ${isReadonly ? '' : `<button class="row-danger" onclick="deleteSingle(${emp.id}, '${_esc(emp.name).replace(/'/g,"\\'")}')" title="Delete"><i class="ri-delete-bin-line"></i></button>`}
                         </div>
                     </td>
                 </tr>`).join('');

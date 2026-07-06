@@ -361,7 +361,14 @@
                             </button>
                         </div>
                     </div>
-                    <div class="mb-0">
+                    <div class="mb-4">
+                        <label class="form-label-premium">Role</label>
+                        <select name="role" id="addRole" class="form-control form-control-premium" onchange="toggleSitesForRole('add')">
+                            <option value="site_admin">Site Admin — can edit, limited to assigned sites</option>
+                            <option value="viewer">Read-only Viewer — sees all sites, cannot add/edit/delete</option>
+                        </select>
+                    </div>
+                    <div class="mb-0" id="addSitesWrap">
                         <label class="form-label-premium">Assigned Regional Sites</label>
                         <div class="multi-select-container" id="addSiteContainer">
                             <div class="multi-select-input-box" onclick="focusSearch('add')">
@@ -420,7 +427,14 @@
                             </button>
                         </div>
                     </div>
-                    <div class="mb-0">
+                    <div class="mb-4">
+                        <label class="form-label-premium">Role</label>
+                        <select name="role" id="editRole" class="form-control form-control-premium" onchange="toggleSitesForRole('edit')">
+                            <option value="site_admin">Site Admin — can edit, limited to assigned sites</option>
+                            <option value="viewer">Read-only Viewer — sees all sites, cannot add/edit/delete</option>
+                        </select>
+                    </div>
+                    <div class="mb-0" id="editSitesWrap">
                         <label class="form-label-premium">Regional Site Alignments</label>
                         <div class="multi-select-container" id="editSiteContainer">
                             <div class="multi-select-input-box" onclick="focusSearch('edit')">
@@ -686,13 +700,16 @@
                     </div>
                 </td>
                 <td>
+                    <span class="badge ${a.role === 'viewer' ? 'bg-info bg-opacity-10 text-info' : 'bg-primary bg-opacity-10 text-primary'} me-1" style="font-weight:600;">
+                        ${a.role_display || 'Site Admin'}
+                    </span>
                     <span class="site-tag-badge shadow-sm">
                         <i class="ri-map-pin-5-line"></i> ${a.site_name}
                     </span>
                 </td>
                 <td class="text-end pe-4">
                     <div class="d-flex gap-2 justify-content-end">
-                        <button onclick="showEditModal('${a.id}', '${a.username.replace(/'/g, "\\'")}', '${a.email.replace(/'/g, "\\'")}', ${JSON.stringify(a.site_ids)})" class="btn btn-sm btn-pro">
+                        <button onclick="showEditModal('${a.id}', '${a.username.replace(/'/g, "\\'")}', '${a.email.replace(/'/g, "\\'")}', ${JSON.stringify(a.site_ids)}, '${a.role || 'site_admin'}')" class="btn btn-sm btn-pro">
                             <i class="ri-user-settings-line"></i> Modify
                         </button>
                         <button onclick="confirmDeleteAdmin('${a.id}', '${a.username.replace(/'/g, "\\'")}')" class="btn btn-sm btn-pro text-danger">
@@ -708,23 +725,34 @@
     const addModal = new bootstrap.Modal(document.getElementById('addModal'));
     const editModal = new bootstrap.Modal(document.getElementById('editModal'));
 
+    // Viewers see ALL sites, so the per-site picker is irrelevant for them.
+    function toggleSitesForRole(mode) {
+        const role = document.getElementById(`${mode}Role`).value;
+        const wrap = document.getElementById(`${mode}SitesWrap`);
+        if (wrap) wrap.style.display = (role === 'viewer') ? 'none' : '';
+    }
+
     function showAddModal() {
         selectedSitesAdd.clear();
         renderSelectedTags('add');
         updateHiddenInputs('add');
         filterDropdown('add');
+        document.getElementById('addRole').value = 'site_admin';
+        toggleSitesForRole('add');
         addModal.show();
     }
 
-    function showEditModal(id, username, email, siteIds) {
+    function showEditModal(id, username, email, siteIds, role) {
         document.getElementById('editAdminId').value = id;
         document.getElementById('editUsername').value = username;
         document.getElementById('editEmail').value = email;
+        document.getElementById('editRole').value = role || 'site_admin';
 
         selectedSitesEdit = new Set(siteIds.map(sid => parseInt(sid)));
         renderSelectedTags('edit');
         updateHiddenInputs('edit');
         filterDropdown('edit');
+        toggleSitesForRole('edit');
 
         editModal.show();
     }

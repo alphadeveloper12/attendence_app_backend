@@ -570,7 +570,7 @@
                         <div style="font-weight:600; font-size:0.875rem; color: var(--text-strong); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
                             {{ user.username }}
                         </div>
-                        <div style="font-size:0.7rem; color: var(--text-muted);">{% if user.is_superuser %}Super Admin{% else %}Admin{% endif %}</div>
+                        <div style="font-size:0.7rem; color: var(--text-muted);">{% if user.is_superuser %}Super Admin{% elif is_readonly %}Read-only Viewer{% else %}Admin{% endif %}</div>
                     </div>
                 </div>
                 <a href="{% url 'admin-logout' %}" class="btn-modern btn-modern--ghost" style="width:100%; justify-content:center;">
@@ -593,6 +593,11 @@
                     aria-label="Open menu">
                 <i class="ri-menu-line"></i>
             </button>
+            {% endif %}
+            {% if is_readonly %}
+            <div class="mb-3 px-3 py-2 rounded" style="background: var(--warning-soft, #fef3c7); color:#b45309; font-size:0.8rem; font-weight:600; display:flex; align-items:center; gap:0.5rem;">
+                <i class="ri-eye-line"></i> Read-only access — you can view everything but cannot add, edit, or delete.
+            </div>
             {% endif %}
             {% block content %}{% endblock %}
         </main>

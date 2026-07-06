@@ -24,12 +24,27 @@ class Site(models.Model):
         return self.name
 
 class AdminProfile(models.Model):
+    # Roles for non-superuser admins. Superusers don't need a profile.
+    ROLE_SITE_ADMIN = 'site_admin'   # scoped to assigned sites, can edit within them
+    ROLE_VIEWER     = 'viewer'       # read-only, sees ALL sites, no add/edit/delete
+    ROLE_CHOICES = [
+        (ROLE_SITE_ADMIN, 'Site Admin'),
+        (ROLE_VIEWER, 'Read-only Viewer'),
+    ]
+
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='admin_profile')
     sites = models.ManyToManyField(Site, blank=True, related_name='admin_profiles')
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default=ROLE_SITE_ADMIN)
+
+    @property
+    def is_readonly(self):
+        """Viewers can see everything but cannot modify anything."""
+        return self.role == self.ROLE_VIEWER
 
     def __str__(self):
         site_names = ", ".join([s.name for s in self.sites.all()])
-        return f"{self.user.username} - {site_names if site_names else 'No Sites'}"
+        role = dict(self.ROLE_CHOICES).get(self.role, self.role)
+        return f"{self.user.username} [{role}] - {site_names if site_names else 'All / No Sites'}"
 
 class Employee(models.Model):
     name = models.CharField(max_length=100)

@@ -4758,9 +4758,14 @@ def admin_site_admins_view(request):
                 'id': admin.user.id,
                 'username': admin.user.username,
                 'email': admin.user.email,
+                'role': admin.role,
+                'role_display': dict(AdminProfile.ROLE_CHOICES).get(admin.role, admin.role),
                 'site_id': first_site.id if first_site else '', # Kept for basic compat
                 'site_ids': list(assigned_sites.values_list('id', flat=True)),
-                'site_name': ", ".join([s.name for s in assigned_sites]) if assigned_sites.exists() else 'No Site'
+                'site_name': (
+                    'All sites' if admin.role == AdminProfile.ROLE_VIEWER
+                    else (", ".join([s.name for s in assigned_sites]) if assigned_sites.exists() else 'No Site')
+                ),
             })
             
         return JsonResponse({
@@ -4784,25 +4789,32 @@ def admin_add_site_admin(request):
     username = request.POST.get("username")
     email = request.POST.get("email")
     password = request.POST.get("password")
+    role = request.POST.get("role") or AdminProfile.ROLE_SITE_ADMIN
+    if role not in (AdminProfile.ROLE_SITE_ADMIN, AdminProfile.ROLE_VIEWER):
+        role = AdminProfile.ROLE_SITE_ADMIN
     site_ids = request.POST.getlist("sites")
-    
-    if not (username and email and password and site_ids):
+
+    # Viewers see ALL sites, so they don't pick any. Site admins must.
+    if not (username and email and password):
         return redirect("admin-site-admins")
-        
+    if role == AdminProfile.ROLE_SITE_ADMIN and not site_ids:
+        return redirect("admin-site-admins")
+
     try:
         with transaction.atomic():
             if User.objects.filter(username=username).exists():
-                 # Handle error
-                 pass
-            
+                return redirect("admin-site-admins")
+
             user = User.objects.create_user(username=username, email=email, password=password)
             user.is_staff = True
             user.save()
-            
-            sites = Site.objects.filter(id__in=site_ids)
-            profile = AdminProfile.objects.create(user=user)
-            profile.sites.set(sites)
-            
+
+            profile = AdminProfile.objects.create(user=user, role=role)
+            if role == AdminProfile.ROLE_VIEWER:
+                profile.sites.set(Site.objects.all())   # all sites → sees everything
+            else:
+                profile.sites.set(Site.objects.filter(id__in=site_ids))
+
         return redirect("admin-site-admins")
     except Exception as e:
         print(f"Error adding site admin: {e}")
@@ -4821,7 +4833,10 @@ def admin_edit_site_admin(request, admin_id):
     email = request.POST.get("email")
     site_ids = request.POST.getlist("sites")
     password = request.POST.get("password") # Optional
-    
+    role = request.POST.get("role") or AdminProfile.ROLE_SITE_ADMIN
+    if role not in (AdminProfile.ROLE_SITE_ADMIN, AdminProfile.ROLE_VIEWER):
+        role = AdminProfile.ROLE_SITE_ADMIN
+
     try:
         with transaction.atomic():
             user.username = username
@@ -4829,13 +4844,16 @@ def admin_edit_site_admin(request, admin_id):
             if password:
                 user.set_password(password)
             user.save()
-            
-            # Update or create profile
-            sites = Site.objects.filter(id__in=site_ids)
+
+            # Update or create profile + role. Viewers get all sites.
             profile, created = AdminProfile.objects.get_or_create(user=user)
-            profile.sites.set(sites)
+            profile.role = role
             profile.save()
-            
+            if role == AdminProfile.ROLE_VIEWER:
+                profile.sites.set(Site.objects.all())
+            else:
+                profile.sites.set(Site.objects.filter(id__in=site_ids))
+
         return redirect("admin-site-admins")
     except Exception as e:
         print(f"Error editing site admin: {e}")
