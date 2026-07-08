@@ -104,6 +104,7 @@ class Employee(models.Model):
     passport_expiry = models.DateField(null=True, blank=True)
     visa_details = models.CharField(max_length=100, null=True, blank=True)
     visa_expiry_date = models.DateField(null=True, blank=True)
+    labour_card_expiry = models.DateField(null=True, blank=True)
     status = models.CharField(max_length=50, null=True, blank=True)  # Active, Leave, Resigned, Terminated, No Renewal, Absconding, Other
     resumption_date = models.DateField(null=True, blank=True)    # Set when employee returns from Leave → Active
     last_working_date = models.DateField(null=True, blank=True)  # Set when employee leaves: Resigned/Terminated/No Renewal/Absconding
@@ -153,6 +154,11 @@ class Employee(models.Model):
     eos_subject = models.CharField(max_length=150, null=True, blank=True)
     eos_date    = models.DateField(null=True, blank=True)
     eos_note    = models.TextField(null=True, blank=True)
+
+    # ── Passport Control (note block, mirrors the Employment-Status note) ──────
+    passport_control_subject = models.CharField(max_length=150, null=True, blank=True)
+    passport_control_date    = models.DateField(null=True, blank=True)
+    passport_control_note    = models.TextField(null=True, blank=True)
 
     def __str__(self):
         return self.name

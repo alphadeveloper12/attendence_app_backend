@@ -1050,14 +1050,30 @@
                                 <div class="col-md-12 mt-4">
                                     <h6 class="fw-bold small text-primary text-uppercase">Labour Card Details</h6>
                                 </div>
-                                <div class="col-md-6"><label
+                                <div class="col-md-4"><label
                                         class="form-label small fw-bold text-secondary text-uppercase"
                                         style="font-size: 0.65rem;">L.Card/CEC Nr.</label><input type="text"
                                         name="labor_card_number" class="form-control form-control-modern"></div>
-                                <div class="col-md-6"><label
+                                <div class="col-md-4"><label
+                                        class="form-label small fw-bold text-secondary text-uppercase"
+                                        style="font-size: 0.65rem;">Labour Card Expiry</label><input type="date"
+                                        name="labour_card_expiry" class="form-control form-control-modern"></div>
+                                <div class="col-md-4"><label
                                         class="form-label small fw-bold text-secondary text-uppercase"
                                         style="font-size: 0.65rem;">Personal Nr. (MOL ID)</label><input type="text"
                                         name="mol_id" class="form-control form-control-modern"></div>
+
+                                <!-- Passport Control — note block (subject / date / note) -->
+                                <div class="col-12 mt-4">
+                                    <h6 class="fw-bold small text-primary text-uppercase"><i class="ri-passport-line"></i> Passport Control</h6>
+                                </div>
+                                <div class="col-md-6"><label class="form-label small fw-bold text-secondary text-uppercase" style="font-size:0.65rem;">Subject</label>
+                                    <input type="text" name="passport_control_subject" class="form-control form-control-modern" placeholder="e.g. Held for renewal, With PRO"></div>
+                                <div class="col-md-6"><label class="form-label small fw-bold text-secondary text-uppercase" style="font-size:0.65rem;">Date</label>
+                                    <input type="date" name="passport_control_date" class="form-control form-control-modern"></div>
+                                <div class="col-12"><label class="form-label small fw-bold text-secondary text-uppercase" style="font-size:0.65rem;">Note</label>
+                                    <textarea name="passport_control_note" rows="2" class="form-control form-control-modern" placeholder="Passport control note…"></textarea></div>
+
                                 <div class="col-12 mt-3">
                                     <div class="alert alert-info py-2 px-3 small mb-0">
                                         <i class="ri-information-line me-1"></i>
@@ -1379,6 +1395,9 @@
                     <strong>Every column is independent</strong> — you can update any single column
                     (e.g. just Passport Expiry, or just Leave Start Date) without filling the others.
                     Dates use <strong>DD-MM-YYYY</strong> format.
+                    You can also update <strong>Visa Expiry</strong>, <strong>Labour Card Expiry</strong>,
+                    <strong>WC &amp; Medical Insurance</strong> (name, status, dates, premium, card number),
+                    and the <strong>Passport Control</strong> note (subject / date / note).
                     Full salary breakdown (Basic, Accommodation, Transport, Food, Fixed OT, Others,
                     Reduction, Gross) can be updated here — these apply for super admins only.
                     The template includes two <strong>SAMPLE</strong> rows showing the format;

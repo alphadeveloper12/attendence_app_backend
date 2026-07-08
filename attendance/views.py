@@ -643,9 +643,11 @@ BULK_EDIT_COLUMNS = [
     'Date of Birth',            # YYYY-MM-DD
     'Date of Joining',          # YYYY-MM-DD
     'Passport Number',
-    'Passport Expiry',          # YYYY-MM-DD
+    'Passport Expiry',          # DD-MM-YYYY
     'Visa Details',
+    'Visa Expiry',              # DD-MM-YYYY
     'L.Card/CEC Nr',
+    'Labour Card Expiry',       # DD-MM-YYYY
     'MOL ID',
     'Housing Camp',
     'Transportation',
@@ -668,6 +670,23 @@ BULK_EDIT_COLUMNS = [
     'Other Allowance',
     'Salary Reduction',
     'Gross Salary',
+    # Insurance — WC (Workmen's Compensation)
+    'WC Insurance Name',
+    'WC Insurance Status',       # Active / To be added / To be cancelled / Not Applicable
+    'WC Insurance Start',        # DD-MM-YYYY
+    'WC Insurance End',          # DD-MM-YYYY
+    'WC Premium Cost',
+    # Insurance — Medical
+    'Medical Insurance Name',
+    'Medical Card Number',
+    'Medical Insurance Status',  # Active / To be added / To be cancelled / Not Applicable
+    'Medical Insurance Start',   # DD-MM-YYYY
+    'Medical Insurance End',     # DD-MM-YYYY
+    'Medical Premium Cost',
+    # Passport Control — note block (subject / date / note)
+    'Passport Control Subject',
+    'Passport Control Date',     # DD-MM-YYYY
+    'Passport Control Note',
 ]
 
 
@@ -773,16 +792,34 @@ class BulkEditEmployeesView(APIView):
         'MOL ID': 'mol_id',
         'Housing Camp': 'camp',
         'Transportation': 'transportation',
+        # Insurance (text)
+        'WC Insurance Name': 'wc_insurance_name',
+        'WC Insurance Status': 'wc_insurance_status',
+        'Medical Insurance Name': 'medical_insurance_name',
+        'Medical Card Number': 'medical_insurance_card_number',
+        'Medical Insurance Status': 'medical_insurance_status',
+        # Passport control (text)
+        'Passport Control Subject': 'passport_control_subject',
+        'Passport Control Note': 'passport_control_note',
     }
     _DATE_FIELD_MAP = {
         'Date of Birth': 'date_of_birth',
         'Date of Joining': 'date_of_joining',
         'Passport Expiry': 'passport_expiry',
+        'Visa Expiry': 'visa_expiry_date',
+        'Labour Card Expiry': 'labour_card_expiry',
         'Resumption Date': 'resumption_date',
         'Last Working Date': 'last_working_date',
         'Leave Approval Date': 'leave_approval_date',
         'Leave Start Date': 'leave_start_date',
         'Leave End Date': 'leave_end_date',
+        # Insurance dates
+        'WC Insurance Start': 'wc_insurance_start_date',
+        'WC Insurance End': 'wc_insurance_end_date',
+        'Medical Insurance Start': 'medical_insurance_start_date',
+        'Medical Insurance End': 'medical_insurance_end_date',
+        # Passport control date
+        'Passport Control Date': 'passport_control_date',
     }
     _DECIMAL_FIELD_MAP = {
         'Basic Salary': 'basic_salary',
@@ -794,6 +831,9 @@ class BulkEditEmployeesView(APIView):
         'Salary Reduction': 'salary_reduction',
         'Gross Salary': 'gross_salary',
         'Leave Ticket Price': 'leave_ticket_price',
+        # Insurance premiums (not salary — applied for all admins)
+        'WC Premium Cost': 'wc_insurance_premium_cost',
+        'Medical Premium Cost': 'medical_insurance_premium_cost',
     }
     # All salary-component fields are restricted to superusers on import.
     _SALARY_FIELDS = {
@@ -1406,6 +1446,10 @@ class AdminEditEmployeeView(APIView):
                 'eos_subject': emp.eos_subject or '',
                 'eos_date': str(emp.eos_date) if emp.eos_date else '',
                 'eos_note': emp.eos_note or '',
+                'labour_card_expiry': str(emp.labour_card_expiry) if emp.labour_card_expiry else '',
+                'passport_control_subject': emp.passport_control_subject or '',
+                'passport_control_date': str(emp.passport_control_date) if emp.passport_control_date else '',
+                'passport_control_note': emp.passport_control_note or '',
             }
             if request.user.is_superuser:
                 data['gross_salary'] = str(emp.gross_salary) if emp.gross_salary else ''
@@ -1641,6 +1685,12 @@ class AdminEditEmployeeView(APIView):
             if 'eos_subject' in data: emp.eos_subject = _txt('eos_subject')
             if 'eos_date' in data:    emp.eos_date = parse_date(data.get('eos_date'))
             if 'eos_note' in data:    emp.eos_note = _txt('eos_note')
+
+            # ── Labour card expiry + Passport Control note ───────────────────
+            if 'labour_card_expiry' in data:       emp.labour_card_expiry = parse_date(data.get('labour_card_expiry'))
+            if 'passport_control_subject' in data: emp.passport_control_subject = _txt('passport_control_subject')
+            if 'passport_control_date' in data:    emp.passport_control_date = parse_date(data.get('passport_control_date'))
+            if 'passport_control_note' in data:    emp.passport_control_note = _txt('passport_control_note')
 
             emp.save()
 

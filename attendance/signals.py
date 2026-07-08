@@ -1,8 +1,22 @@
 from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
-from .models import FaceTemplate, Employee
+from .models import FaceTemplate, Employee, Site, AdminProfile
 from .engine import ENGINE
 import numpy as np
+
+
+@receiver(post_save, sender=Site)
+def add_new_site_to_viewers(sender, instance, created, **kwargs):
+    """Read-only Viewers are scoped to ALL sites (that's how they see everything).
+    When a new site is created, attach it to every viewer so their view stays
+    complete without any per-endpoint scoping changes."""
+    if not created:
+        return
+    try:
+        for prof in AdminProfile.objects.filter(role=AdminProfile.ROLE_VIEWER):
+            prof.sites.add(instance)
+    except Exception:
+        pass
 
 @receiver(post_save, sender=FaceTemplate)
 def update_index_on_save(sender, instance, **kwargs):
