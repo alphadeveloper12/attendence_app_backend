@@ -970,22 +970,29 @@
                                 <div class="col-md-4"><label
                                         class="form-label small fw-bold text-secondary text-uppercase"
                                         style="font-size: 0.65rem;">Working Type</label>
-                                    <select name="working_type" class="form-select form-select-modern">
+                                    <select name="working_type" id="workingTypeSelect"
+                                            class="form-select form-select-modern">
                                         <option value="">— Select —</option>
-                                        <option value="Permanent">Permanent</option>
+                                        <option value="Regular">Regular</option>
+                                        <option value="Budget">Budget</option>
                                         <option value="Contract">Contract</option>
-                                        <option value="Temporary">Temporary</option>
+                                        <option value="Certified">Certified</option>
                                     </select>
                                 </div>
                                 <div class="col-md-4"><label
                                         class="form-label small fw-bold text-secondary text-uppercase"
                                         style="font-size: 0.65rem;">Working Shift</label>
-                                    <select name="working_shift" class="form-select form-select-modern">
+                                    <select name="working_shift" id="workingShiftSelect"
+                                            class="form-select form-select-modern">
                                         <option value="">— Select —</option>
                                         <option value="Day">Day</option>
                                         <option value="Night">Night</option>
                                         <option value="Rotating">Rotating</option>
                                     </select>
+                                    <div class="form-text small" id="workingShiftHint"
+                                         style="font-size:0.65rem; display:none;">
+                                        Shift applies to Regular workers only.
+                                    </div>
                                 </div>
                                 <div class="col-md-4"><label
                                         class="form-label small fw-bold text-secondary text-uppercase"
@@ -2774,12 +2781,30 @@
             loadGeneralNotes(empId);
             // Derive Gross from the loaded components so the read-only field is correct
             recalcGrossSalary();
+            syncWorkingShiftState();
         } catch (e) {
             alert("Failed to load employee data.");
         } finally {
             if (overlay) overlay.style.display = 'none';
         }
     }
+
+    // Working Shift (Day / Night / Rotating) only means something for Regular
+    // workers. Budget and Contract workers are not shift-based, so the field is
+    // disabled and forced blank for them.
+    function syncWorkingShiftState() {
+        const type = document.getElementById('workingTypeSelect');
+        const shift = document.getElementById('workingShiftSelect');
+        const hint = document.getElementById('workingShiftHint');
+        if (!type || !shift) return;
+        const isRegular = type.value === 'Regular';
+        shift.disabled = !isRegular;
+        if (!isRegular) shift.value = '';
+        if (hint) hint.style.display = isRegular ? 'none' : 'block';
+    }
+    document.addEventListener('change', e => {
+        if (e.target && e.target.id === 'workingTypeSelect') syncWorkingShiftState();
+    });
 
     // Gross Salary is the signed sum of its components. Each component's sign
     // (+1 add / -1 subtract / 0 ignore) is configured in Settings → Salary and
@@ -3494,6 +3519,7 @@
         originalEmployeeStatus = null; // No original — adding new employee
         toggleResumptionDate('Active'); // Always hidden when adding new
         recalcGrossSalary(); // Reset the read-only Gross field to 0.00
+        syncWorkingShiftState();
         const _ov = document.getElementById('editLoadingOverlay');
         if (_ov) _ov.style.display = 'none'; // No async load for Add New
         addModal.show();

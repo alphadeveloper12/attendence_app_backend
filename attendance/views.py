@@ -652,8 +652,8 @@ BULK_EDIT_COLUMNS = [
     'Emirates ID',              # 784-YYYY-NNNNNNN-C
     'Housing Camp',
     'Transportation',
-    'Working Type',             # Permanent / Contract / Temporary
-    'Working Shift',            # Day / Night / Rotating
+    'Working Type',             # Regular / Budget / Contract / Certified
+    'Working Shift',            # Day / Night / Rotating — Regular workers only
     # Status-conditional fields — fill these only when the Status column changes
     'Resumption Date',          # required when leaving Leave → Active
     'Last Working Date',        # required for any terminal status
@@ -1013,6 +1013,10 @@ class BulkEditEmployeesView(APIView):
                     v = get(row, col_name)
                     if v is not None:
                         setattr(emp, field_name, v)
+
+                # Shift only applies to Regular workers — Budget/Contract stay blank.
+                if emp.working_type and emp.working_type != Employee.WORKING_TYPE_REGULAR:
+                    emp.working_shift = None
 
                 # ── Date fields (each applied independently) ──────────────────
                 date_overrides = {}
@@ -1611,6 +1615,9 @@ class AdminEditEmployeeView(APIView):
                 emp.working_type = (data.get('working_type') or '').strip() or None
             if 'working_shift' in data:
                 emp.working_shift = (data.get('working_shift') or '').strip() or None
+            # Shift is a Regular-worker concept only — Budget and Contract stay blank.
+            if emp.working_type != Employee.WORKING_TYPE_REGULAR:
+                emp.working_shift = None
             emp.job_description = data.get('job_description')
             emp.sponsor = data.get('sponsor')
             new_employer = data.get('employer')
@@ -5448,6 +5455,37 @@ def site_map_on_date(employees, on_date):
     return out
 
 
+def working_map_on_date(employees, on_date):
+    """{employee_id: (working_type, working_shift)} — the arrangement in effect on `on_date`.
+
+    Each transfer snapshots the worker's type/shift, so a report for an older
+    date shows what they were on back then rather than their current setup.
+    Falls back to the employee's current values when there's no history (or when
+    the history row predates the fields being captured).
+    """
+    from collections import defaultdict
+    hist = defaultdict(list)
+    qs = (EmployeeSiteHistory.objects
+          .filter(employee__in=employees)
+          .order_by('effective_from', 'id'))
+    for h in qs:
+        hist[h.employee_id].append(h)
+
+    out = {}
+    for emp in employees:
+        snap = None
+        for h in hist.get(emp.id, []):
+            if h.effective_from <= on_date:
+                # Only take the snapshot if it actually recorded something —
+                # transfers made before this feature existed have both blank.
+                if h.working_type or h.working_shift:
+                    snap = (h.working_type, h.working_shift)
+            else:
+                break
+        out[emp.id] = snap or (emp.working_type, emp.working_shift)
+    return out
+
+
 @login_required
 def admin_reports_view(request):
     """
@@ -5557,6 +5595,8 @@ def export_reports_view(request):
     employees = list(employees.select_related('site'))
     # Site the employee actually belonged to on this date (honours transfers).
     site_on_date = site_map_on_date(employees, selected_date)
+    # Working type/shift as captured at the transfer that was in effect that day.
+    working_on_date = working_map_on_date(employees, selected_date)
 
     attendance_records = Attendance.objects.filter(
         date=selected_date,
@@ -5580,6 +5620,8 @@ def export_reports_view(request):
         _day_site = site_on_date.get(emp.id) or emp.site
         site_name = _day_site.name if _day_site else '-'
         position_name = emp.position or '-'
+        _day_working_type, _day_working_shift = working_on_date.get(
+            emp.id, (emp.working_type, emp.working_shift))
 
         if att:
             # A real punch wins, unless the day was explicitly marked sick/leave.
@@ -5613,8 +5655,8 @@ def export_reports_view(request):
                 site_name,
                 emp.camp or '-',
                 emp.transportation or '-',
-                emp.working_type or '-',
-                emp.working_shift or '-',
+                _day_working_type or '-',
+                _day_working_shift or '-',
                 selected_date,
                 status,
                 check_in,
@@ -6989,9 +7031,14 @@ class AttendanceReportDataView(APIView):
         # Schedule lookup for "expected check-out" calc
         eod_threshold = now_local - timedelta(hours=6)  # any check-in older than 6h with no check-out is "missing"
 
+        # Working type/shift as it stood on this date (captured at each transfer).
+        working_on_date = working_map_on_date(employees, selected_date)
+
         for emp in employees:
             att = attendance_map.get(emp.id)
             site_name = emp.site.name if emp.site else '-'
+            day_working_type, day_working_shift = working_on_date.get(
+                emp.id, (emp.working_type, emp.working_shift))
             site_key  = emp.site_id or 0
             dept_name = (emp.department or 'Unassigned').strip() or 'Unassigned'
             cat_name  = (emp.category or 'unspecified').strip().lower()
@@ -7094,8 +7141,8 @@ class AttendanceReportDataView(APIView):
                 'profile_picture': emp.profile_picture.url if emp.profile_picture else None,
                 'site': site_name,
                 'site_id': emp.site.id if emp.site else None,
-                'working_type': emp.working_type or '',
-                'working_shift': emp.working_shift or '',
+                'working_type': day_working_type or '',
+                'working_shift': day_working_shift or '',
                 'status': status,
                 'check_in': check_in,
                 'check_out': check_out,

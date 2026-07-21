@@ -125,10 +125,14 @@ class Employee(models.Model):
         ('personal', 'Personal'),
     ])
     # How the worker is engaged and which shift they run.
+    # Working shift only applies to Regular staff — Budget and Contract workers
+    # are not shift-based, so the field is left blank for them.
+    WORKING_TYPE_REGULAR = 'Regular'
     working_type = models.CharField(max_length=30, null=True, blank=True, choices=[
-        ('Permanent', 'Permanent'),
+        ('Regular', 'Regular'),
+        ('Budget', 'Budget'),
         ('Contract', 'Contract'),
-        ('Temporary', 'Temporary'),
+        ('Certified', 'Certified'),
     ])
     working_shift = models.CharField(max_length=20, null=True, blank=True, choices=[
         ('Day', 'Day'),
