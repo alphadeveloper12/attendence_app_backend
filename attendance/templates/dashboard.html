@@ -410,7 +410,14 @@
                 <i class="ri-login-circle-line"></i> Missing Check-In
                 <span class="pill" style="background:var(--warning-soft,#fef3c7); color:#b45309;" id="missingCheckinCount">0</span>
             </h3>
-            <div class="small text-secondary">Employees who checked out without a check-in. Add the missing time below.</div>
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <span class="small text-secondary" id="missingCheckinShown"></span>
+                <button type="button" class="btn-modern btn-modern--success" style="padding:0.35rem 0.75rem; font-size:0.8rem;"
+                        onclick="downloadMissingCheckin()" title="Download this list as Excel">
+                    <i class="ri-file-excel-2-line"></i> Download
+                </button>
+            </div>
+            <div class="small text-secondary w-100 mt-1">Employees who checked out without a check-in — follows the selected site. Add the missing time below.</div>
         </div>
         <div id="missingCheckinContainer" class="p-3" style="max-height: 380px; overflow-y: auto;">
             <div class="empty-state" style="padding: 1rem;">Loading…</div>
@@ -960,11 +967,36 @@
                                         {% for emp in app_settings.employers %}<option value="{{ emp }}">{{ emp }}</option>{% endfor %}
                                     </select>
                                 </div>
-                                <div class="col-md-6"><label
+                                <div class="col-md-4"><label
+                                        class="form-label small fw-bold text-secondary text-uppercase"
+                                        style="font-size: 0.65rem;">Working Type</label>
+                                    <select name="working_type" class="form-select form-select-modern">
+                                        <option value="">— Select —</option>
+                                        <option value="Permanent">Permanent</option>
+                                        <option value="Contract">Contract</option>
+                                        <option value="Temporary">Temporary</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-4"><label
+                                        class="form-label small fw-bold text-secondary text-uppercase"
+                                        style="font-size: 0.65rem;">Working Shift</label>
+                                    <select name="working_shift" class="form-select form-select-modern">
+                                        <option value="">— Select —</option>
+                                        <option value="Day">Day</option>
+                                        <option value="Night">Night</option>
+                                        <option value="Rotating">Rotating</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-4"><label
+                                        class="form-label small fw-bold text-secondary text-uppercase"
+                                        style="font-size: 0.65rem;">Emirates ID</label><input type="text"
+                                        name="emirates_id" class="form-control form-control-modern"
+                                        placeholder="784-1985-7607976-2"></div>
+                                <div class="col-md-4"><label
                                         class="form-label small fw-bold text-secondary text-uppercase"
                                         style="font-size: 0.65rem;">Email</label><input type="email" name="email"
                                         class="form-control form-control-modern"></div>
-                                <div class="col-md-6"><label
+                                <div class="col-md-4"><label
                                         class="form-label small fw-bold text-secondary text-uppercase"
                                         style="font-size: 0.65rem;">Phone</label><input type="text" name="phone"
                                         class="form-control form-control-modern"></div>
@@ -1816,11 +1848,19 @@
         const wrap = document.getElementById('missingCheckinWrapper');
         if (!wrap) return;   // not a superuser — card not rendered
         try {
-            const res = await fetch('/api/attendance/missing-checkin/');
+            // Follows the dashboard's site selector so each site shows its own list.
+            const res = await fetch(`/api/attendance/missing-checkin/?site=${currentSiteId}`);
             const data = await res.json();
             const rows = data.rows || [];
+            const total = (data.total != null) ? data.total : rows.length;
             const countEl = document.getElementById('missingCheckinCount');
-            if (countEl) countEl.textContent = rows.length;
+            if (countEl) countEl.textContent = total;
+            const shownEl = document.getElementById('missingCheckinShown');
+            if (shownEl) {
+                shownEl.textContent = (total > rows.length)
+                    ? `Showing first ${rows.length} of ${total} — use Download for the full list.`
+                    : '';
+            }
             const c = document.getElementById('missingCheckinContainer');
             if (!rows.length) { wrap.classList.add('d-none'); return; }
             wrap.classList.remove('d-none');
@@ -1837,6 +1877,10 @@
                     </div>
                 </div>`).join('');
         } catch (e) { /* leave the card hidden on error */ }
+    }
+
+    function downloadMissingCheckin() {
+        window.location.href = `/api/attendance/missing-checkin/export/?site=${currentSiteId}`;
     }
 
     async function setCheckin(id) {
@@ -2119,6 +2163,7 @@
                     </td>
                     <td class="col-ids col-hide-lg">
                         <div class="id-grid">
+                            ${idField('Emirates ID', emp.emirates_id)}
                             ${idField('Passport', emp.passport_number)}
                             ${idField('Labour', emp.labor_card_number)}
                             ${idField('MOL', emp.mol_id)}
@@ -2153,6 +2198,7 @@
         loadStats();
         loadEmployees();
         loadAlerts();
+        loadMissingCheckin();   // per-site missing check-ins
     }
 
     function filterStatus(status, label) {
@@ -3021,6 +3067,11 @@
                                 <span class="text-secondary">To:</span>
                                 <span class="font-monospace">${s.to_date || '<span class="badge bg-success">present</span>'}</span>
                             </div>
+                            ${(s.working_type || s.working_shift) ? `
+                                <div class="mt-2 d-flex flex-wrap gap-1">
+                                    ${s.working_type ? `<span class="badge rounded-pill bg-secondary bg-opacity-10 text-secondary"><i class="ri-briefcase-line me-1"></i>${s.working_type}</span>` : ''}
+                                    ${s.working_shift ? `<span class="badge rounded-pill bg-info bg-opacity-10 text-info"><i class="ri-sun-line me-1"></i>${s.working_shift} shift</span>` : ''}
+                                </div>` : ''}
                             ${s.old_site_name ? `<div class="text-muted small mt-1">Moved from <em>${s.old_site_name}</em></div>` : ''}
                         </div>
                     `).join('')}

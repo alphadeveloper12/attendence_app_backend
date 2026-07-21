@@ -446,6 +446,8 @@
                     <th>Category</th>
                     <th>Department</th>
                     <th>Site</th>
+                    <th>Work Type</th>
+                    <th>Shift</th>
                     <th>Status</th>
                     <th>Check-in</th>
                     <th>Check-out</th>
@@ -559,7 +561,7 @@
             if (!opts.silent) loadExecSummary(false);
         } catch (e) {
             console.error(e);
-            tbody.innerHTML = `<tr><td colspan="11" class="text-center py-5 text-danger"><i class="ri-error-warning-line fs-2 d-block mb-2"></i>Error loading data — ${e.message}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="13" class="text-center py-5 text-danger"><i class="ri-error-warning-line fs-2 d-block mb-2"></i>Error loading data — ${e.message}</td></tr>`;
         }
     }
 
@@ -820,14 +822,20 @@
     function renderTable(rows) {
         const tbody = document.getElementById('reportTableBody');
         if (!rows || rows.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="11" class="text-center py-5"><div class="text-muted"><i class="ri-file-search-line fs-1 d-block mb-3 opacity-25"></i>No records found.</div></td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="13" class="text-center py-5"><div class="text-muted"><i class="ri-file-search-line fs-1 d-block mb-3 opacity-25"></i>No records found.</div></td></tr>`;
             return;
         }
         tbody.innerHTML = rows.map(item => {
             const img = item.profile_picture ? `<img src="${item.profile_picture}" alt="">` : (item.name || '?').charAt(0);
-            const status = item.status === 'Present'
+            // Present / Absent are the common cases; anything else (Leave, Sick,
+            // Resigned, Terminated, No Renewal…) gets a neutral badge so the real
+            // employment state shows instead of a misleading "Absent".
+            const _st = item.status || 'Absent';
+            const status = _st === 'Present'
                 ? `<span class="badge-soft badge-present"><i class="ri-checkbox-circle-line"></i> Present</span>`
-                : `<span class="badge-soft badge-absent"><i class="ri-close-circle-line"></i> Absent</span>`;
+                : (_st === 'Absent'
+                    ? `<span class="badge-soft badge-absent"><i class="ri-close-circle-line"></i> Absent</span>`
+                    : `<span class="badge-soft" style="background:rgba(180,83,9,0.10); color:#b45309;"><i class="ri-information-line"></i> ${esc(_st)}</span>`);
             const lateBadge = item.late_minutes > 0
                 ? `<span class="badge-soft badge-late">${item.late_minutes}m</span>`
                 : '<span class="page-sub">—</span>';
@@ -856,6 +864,8 @@
                     <td>${esc(item.salary_grade || '—')}</td>
                     <td>${esc(item.department || '—')}</td>
                     <td><div class="d-flex align-items-center gap-1 small"><i class="ri-building-line text-secondary"></i> ${esc(item.site)}</div></td>
+                    <td><span class="small">${esc(item.working_type || '—')}</span></td>
+                    <td><span class="small">${esc(item.working_shift || '—')}</span></td>
                     <td>${status}</td>
                     <td><span class="small text-success"><i class="ri-login-box-line"></i> ${esc(item.check_in)}</span></td>
                     <td>${checkout}</td>

@@ -13,7 +13,7 @@ class UserSerializer(serializers.ModelSerializer):
         model = Employee
         fields = [
             'id', 'name', 'email', 'phone', 'department', 'position', 'face_embedding', 'profile_picture',
-            'job_description', 'salary_grade', 'badge_number', 'mol_id', 'labor_card_number', 'site', 'site_details',
+            'job_description', 'salary_grade', 'badge_number', 'mol_id', 'emirates_id', 'labor_card_number', 'site', 'site_details',
             'sponsor', 'employer',
             'category', 'basic_salary'
         ]
@@ -32,7 +32,7 @@ class EmployeeSerializer(serializers.ModelSerializer):
         model = Employee
         fields = [
             'id', 'name', 'email', 'phone', 'department', 'position', 'profile_picture_url', 'site', 'site_name',
-            'job_description', 'salary_grade', 'badge_number', 'mol_id', 'labor_card_number',
+            'job_description', 'salary_grade', 'badge_number', 'mol_id', 'emirates_id', 'labor_card_number',
             'sponsor', 'employer',
             'nationality', 'gender', 'marital_status', 'religion', 'date_of_birth', 'date_of_joining',
             'passport_number', 'passport_expiry', 'visa_details', 'status', 'gross_salary', 'basic_salary', 'category', 'camp', 'transportation', 'face_embedding',

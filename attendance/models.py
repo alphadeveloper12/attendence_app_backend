@@ -60,6 +60,7 @@ class Employee(models.Model):
     salary_grade = models.CharField(max_length=50, null=True, blank=True)  # Salary Grade/Category
     badge_number = models.CharField(max_length=20, null=True, blank=True)  # Badge Number
     mol_id = models.CharField(max_length=50, null=True, blank=True)  # MOL ID
+    emirates_id = models.CharField(max_length=30, null=True, blank=True)  # Emirates ID (784-YYYY-NNNNNNN-C)
     labor_card_number = models.CharField(max_length=50, null=True, blank=True)  # Labor Card/ Work Permit Numbers
     site = models.ForeignKey(Site, on_delete=models.SET_NULL, null=True, blank=True)  # Site
     # Sponsor — kept at max_length=100 because legacy free-text data (e.g. "PICDUB") lives here
@@ -122,6 +123,17 @@ class Employee(models.Model):
     transportation = models.CharField(max_length=50, null=True, blank=True, choices=[
         ('Company Bus', 'Company Bus'),
         ('personal', 'Personal'),
+    ])
+    # How the worker is engaged and which shift they run.
+    working_type = models.CharField(max_length=30, null=True, blank=True, choices=[
+        ('Permanent', 'Permanent'),
+        ('Contract', 'Contract'),
+        ('Temporary', 'Temporary'),
+    ])
+    working_shift = models.CharField(max_length=20, null=True, blank=True, choices=[
+        ('Day', 'Day'),
+        ('Night', 'Night'),
+        ('Rotating', 'Rotating'),
     ])
     basic_salary = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     category = models.CharField(max_length=20, choices=[('staff', 'Staff'), ('worker', 'Worker')], default='worker')
@@ -200,6 +212,10 @@ class EmployeeSiteHistory(models.Model):
     new_site       = models.ForeignKey(Site, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
     effective_from = models.DateField(default=timezone.localdate)
     note           = models.CharField(max_length=255, null=True, blank=True)
+    # Working arrangement captured at the moment of the transfer, so the history
+    # shows what the worker moved onto (day/night, permanent/contract).
+    working_type   = models.CharField(max_length=30, null=True, blank=True)
+    working_shift  = models.CharField(max_length=20, null=True, blank=True)
     changed_at     = models.DateTimeField(auto_now_add=True)
     changed_by     = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
 

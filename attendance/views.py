@@ -649,8 +649,11 @@ BULK_EDIT_COLUMNS = [
     'L.Card/CEC Nr',
     'Labour Card Expiry',       # DD-MM-YYYY
     'MOL ID',
+    'Emirates ID',              # 784-YYYY-NNNNNNN-C
     'Housing Camp',
     'Transportation',
+    'Working Type',             # Permanent / Contract / Temporary
+    'Working Shift',            # Day / Night / Rotating
     # Status-conditional fields — fill these only when the Status column changes
     'Resumption Date',          # required when leaving Leave → Active
     'Last Working Date',        # required for any terminal status
@@ -790,8 +793,11 @@ class BulkEditEmployeesView(APIView):
         'Visa Details': 'visa_details',
         'L.Card/CEC Nr': 'labor_card_number',
         'MOL ID': 'mol_id',
+        'Emirates ID': 'emirates_id',
         'Housing Camp': 'camp',
         'Transportation': 'transportation',
+        'Working Type': 'working_type',
+        'Working Shift': 'working_shift',
         # Insurance (text)
         'WC Insurance Name': 'wc_insurance_name',
         'WC Insurance Status': 'wc_insurance_status',
@@ -1160,6 +1166,8 @@ class BulkEditEmployeesView(APIView):
                             f"{old_site.name if old_site else '—'} → "
                             f"{emp.site.name if emp.site else '—'} (bulk edit)"
                         ),
+                        working_type=emp.working_type,
+                        working_shift=emp.working_shift,
                         changed_by=request.user if request.user.is_authenticated else None,
                     )
 
@@ -1446,6 +1454,9 @@ class AdminEditEmployeeView(APIView):
                 'eos_subject': emp.eos_subject or '',
                 'eos_date': str(emp.eos_date) if emp.eos_date else '',
                 'eos_note': emp.eos_note or '',
+                'emirates_id': emp.emirates_id or '',
+                'working_type': emp.working_type or '',
+                'working_shift': emp.working_shift or '',
                 'labour_card_expiry': str(emp.labour_card_expiry) if emp.labour_card_expiry else '',
                 'passport_control_subject': emp.passport_control_subject or '',
                 'passport_control_date': str(emp.passport_control_date) if emp.passport_control_date else '',
@@ -1594,6 +1605,12 @@ class AdminEditEmployeeView(APIView):
             emp.camp = data.get('camp')
             emp.transportation = data.get('transportation')
             emp.mol_id = data.get('mol_id')
+            if 'emirates_id' in data:
+                emp.emirates_id = (data.get('emirates_id') or '').strip() or None
+            if 'working_type' in data:
+                emp.working_type = (data.get('working_type') or '').strip() or None
+            if 'working_shift' in data:
+                emp.working_shift = (data.get('working_shift') or '').strip() or None
             emp.job_description = data.get('job_description')
             emp.sponsor = data.get('sponsor')
             new_employer = data.get('employer')
@@ -1645,6 +1662,8 @@ class AdminEditEmployeeView(APIView):
                         f"{old_site.name if old_site else '—'} → "
                         f"{emp.site.name if emp.site else '—'}"
                     ),
+                    working_type=emp.working_type,
+                    working_shift=emp.working_shift,
                     changed_by=request.user if request.user.is_authenticated else None,
                 )
 
@@ -1806,6 +1825,8 @@ class EmployeeSiteHistoryView(APIView):
                 'changed_at': h.changed_at.isoformat() if h.changed_at else None,
                 'changed_by': h.changed_by.username if h.changed_by else None,
                 'old_site_name': h.old_site.name if h.old_site else None,
+                'working_type': h.working_type,
+                'working_shift': h.working_shift,
             })
 
         return Response({
@@ -5061,6 +5082,8 @@ EMPLOYEE_EXPORT_COLUMNS = [
     ('MOL ID',               lambda e: e.mol_id or '-'),
     # Housing
     ('Housing Camp',         lambda e: e.camp or '-'),
+    ('Working Type',         lambda e: e.working_type or '-'),
+    ('Working Shift',        lambda e: e.working_shift or '-'),
     ('Transportation',       lambda e: e.transportation or '-'),
     # Status + termination
     ('Status',               lambda e: e.status or '-'),
@@ -5068,6 +5091,7 @@ EMPLOYEE_EXPORT_COLUMNS = [
     ('Last Working Date',    lambda e: str(e.last_working_date) if e.last_working_date else '-'),
     ('Termination Reason',   lambda e: e.termination_reason or '-'),
     # Leave
+    ('Emirates ID',          lambda e: e.emirates_id or '-'),
     ('Leave Type',           lambda e: e.leave_type or '-'),
     ('Leave Start',          lambda e: str(e.leave_start_date) if e.leave_start_date else '-'),
     ('Leave End',            lambda e: str(e.leave_end_date) if e.leave_end_date else '-'),
@@ -5360,6 +5384,70 @@ class ExportFaceEnrollmentView(APIView):
         return response
 # ------------------ Reports Module ------------------
 
+REPORT_TERMINAL_STATUSES = {'Resigned', 'Terminated', 'No Renewal', 'Absconding'}
+
+
+def employment_status_on(emp, on_date):
+    """What an employee's state was on `on_date` when there is NO attendance row.
+
+    Without this every non-punch reads as "Absent" — so people on approved leave
+    or who already left the company show up as absent in reports. Honours the
+    leave window, resumption date and last working date.
+    """
+    emp_status = (emp.status or '').strip()
+
+    # Already left the company before this date → report the leaving status.
+    if emp_status in REPORT_TERMINAL_STATUSES:
+        if emp.last_working_date and emp.last_working_date < on_date:
+            return emp_status
+        # Still employed on this date (last working day not yet reached) → absent.
+        if not emp.last_working_date:
+            return emp_status
+
+    # Inside an approved leave window.
+    if emp.leave_start_date and emp.leave_end_date:
+        if emp.leave_start_date <= on_date <= emp.leave_end_date:
+            return 'Leave'
+
+    # Flagged as on Leave and not yet resumed by this date.
+    if emp_status == 'Leave':
+        if not emp.resumption_date or on_date < emp.resumption_date:
+            return 'Leave'
+
+    return 'Absent'
+
+
+def site_map_on_date(employees, on_date):
+    """{employee_id: Site} — the site each employee was assigned to on `on_date`.
+
+    Walks EmployeeSiteHistory by `effective_from` so a report shows the site the
+    person actually worked at that day, not wherever they were transferred to
+    later. All history is fetched in ONE query, so this is safe for thousands of
+    employees. Falls back to the employee's current site when there's no history.
+    """
+    from collections import defaultdict
+    hist = defaultdict(list)
+    qs = (EmployeeSiteHistory.objects
+          .filter(employee__in=employees)
+          .select_related('new_site', 'old_site')
+          .order_by('effective_from', 'id'))
+    for h in qs:
+        hist[h.employee_id].append(h)
+
+    out = {}
+    for emp in employees:
+        day_site = None
+        for h in hist.get(emp.id, []):
+            if h.effective_from <= on_date:
+                day_site = h.new_site
+            else:
+                if day_site is None:
+                    day_site = h.old_site   # date predates the first transfer
+                break
+        out[emp.id] = day_site or emp.site
+    return out
+
+
 @login_required
 def admin_reports_view(request):
     """
@@ -5449,6 +5537,27 @@ def export_reports_view(request):
     if employer_filter and employer_filter != 'all':
         employees = employees.filter(employer__iexact=employer_filter)
 
+    # ── Only people actually employed on the selected date ───────────────────
+    # Without this, anyone who has left (Resigned / Terminated / No Renewal /
+    # Absconding) still lands in the report and — having no attendance row —
+    # is counted as "Absent", inflating the absent totals.
+    # Someone who left is still included for dates up to their last working day,
+    # so historical reports stay accurate. Pass ?include_inactive=1 to override.
+    if (request.GET.get('include_inactive') or '').strip().lower() not in ('1', 'true', 'yes'):
+        TERMINAL_STATUSES = ['Resigned', 'Terminated', 'No Renewal', 'Absconding']
+        employees = employees.exclude(
+            Q(status__in=TERMINAL_STATUSES) & (
+                Q(last_working_date__isnull=True) | Q(last_working_date__lt=selected_date)
+            )
+        )
+        # Not yet joined on that date → shouldn't appear either.
+        employees = employees.exclude(date_of_joining__gt=selected_date)
+
+    # Materialise once — we iterate the list several times below.
+    employees = list(employees.select_related('site'))
+    # Site the employee actually belonged to on this date (honours transfers).
+    site_on_date = site_map_on_date(employees, selected_date)
+
     attendance_records = Attendance.objects.filter(
         date=selected_date,
         user__in=employees
@@ -5466,16 +5575,27 @@ def export_reports_view(request):
 
     for emp in employees:
         att = attendance_map.get(emp.id)
-        status = 'Absent'
         check_in = '-'
         check_out = '-'
-        site_name = emp.site.name if emp.site else '-'
+        _day_site = site_on_date.get(emp.id) or emp.site
+        site_name = _day_site.name if _day_site else '-'
         position_name = emp.position or '-'
 
         if att:
-            status = 'Present'
+            # A real punch wins, unless the day was explicitly marked sick/leave.
+            att_status = (att.status or '').strip().lower()
+            if att_status == 'sick':
+                status = 'Sick'
+            elif att_status == 'leave':
+                status = 'Leave'
+            else:
+                status = 'Present'
             check_in = timezone.localtime(att.check_in_time).strftime('%I:%M %p') if att.check_in_time else '-'
             check_out = timezone.localtime(att.check_out_time).strftime('%I:%M %p') if att.check_out_time else '-'
+        else:
+            # No punch → reflect the real employment state on that date
+            # (Leave / Resigned / Terminated / No Renewal) instead of "Absent".
+            status = employment_status_on(emp, selected_date)
 
         # Apply status filter for the detailed sheet
         include_in_detailed = True
@@ -5493,6 +5613,8 @@ def export_reports_view(request):
                 site_name,
                 emp.camp or '-',
                 emp.transportation or '-',
+                emp.working_type or '-',
+                emp.working_shift or '-',
                 selected_date,
                 status,
                 check_in,
@@ -5510,9 +5632,11 @@ def export_reports_view(request):
         if key not in summary_map:
             summary_map[key] = {'present': 0, 'absent': 0}
         
+        # Only a genuine no-show counts as Absent. Leave / Sick / leavers are
+        # legitimate non-attendance and must not inflate the absent totals.
         if status == 'Present':
             summary_map[key]['present'] += 1
-        else:
+        elif status == 'Absent':
             summary_map[key]['absent'] += 1
 
     # Create XLSX
@@ -5522,7 +5646,7 @@ def export_reports_view(request):
     ws_detailed = wb.active
     ws_detailed.title = "Detailed Attendance"
     
-    headers = ['Employee Name', 'Badge ID', 'Grade', 'Department', 'Position', 'Site', 'Housing Camp', 'Transportation', 'Date', 'Status', 'Check In', 'Check Out']
+    headers = ['Employee Name', 'Badge ID', 'Grade', 'Department', 'Position', 'Site', 'Housing Camp', 'Transportation', 'Working Type', 'Working Shift', 'Date', 'Status', 'Check In', 'Check Out']
     ws_detailed.append(headers)
     
     header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
@@ -6300,6 +6424,19 @@ def monthly_report_view(request):
     if employer_filter and employer_filter != 'all':
         employees = employees.filter(employer__iexact=employer_filter)
 
+    # ── Only staff employed during this month ────────────────────────────────
+    # Otherwise leavers show a full month of "Absent" days in the report.
+    if (request.GET.get('include_inactive') or '').strip().lower() not in ('1', 'true', 'yes'):
+        _m_start = datetime(year, month, 1).date()
+        _m_end = datetime(year, month, calendar.monthrange(year, month)[1]).date()
+        TERMINAL_STATUSES = ['Resigned', 'Terminated', 'No Renewal', 'Absconding']
+        employees = employees.exclude(
+            Q(status__in=TERMINAL_STATUSES) & (
+                Q(last_working_date__isnull=True) | Q(last_working_date__lt=_m_start)
+            )
+        )
+        employees = employees.exclude(date_of_joining__gt=_m_end)
+
     analytics_employees = list(employees)
 
     if search_query:
@@ -6598,11 +6735,24 @@ def export_monthly_report(request):
         employees = employees.filter(site=selected_site)
     if employer_filter and employer_filter != 'all':
         employees = employees.filter(employer__iexact=employer_filter)
-    
+
     # Calculate date range
     num_days = calendar.monthrange(year, month)[1]
     start_date = datetime(year, month, 1).date()
     end_date = datetime(year, month, num_days).date()
+
+    # ── Only staff employed during this month ────────────────────────────────
+    # Leavers (Resigned / Terminated / No Renewal / Absconding) otherwise appear
+    # with a full month of "Absent" days. Anyone whose last working day falls in
+    # this month is still included, so past months stay accurate.
+    if (request.GET.get('include_inactive') or '').strip().lower() not in ('1', 'true', 'yes'):
+        TERMINAL_STATUSES = ['Resigned', 'Terminated', 'No Renewal', 'Absconding']
+        employees = employees.exclude(
+            Q(status__in=TERMINAL_STATUSES) & (
+                Q(last_working_date__isnull=True) | Q(last_working_date__lt=start_date)
+            )
+        )
+        employees = employees.exclude(date_of_joining__gt=end_date)
     
     # Get attendance records
     attendance_records = Attendance.objects.filter(
@@ -6854,7 +7004,9 @@ class AttendanceReportDataView(APIView):
             checked_in_at_iso = None
             checked_out_at_iso = None
 
-            status = 'Absent'
+            # No punch → show the real state (Leave / Resigned / Terminated /
+            # No Renewal) rather than a blanket "Absent".
+            status = employment_status_on(emp, selected_date)
 
             if att and att.check_in_time:
                 status = 'Present'
@@ -6942,6 +7094,8 @@ class AttendanceReportDataView(APIView):
                 'profile_picture': emp.profile_picture.url if emp.profile_picture else None,
                 'site': site_name,
                 'site_id': emp.site.id if emp.site else None,
+                'working_type': emp.working_type or '',
+                'working_shift': emp.working_shift or '',
                 'status': status,
                 'check_in': check_in,
                 'check_out': check_out,
@@ -9831,36 +9985,53 @@ class PublicHolidayView(APIView):
 # ══════════════════════════════════════════════════════════════════════════
 #  MISSING CHECK-IN — checked out without checking in (notify super admin)
 # ══════════════════════════════════════════════════════════════════════════
+def _missing_checkin_qs(request):
+    """Attendance rows where the employee checked OUT but never checked IN.
+
+    Honours site-admin scoping plus optional ?site=<id|all> and ?date=YYYY-MM-DD
+    filters. No date → last 30 days. Shared by the list + export endpoints.
+    """
+    from datetime import datetime as _dt, timedelta
+    qs = Attendance.objects.select_related('user', 'user__site').filter(
+        check_out_time__isnull=False, check_in_time__isnull=True,
+    )
+    if not request.user.is_superuser:
+        try:
+            profile = AdminProfile.objects.get(user=request.user)
+            qs = qs.filter(user__site__in=profile.sites.all())
+        except AdminProfile.DoesNotExist:
+            qs = qs.none()
+
+    # Site filter — mirrors the dashboard's site selector.
+    site_id = (request.GET.get('site') or '').strip()
+    if site_id and site_id.lower() != 'all':
+        try:
+            qs = qs.filter(user__site_id=int(site_id))
+        except (TypeError, ValueError):
+            pass
+
+    date_str = (request.GET.get('date') or '').strip()
+    if date_str:
+        try:
+            qs = qs.filter(date=_dt.strptime(date_str, '%Y-%m-%d').date())
+        except ValueError:
+            pass
+    else:
+        qs = qs.filter(date__gte=timezone.localdate() - timedelta(days=30))
+
+    return qs.order_by('-date', 'user__name')
+
+
 class MissingCheckInView(APIView):
     """List attendance rows where the person checked OUT but never checked IN.
 
-    GET /api/attendance/missing-checkin/?date=YYYY-MM-DD
-    No date → last 30 days. Site admins are scoped to their own sites.
+    GET /api/attendance/missing-checkin/?site=<id|all>&date=YYYY-MM-DD
     """
     permission_classes = [IsAdminUser | IsSiteAdmin]
 
     def get(self, request):
-        from datetime import datetime as _dt, timedelta
-        qs = Attendance.objects.select_related('user', 'user__site').filter(
-            check_out_time__isnull=False, check_in_time__isnull=True,
-        )
-        if not request.user.is_superuser:
-            try:
-                profile = AdminProfile.objects.get(user=request.user)
-                qs = qs.filter(user__site__in=profile.sites.all())
-            except AdminProfile.DoesNotExist:
-                qs = qs.none()
-
-        date_str = (request.GET.get('date') or '').strip()
-        if date_str:
-            try:
-                qs = qs.filter(date=_dt.strptime(date_str, '%Y-%m-%d').date())
-            except ValueError:
-                pass
-        else:
-            qs = qs.filter(date__gte=timezone.localdate() - timedelta(days=30))
-
-        qs = qs.order_by('-date', 'user__name')
+        qs = _missing_checkin_qs(request)
+        total = qs.count()
         rows = [{
             'id': a.id,
             'employee': a.user.name,
@@ -9870,7 +10041,55 @@ class MissingCheckInView(APIView):
             'date': str(a.date),
             'check_out': timezone.localtime(a.check_out_time).strftime('%I:%M %p') if a.check_out_time else '-',
         } for a in qs[:300]]
-        return Response({'count': len(rows), 'rows': rows})
+        # `total` is the unclipped count so the UI can say "showing 300 of N".
+        return Response({'count': len(rows), 'total': total, 'rows': rows})
+
+
+class MissingCheckInExportView(APIView):
+    """Excel download of the missing check-ins for the current site/date filter."""
+    permission_classes = [IsAdminUser | IsSiteAdmin]
+
+    def get(self, request):
+        import io
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment
+        from django.http import HttpResponse
+
+        qs = _missing_checkin_qs(request)
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = 'Missing Check-In'
+
+        headers = ['Badge ID', 'Employee', 'Site', 'Date', 'Checked Out']
+        ws.append(headers)
+        fill = PatternFill(start_color='2563EB', end_color='2563EB', fill_type='solid')
+        font = Font(bold=True, color='FFFFFF')
+        for c in range(1, len(headers) + 1):
+            cell = ws.cell(row=1, column=c)
+            cell.fill = fill
+            cell.font = font
+            cell.alignment = Alignment(horizontal='center')
+            ws.column_dimensions[cell.column_letter].width = 24
+        ws.freeze_panes = 'A2'
+
+        for a in qs:
+            ws.append([
+                a.user.badge_number or '-',
+                a.user.name,
+                a.user.site.name if a.user.site else '-',
+                str(a.date),
+                timezone.localtime(a.check_out_time).strftime('%I:%M %p') if a.check_out_time else '-',
+            ])
+
+        out = io.BytesIO()
+        wb.save(out)
+        out.seek(0)
+        resp = HttpResponse(
+            out.read(),
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        )
+        resp['Content-Disposition'] = 'attachment; filename=missing_check_in.xlsx'
+        return resp
 
 
 class SetCheckInView(APIView):
