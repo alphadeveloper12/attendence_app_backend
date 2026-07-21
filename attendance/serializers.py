@@ -35,7 +35,7 @@ class EmployeeSerializer(serializers.ModelSerializer):
             'job_description', 'salary_grade', 'badge_number', 'mol_id', 'emirates_id', 'labor_card_number',
             'sponsor', 'employer',
             'nationality', 'gender', 'marital_status', 'religion', 'date_of_birth', 'date_of_joining',
-            'passport_number', 'passport_expiry', 'visa_details', 'status', 'gross_salary', 'basic_salary', 'category', 'camp', 'transportation', 'face_embedding',
+            'passport_number', 'passport_expiry', 'visa_details', 'status', 'gross_salary', 'basic_salary', 'category', 'camp', 'transportation', 'agency_name', 'face_embedding',
             'passport_document', 'visa_document', 'labour_card_document',
         ]
 

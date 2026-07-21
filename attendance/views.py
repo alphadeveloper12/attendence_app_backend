@@ -652,6 +652,7 @@ BULK_EDIT_COLUMNS = [
     'Emirates ID',              # 784-YYYY-NNNNNNN-C
     'Housing Camp',
     'Transportation',
+    'Agency Name',              # supplying manpower agency, blank if direct hire
     'Working Type',             # Regular / Budget / Contract / Certified
     'Working Shift',            # Day / Night / Rotating — Regular workers only
     # Status-conditional fields — fill these only when the Status column changes
@@ -796,6 +797,7 @@ class BulkEditEmployeesView(APIView):
         'Emirates ID': 'emirates_id',
         'Housing Camp': 'camp',
         'Transportation': 'transportation',
+        'Agency Name': 'agency_name',
         'Working Type': 'working_type',
         'Working Shift': 'working_shift',
         # Insurance (text)
@@ -1334,7 +1336,8 @@ class AdminAddEmployeeView(APIView):
                 salary_remarks=data.get('salary_remarks') or None,
                 category=data.get('category', 'worker'),
                 camp=data.get('camp'),
-                transportation=data.get('transportation')
+                transportation=data.get('transportation'),
+                agency_name=(data.get('agency_name') or '').strip() or None,
             )
 
             # Record initial salary snapshot when any salary component is provided
@@ -1439,6 +1442,7 @@ class AdminEditEmployeeView(APIView):
                 'site_name': emp.site.name if emp.site else '',
                 'camp': emp.camp,
                 'transportation': emp.transportation,
+                'agency_name': emp.agency_name or '',
                 # Document URLs (frontend uses these for "View" buttons)
                 'passport_document_url': emp.passport_document.url if emp.passport_document else '',
                 'visa_document_url': emp.visa_document.url if emp.visa_document else '',
@@ -1608,6 +1612,8 @@ class AdminEditEmployeeView(APIView):
             emp.labor_card_number = data.get('labor_card_number')
             emp.camp = data.get('camp')
             emp.transportation = data.get('transportation')
+            if 'agency_name' in data:
+                emp.agency_name = (data.get('agency_name') or '').strip() or None
             emp.mol_id = data.get('mol_id')
             if 'emirates_id' in data:
                 emp.emirates_id = (data.get('emirates_id') or '').strip() or None
@@ -2342,6 +2348,7 @@ class RegisterUserView(APIView):
         gross_salary = data.get("gross_salary")
         camp = data.get("camp") or ""
         transportation = data.get("transportation") or ""
+        agency_name = (data.get("agency_name") or "").strip() or None
         
         # Files MUST come from request.FILES
         files = request.FILES.getlist("images") or request.FILES.getlist("images[]")
@@ -2422,6 +2429,7 @@ class RegisterUserView(APIView):
             emp.gross_salary = gross_salary
             emp.camp = camp
             emp.transportation = transportation
+            emp.agency_name = agency_name
             emp.save()
         else:
             # Create new employee
@@ -2452,6 +2460,7 @@ class RegisterUserView(APIView):
                 gross_salary=gross_salary,
                 camp=camp,
                 transportation=transportation,
+                agency_name=agency_name,
             )
 
         # Process images if provided
@@ -3994,6 +4003,7 @@ def admin_user_detail_view(request, user_id):
                     'visa_expiry_date': str(employee.visa_expiry_date) if employee.visa_expiry_date else None,
                     'camp': employee.camp,
                     'transportation': employee.transportation,
+                    'agency_name': employee.agency_name,
                 },
                 'stats': {
                     'total_records': total_records,
@@ -5020,6 +5030,7 @@ class ExportAttendanceView(APIView):
         ws.append(['Badge ID:', employee.badge_number or '-'])
         ws.append(['Housing Camp:', employee.camp or '-'])
         ws.append(['Transportation:', employee.transportation or '-'])
+        ws.append(['Agency Name:', employee.agency_name or '-'])
         ws.append([]) # Empty row
 
         # Headers
@@ -5092,6 +5103,7 @@ EMPLOYEE_EXPORT_COLUMNS = [
     ('Working Type',         lambda e: e.working_type or '-'),
     ('Working Shift',        lambda e: e.working_shift or '-'),
     ('Transportation',       lambda e: e.transportation or '-'),
+    ('Agency Name',          lambda e: e.agency_name or '-'),
     # Status + termination
     ('Status',               lambda e: e.status or '-'),
     ('Resumption Date',      lambda e: str(e.resumption_date) if e.resumption_date else '-'),
@@ -6819,6 +6831,7 @@ def export_monthly_report(request):
             'Site': emp.site.name if emp.site else '-',
             'Housing Camp': emp.camp or '-',
             'Transportation': emp.transportation or '-',
+            'Agency Name': emp.agency_name or '-',
             'Total Days': num_days,
             'Days Present': days_present,
             'Days Absent': days_absent,

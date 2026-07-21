@@ -124,6 +124,8 @@ class Employee(models.Model):
         ('Company Bus', 'Company Bus'),
         ('personal', 'Personal'),
     ])
+    # Supplying agency, for workers hired through a manpower agency.
+    agency_name = models.CharField(max_length=150, null=True, blank=True)
     # How the worker is engaged and which shift they run.
     # Working shift only applies to Regular staff — Budget and Contract workers
     # are not shift-based, so the field is left blank for them.
