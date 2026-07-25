@@ -58,6 +58,7 @@ web_urlpatterns = [
 # ── JSON API endpoints (used by mobile app + AJAX in templates) ───────────
 api_urlpatterns = [
     # Auth + identity
+    path('me/',                  me_view,                          name='me'),
     path('register-user/',       RegisterUserView.as_view(),       name='register-user'),
     path('mark-attendance/',     MarkAttendanceView.as_view(),     name='mark-attendance'),
     path('admin/login/',         AdminLoginView.as_view(),         name='admin-login-api'),

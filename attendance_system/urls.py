@@ -1,7 +1,7 @@
 
 from django.urls import reverse
 from django.contrib import admin
-from django.urls import path, include
+from django.urls import path, include, re_path
 from django.conf.urls.static import static
 from django.conf import settings
 from django.shortcuts import redirect, render
@@ -18,6 +18,25 @@ def root_landing(request):
             and not request.GET.get('stay')):
         return redirect(reverse('admin-dashboard'))
     return render(request, 'landing.html')
+
+
+def react_shell(request, rest=None):
+    """Serves the React SPA shell. The bundle's client-side router (React Router)
+    renders the right page based on the URL path. Used for all migrated pages
+    while the legacy Django pages stay untouched.
+
+    ``rest`` captures deep SPA paths (e.g. /app/employees/42) so a single shell
+    view backs the whole client-side route tree.
+
+    Passes the Google Maps key so the SPA's geofence maps can load it.
+    """
+    return render(request, 'react_base.html', {
+        'google_maps_key': settings.GOOGLE_MAPS_API_KEY,
+    })
+
+
+# Backwards-compatible alias
+react_home = react_shell
 
 
 def legacy_dashboard_redirect(request, slug=''):
@@ -41,8 +60,19 @@ def legacy_dashboard_redirect(request, slug=''):
 
 
 urlpatterns = [
-    # /                  → marketing landing page
+    # /                  → marketing landing page (legacy Django template)
     path('', root_landing, name='landing'),
+
+    # NEW React pages (preview; the legacy Django pages stay untouched).
+    # Convention: every migrated page mirrors its legacy path with a `-v2`
+    # suffix — e.g. /dashboard/ → /dashboard-v2, /dashboard/reports/ →
+    # /dashboard/reports-v2, /dashboard/sites/5/ → /dashboard/sites/5-v2.
+    # A single catch-all serves the SPA shell for ANY url ending in `-v2` (with
+    # optional trailing slash); React Router then renders the right page. This
+    # never shadows the legacy pages, which never end in `-v2`.
+    path('home-v2/', react_shell, name='home-v2'),
+    path('login-v2/', react_shell, name='login-v2'),
+    re_path(r'.*-v2/?$', react_shell, name='spa-v2'),
 
     # Django admin
     path('admin/', admin.site.urls),

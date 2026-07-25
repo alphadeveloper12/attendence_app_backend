@@ -4249,6 +4249,62 @@ def admin_logout_view(request):
     return redirect("admin-login")
 
 
+def me_view(request):
+    """Return the current admin's identity, permissions and site scope for the
+    React dashboard.
+
+    This is the single source of truth the SPA uses to gate the sidebar nav,
+    switch on read-only mode, and scope site filters. The permission fields
+    (``nav_visible``, ``is_readonly``, ``can_write``, ``currency_code``) are
+    computed by the SAME logic the templates use — we reuse
+    ``context_processors.app_settings`` so the SPA and legacy templates can never
+    drift apart.
+
+    Response 200 (authenticated staff):
+        {
+          username, is_superuser, is_staff, role,   # role: superuser|site_admin|viewer
+          is_readonly, can_write,
+          nav_visible: { <key>: bool, ... },
+          currency_code,
+          sites: [ { id, name }, ... ]              # scoped: all for superuser, else assigned
+        }
+    Response 401 for anonymous / non-staff users (SPA then redirects to login).
+    """
+    from . import context_processors
+
+    user = request.user
+    if not user.is_authenticated or not user.is_staff:
+        return JsonResponse({"detail": "Authentication required"}, status=401)
+
+    ctx = context_processors.app_settings(request)
+    is_super = bool(user.is_superuser)
+
+    # Resolve role + the sites this admin may see. Superusers see everything;
+    # site-scoped admins/viewers see only the sites on their AdminProfile.
+    role = "superuser"
+    if is_super:
+        site_qs = Site.objects.all().order_by("name")
+    else:
+        profile = AdminProfile.objects.filter(user=user).first()
+        if profile:
+            role = profile.role  # ROLE_SITE_ADMIN or ROLE_VIEWER
+            site_qs = profile.sites.all().order_by("name")
+        else:
+            site_qs = Site.objects.none()
+
+    return JsonResponse({
+        "username": user.username,
+        "is_superuser": is_super,
+        "is_staff": bool(user.is_staff),
+        "role": role,
+        "is_readonly": ctx["is_readonly"],
+        "can_write": ctx["can_write"],
+        "nav_visible": ctx["nav_visible"],
+        "currency_code": ctx["currency_code"],
+        "sites": [{"id": s.id, "name": s.name} for s in site_qs],
+    })
+
+
 # ------------------ Sites Management ------------------
 
 @login_required(login_url="admin-login")
