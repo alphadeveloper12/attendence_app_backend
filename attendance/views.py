@@ -2762,6 +2762,7 @@ class MarkAttendanceView(APIView):
         best_eid = None
         best_sim = 0.0
         second_sim = -1.0
+        cross_site_match = False  # set when the winner came from a whole-DB fallback
 
         if v is None and employee_id_input:
             # Offline sync: face undetectable but match already done on device — trust it
@@ -2772,47 +2773,65 @@ class MarkAttendanceView(APIView):
             best_eid = employee_id_input
             best_sim = 1.0
         else:
-            # FAISS nearest neighbors (cosine similarity on L2-normalized vectors)
+            # FAISS nearest neighbors (cosine similarity on L2-normalized vectors).
+            # Search the marking site FIRST — this is the common case, keeps the
+            # candidate gallery small, and minimises cross-site false matches.
             results = ENGINE.search(v, k=10, site_id=site_id)
 
+        # Aggregate FAISS hits to the best score per employee, then apply the
+        # threshold + margin gate. Returns (eid, best_sim, second_sim, passed).
+        def _pick_winner(hits):
+            if not hits:
+                return None, 0.0, -1.0, False
+            per_emp = {}
+            for _, eid, sim in hits:
+                if eid not in per_emp or sim > per_emp[eid]:
+                    per_emp[eid] = sim
+            ranked = sorted(per_emp.items(), key=lambda kv: kv[1], reverse=True)
+            b_eid, b_sim = ranked[0]
+            s_sim = ranked[1][1] if len(ranked) > 1 else -1.0
+            solo = s_sim < 0
+            ok = (b_sim >= THRESH) and (True if solo else (b_sim - s_sim) >= MARGIN)
+            return b_eid, b_sim, s_sim, ok
+
         if best_eid is None:
-            # Run FAISS recognition (live path — v is guaranteed non-None here)
-            if results:
-                # Aggregate to best per employee
-                per_emp = {}
-                for _, eid, sim in results:
-                    if eid not in per_emp or sim > per_emp[eid]:
-                        per_emp[eid] = sim
+            # Live path — v is guaranteed non-None here.
+            best_eid, best_sim, second_sim, passed = _pick_winner(results)
 
-                # Decide winner with threshold + margin
-                ranked = sorted(per_emp.items(), key=lambda kv: kv[1], reverse=True)
-                best_eid, best_sim = ranked[0]
-                second_sim = ranked[1][1] if len(ranked) > 1 else -1.0
+            # Not confidently recognised at THIS site → escalate to a whole-DB
+            # search. The worker may belong to another site (a transfer that
+            # hasn't synced, or someone marking from a different project). If we
+            # find them company-wide we accept the match, and below we move them
+            # onto the marking site so next time they're in the local gallery.
+            if not passed and site_id is not None:
+                global_hits = ENGINE.search(v, k=10, site_id=None)
+                g_eid, g_sim, g_second, g_ok = _pick_winner(global_hits)
+                if g_ok:
+                    best_eid, best_sim, second_sim = g_eid, g_sim, g_second
+                    passed = True
+                    cross_site_match = True
+                    logger.info(
+                        "[MARK-ATTENDANCE] CROSS-SITE MATCH | emp=%r sim=%.4f marking_site=%r",
+                        g_eid, g_sim, site_id,
+                    )
 
-                solo = second_sim < 0
-                pass_thresh = best_sim >= THRESH
-                pass_margin = True if solo else (best_sim - second_sim) >= MARGIN
-
-                if not (pass_thresh and pass_margin):
-                    print("Face recognition failed: Threshold or Margin not met")
-                    # IF we have an employee_id_input (from offline sync), we TRUST it
-                    if employee_id_input:
-                        print(f"Trusting offline identification: {employee_id_input}")
-                        best_eid = employee_id_input
-                    else:
-                        return Response(
-                            {
-                                "error": "Face not recognized. Try again or re-enroll with more images.",
-                                "best_sim": best_sim,
-                                "second_sim": second_sim,
-                            },
-                            status=400,
-                        )
-            else:
-                # No results from engine search
+            if not passed:
+                # No confident match at the site or company-wide.
                 if employee_id_input:
-                    print(f"No match found in engine, but using provided employee_id: {employee_id_input}")
+                    # Offline sync trusts the identification already done on device.
+                    print(f"Trusting offline identification: {employee_id_input}")
                     best_eid = employee_id_input
+                    cross_site_match = False
+                elif best_eid is not None:
+                    print("Face recognition failed: Threshold or Margin not met")
+                    return Response(
+                        {
+                            "error": "Face not recognized. Try again or re-enroll with more images.",
+                            "best_sim": best_sim,
+                            "second_sim": second_sim,
+                        },
+                        status=400,
+                    )
                 else:
                     return Response({"error": "No match found."}, status=400)
 
@@ -2834,6 +2853,43 @@ class MarkAttendanceView(APIView):
             logger.info("[MARK-ATTENDANCE] TIMESTAMP | none provided, using now=%r", now)
 
         today = now.date()
+
+        reassigned_to = None  # set to the new site's name if we move the worker
+
+        # Cross-site auto-assign: the worker is marking from a site they don't
+        # currently belong to (recognised via the whole-DB fallback, or an offline
+        # record for someone since moved). Move them onto the marking site so the
+        # local gallery picks them up next time, and record it as a transfer.
+        # The Employee post_save signal re-indexes this worker's face templates
+        # under the new site (cheap — one employee, a handful of templates).
+        if site_id:
+            try:
+                marking_site_id = int(site_id)
+            except (TypeError, ValueError):
+                marking_site_id = None
+            if marking_site_id and emp.site_id != marking_site_id:
+                old_site = emp.site
+                try:
+                    new_site = Site.objects.get(id=marking_site_id)
+                except Site.DoesNotExist:
+                    new_site = None
+                if new_site is not None:
+                    emp.site = new_site
+                    emp.save(update_fields=["site"])
+                    EmployeeSiteHistory.objects.create(
+                        employee=emp,
+                        old_site=old_site,
+                        new_site=new_site,
+                        effective_from=today,
+                        note="Auto-assigned on cross-site attendance",
+                        working_type=emp.working_type,
+                        working_shift=emp.working_shift,
+                    )
+                    reassigned_to = new_site.name
+                    logger.info(
+                        "[MARK-ATTENDANCE] AUTO-REASSIGN | emp=%r %r -> %r (cross_site_fallback=%r)",
+                        emp.id, old_site.name if old_site else None, new_site.name, cross_site_match,
+                    )
 
         # Check for existing attendance for today
         attendance, created = Attendance.objects.get_or_create(
@@ -2906,6 +2962,7 @@ class MarkAttendanceView(APIView):
                 "employee": {"id": emp.id, "name": emp.name, "email": emp.email},
                 "time": now.strftime("%I:%M %p"),
                 "confidence": best_sim,
+                "reassigned_to": reassigned_to,
             },
             status=200,
         )
