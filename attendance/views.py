@@ -5088,6 +5088,12 @@ class ExportAttendanceView(APIView):
         ws.append(['Housing Camp:', employee.camp or '-'])
         ws.append(['Transportation:', employee.transportation or '-'])
         ws.append(['Agency Name:', employee.agency_name or '-'])
+        # Employment status + the dates that explain non-attendance.
+        ws.append(['Status:', employee.status or '-'])
+        ws.append(['Leave Start:', str(employee.leave_start_date) if employee.leave_start_date else '-'])
+        ws.append(['Leave End:', str(employee.leave_end_date) if employee.leave_end_date else '-'])
+        ws.append(['Resumption Date:', str(employee.resumption_date) if employee.resumption_date else '-'])
+        ws.append(['Last Working Day:', str(employee.last_working_date) if employee.last_working_date else '-'])
         ws.append([]) # Empty row
 
         # Headers
@@ -5493,6 +5499,58 @@ def employment_status_on(emp, on_date):
     return 'Absent'
 
 
+# Buckets that are NOT part of the working headcount. A report's Present/Absent
+# totals count only working staff; everyone in these buckets is pulled into a
+# separate "Non-Working" section instead of inflating the Absent total.
+NON_WORKING_BUCKETS = ('leave', 'sick', 'left')
+
+
+def classify_report_row(emp, att, on_date):
+    """Bucket one employee for a date's report.
+
+    Returns (bucket, display_status) where bucket is one of:
+      'present' | 'absent'  -> working population (counted in totals)
+      'leave'   | 'sick'    -> separated, still on the books
+      'left'                -> separated, has left the company
+
+    A real punch wins: someone who physically checked in is Present even if
+    their master status says Leave.
+    """
+    if att and att.check_in_time:
+        s = (att.status or '').strip().lower()
+        if s == 'sick':
+            return 'sick', 'Sick'
+        if s == 'leave':
+            return 'leave', 'Leave'
+        return 'present', 'Present'
+    if att:
+        # Attendance row with no punch but an explicit sick/leave marking.
+        s = (att.status or '').strip().lower()
+        if s == 'sick':
+            return 'sick', 'Sick'
+        if s == 'leave':
+            return 'leave', 'Leave'
+    st = employment_status_on(emp, on_date)
+    if st == 'Leave':
+        return 'leave', 'Leave'
+    if st in REPORT_TERMINAL_STATUSES:
+        return 'left', st
+    if st == 'Present':
+        return 'present', 'Present'
+    return 'absent', 'Absent'
+
+
+def leaver_is_recent(emp, on_date, window_days=31):
+    """Whether a departed employee is worth still showing in the separated
+    section. Freshly-gone staff (within `window_days` of their last working day)
+    are listed; long-gone staff are dropped from the report entirely so daily
+    reports don't accumulate every ex-employee forever."""
+    lwd = emp.last_working_date
+    if not lwd:
+        return False  # no last working date recorded → treat as long gone
+    return 0 <= (on_date - lwd).days <= window_days
+
+
 def site_map_on_date(employees, on_date):
     """{employee_id: Site} — the site each employee was assigned to on `on_date`.
 
@@ -5644,20 +5702,8 @@ def export_reports_view(request):
     if employer_filter and employer_filter != 'all':
         employees = employees.filter(employer__iexact=employer_filter)
 
-    # ── Only people actually employed on the selected date ───────────────────
-    # Without this, anyone who has left (Resigned / Terminated / No Renewal /
-    # Absconding) still lands in the report and — having no attendance row —
-    # is counted as "Absent", inflating the absent totals.
-    # Someone who left is still included for dates up to their last working day,
-    # so historical reports stay accurate. Pass ?include_inactive=1 to override.
+    # Not yet joined on that date → shouldn't appear at all.
     if (request.GET.get('include_inactive') or '').strip().lower() not in ('1', 'true', 'yes'):
-        TERMINAL_STATUSES = ['Resigned', 'Terminated', 'No Renewal', 'Absconding']
-        employees = employees.exclude(
-            Q(status__in=TERMINAL_STATUSES) & (
-                Q(last_working_date__isnull=True) | Q(last_working_date__lt=selected_date)
-            )
-        )
-        # Not yet joined on that date → shouldn't appear either.
         employees = employees.exclude(date_of_joining__gt=selected_date)
 
     # Materialise once — we iterate the list several times below.
@@ -5675,8 +5721,9 @@ def export_reports_view(request):
 
     # Data Collection
     detailed_data = []
+    non_working_data = []   # Leave / Sick / recently-left → their own sheet
     summary_map = {} # (site_name, position) -> {present: 0, absent: 0}
-    
+
     # Get all unique positions for the summary matrix
     all_positions = sorted(list(set(Employee.objects.exclude(position__isnull=True).exclude(position='').values_list('position', flat=True))))
     if not all_positions:
@@ -5692,21 +5739,32 @@ def export_reports_view(request):
         _day_working_type, _day_working_shift = working_on_date.get(
             emp.id, (emp.working_type, emp.working_shift))
 
-        if att:
-            # A real punch wins, unless the day was explicitly marked sick/leave.
-            att_status = (att.status or '').strip().lower()
-            if att_status == 'sick':
-                status = 'Sick'
-            elif att_status == 'leave':
-                status = 'Leave'
-            else:
-                status = 'Present'
-            check_in = timezone.localtime(att.check_in_time).strftime('%I:%M %p') if att.check_in_time else '-'
-            check_out = timezone.localtime(att.check_out_time).strftime('%I:%M %p') if att.check_out_time else '-'
-        else:
-            # No punch → reflect the real employment state on that date
-            # (Leave / Resigned / Terminated / No Renewal) instead of "Absent".
-            status = employment_status_on(emp, selected_date)
+        # Classify working vs non-working (Leave / Sick / left). Non-working
+        # people never touch the Present/Absent counts — they go to a separate
+        # sheet so leave & sick can't inflate the absent totals.
+        bucket, status = classify_report_row(emp, att, selected_date)
+
+        if bucket in NON_WORKING_BUCKETS:
+            # Show every non-working person, including all resigned / terminated
+            # staff regardless of how long ago they left.
+            reason = {'leave': 'On Leave', 'sick': 'Sick', 'left': status}.get(bucket, status)
+            non_working_data.append([
+                emp.name,
+                emp.badge_number,
+                emp.salary_grade,
+                emp.department,
+                position_name,
+                site_name,
+                reason,
+                str(emp.leave_start_date) if emp.leave_start_date else '-',
+                str(emp.leave_end_date) if emp.leave_end_date else '-',
+                str(emp.resumption_date) if emp.resumption_date else '-',
+                str(emp.last_working_date) if emp.last_working_date else '-',
+            ])
+            continue
+
+        check_in = timezone.localtime(att.check_in_time).strftime('%I:%M %p') if att and att.check_in_time else '-'
+        check_out = timezone.localtime(att.check_out_time).strftime('%I:%M %p') if att and att.check_out_time else '-'
 
         # Apply status filter for the detailed sheet
         include_in_detailed = True
@@ -5729,22 +5787,19 @@ def export_reports_view(request):
                 selected_date,
                 status,
                 check_in,
-                check_out
+                check_out,
+                # Employment-status dates carried on every row so the daily
+                # attendance sheet itself shows leave / resumption / last-working info.
+                str(emp.leave_start_date) if emp.leave_start_date else '-',
+                str(emp.leave_end_date) if emp.leave_end_date else '-',
+                str(emp.resumption_date) if emp.resumption_date else '-',
+                str(emp.last_working_date) if emp.last_working_date else '-',
             ])
 
-        # Aggregate for summary (always aggregate even if filtered in detailed list?)
-        # User usually wants summary of the filtered set, but they said "all 45 sites"
-        # If they filtered a specific site, only that site should show.
-        # But if they filtered status "Absent", the summary should reflect that?
-        # Typically summary reflects the population. Let's respect status/category filters if applied.
-        
-        # Site/Position key
+        # Summary counts only the working population (Present vs genuine Absent).
         key = (site_name, position_name)
         if key not in summary_map:
             summary_map[key] = {'present': 0, 'absent': 0}
-        
-        # Only a genuine no-show counts as Absent. Leave / Sick / leavers are
-        # legitimate non-attendance and must not inflate the absent totals.
         if status == 'Present':
             summary_map[key]['present'] += 1
         elif status == 'Absent':
@@ -5757,7 +5812,7 @@ def export_reports_view(request):
     ws_detailed = wb.active
     ws_detailed.title = "Detailed Attendance"
     
-    headers = ['Employee Name', 'Badge ID', 'Grade', 'Department', 'Position', 'Site', 'Housing Camp', 'Transportation', 'Working Type', 'Working Shift', 'Date', 'Status', 'Check In', 'Check Out']
+    headers = ['Employee Name', 'Badge ID', 'Grade', 'Department', 'Position', 'Site', 'Housing Camp', 'Transportation', 'Working Type', 'Working Shift', 'Date', 'Status', 'Check In', 'Check Out', 'Leave Start', 'Leave End', 'Resumption Date', 'Last Working Day']
     ws_detailed.append(headers)
     
     header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
@@ -5861,6 +5916,28 @@ def export_reports_view(request):
     for col in range(2, ws_summary.max_column + 1):
         ws_summary.column_dimensions[get_column_letter(col)].width = 12
 
+    # --- Sheet 3: On Leave / Not Working ---
+    # People who were NOT part of the working headcount on this date — on leave,
+    # sick, or recently left. Kept out of Sheets 1 & 2 so the attendance figures
+    # reflect only staff who were expected to work.
+    ws_leave = wb.create_sheet("On Leave & Not Working")
+    leave_headers = ['Employee Name', 'Badge ID', 'Grade', 'Department', 'Position',
+                     'Site', 'Reason', 'Leave Start', 'Leave End', 'Resumption Date', 'Last Working Day']
+    ws_leave.append(leave_headers)
+    for col in range(1, len(leave_headers) + 1):
+        cell = ws_leave.cell(row=1, column=col)
+        cell.fill = PatternFill(start_color="C55A11", end_color="C55A11", fill_type="solid")
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center")
+    # Group by reason then name for a readable list.
+    non_working_data.sort(key=lambda r: (str(r[6]), str(r[0])))
+    for row in non_working_data:
+        ws_leave.append(row)
+    if not non_working_data:
+        ws_leave.append(['No employees on leave, sick or recently left on this date.'])
+    for i in range(len(leave_headers)):
+        ws_leave.column_dimensions[get_column_letter(i + 1)].width = 18
+
     # Output
     response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     filename = f"attendance_report_{selected_date}.xlsx"
@@ -5962,6 +6039,11 @@ class AdminSalaryReportView(APIView):
                 'special_ot_pay': round(special_ot_pay, 2),
                 'deduction': round(deduction, 2),
                 'net_salary': round(net_salary, 2),
+                'status': emp.status or '-',
+                'leave_start_date': str(emp.leave_start_date) if emp.leave_start_date else None,
+                'leave_end_date': str(emp.leave_end_date) if emp.leave_end_date else None,
+                'resumption_date': str(emp.resumption_date) if emp.resumption_date else None,
+                'last_working_date': str(emp.last_working_date) if emp.last_working_date else None,
             })
             
         # AJAX Response
@@ -6232,6 +6314,8 @@ def _build_monthly_analytics(employees, attendance_records, year, month):
     rec_by_user = defaultdict(list)
     trend_p = defaultdict(int)
     trend_l = defaultdict(int)
+    trend_leave = defaultdict(int)   # per-day people on leave
+    trend_sick = defaultdict(int)    # per-day people sick
     site_p = defaultdict(lambda: defaultdict(int))
     dept_p = defaultdict(int)
     dept_l = defaultdict(int)
@@ -6253,26 +6337,68 @@ def _build_monthly_analytics(employees, attendance_records, year, month):
     total_present = 0
     total_late = 0
     total_ot = 0.0
+    total_leave = 0
+    total_sick = 0
     zero_attendees = []
 
     for e in employees:
         recs = rec_by_user.get(e.id, [])
-        days_present = sum(1 for r in recs if r.check_in_time)
+        rec_by_date = {r.date: r for r in recs}
         late_count = sum(1 for r in recs if r.late_minutes and r.late_minutes > 0)
         ot_hours = sum(float(r.normal_ot_hours or 0) + float(r.special_ot_hours or 0)
                        for r in recs)
 
+        # Per-day classification so Leave and Sick are separated from genuine
+        # absence and don't drag down the attendance percentage.
+        is_staff = (e.category or '').lower() == 'staff'
+        raw_off = (e.site.office_day_off if is_staff else e.site.worker_day_off) if e.site else ''
+        day_off = (raw_off or '').strip().lower()
+
+        days_present = 0
+        days_leave = 0
+        days_sick = 0
+        days_absent = 0
+        for d in dates_in_month:
+            rec = rec_by_date.get(d)
+            if rec and rec.check_in_time:
+                days_present += 1
+                continue
+            marking = (rec.status or '').strip().lower() if rec else ''
+            if marking == 'sick':
+                days_sick += 1
+                trend_sick[d] += 1
+                continue
+            if marking == 'leave':
+                days_leave += 1
+                trend_leave[d] += 1
+                continue
+            st = employment_status_on(e, d)
+            if st == 'Leave':
+                days_leave += 1
+                trend_leave[d] += 1
+            elif st in REPORT_TERMINAL_STATUSES:
+                pass  # not employed that day — neither present nor absent
+            elif not day_off or d.strftime('%A').lower() != day_off:
+                days_absent += 1  # a genuine no-show on a working day
+
         working_days = _working_days_for(e, dates_in_month, num_days)
+        # Leave & sick are legitimate — exclude them from the denominator so the
+        # percentage reflects days the employee was actually expected to work.
+        eff_working = max(0, working_days - days_leave - days_sick)
         raw_pct = (days_present / num_days * 100) if num_days else 0
-        eff_pct = min((days_present / working_days * 100) if working_days else 0, 100.0)
+        eff_pct = min((days_present / eff_working * 100) if eff_working else 0, 100.0)
 
         bands[_attendance_band(eff_pct)] += 1
-        if days_present == 0:
+        # A "ghost" is someone with genuine no-shows, not someone who was simply
+        # on leave / sick / had left for the whole month.
+        if days_present == 0 and days_absent > 0:
             zero_attendees.append(e)
 
         total_present += days_present
         total_late += late_count
         total_ot += ot_hours
+        total_leave += days_leave
+        total_sick += days_sick
 
         employee_rows.append({
             'id': e.id,
@@ -6284,24 +6410,36 @@ def _build_monthly_analytics(employees, attendance_records, year, month):
             'site': e.site.name if e.site else '-',
             'category': e.category or '',
             'days_present': days_present,
-            'days_absent': num_days - days_present,
+            'days_absent': days_absent,
+            'days_leave': days_leave,
+            'days_sick': days_sick,
             'working_days': working_days,
             'late_count': late_count,
             'overtime_hours': round(ot_hours, 2),
             'attendance_percentage': round(eff_pct, 2),
             'attendance_percentage_raw': round(raw_pct, 2),
+            'status': e.status or '-',
+            'leave_start_date': str(e.leave_start_date) if e.leave_start_date else None,
+            'leave_end_date': str(e.leave_end_date) if e.leave_end_date else None,
+            'resumption_date': str(e.resumption_date) if e.resumption_date else None,
+            'last_working_date': str(e.last_working_date) if e.last_working_date else None,
         })
 
     trend = []
     for d in dates_in_month:
         p = trend_p.get(d, 0)
         l = trend_l.get(d, 0)
+        lv = trend_leave.get(d, 0)
+        sk = trend_sick.get(d, 0)
         trend.append({
             'date': d.isoformat(),
             'day': d.day,
             'weekday': d.strftime('%a'),
             'present': p,
-            'absent': max(0, emp_count - p),
+            # Absent no longer swallows people on leave or sick that day.
+            'absent': max(0, emp_count - p - lv - sk),
+            'on_leave': lv,
+            'sick': sk,
             'late': l,
         })
 
@@ -6435,6 +6573,8 @@ def _build_monthly_analytics(employees, attendance_records, year, month):
             'present': total_present,
             'late': total_late,
             'overtime_hours': round(total_ot, 1),
+            'leave': total_leave,
+            'sick': total_sick,
             'employees_with_zero_attendance': len(zero_attendees),
         },
     }
@@ -6872,15 +7012,49 @@ def export_monthly_report(request):
         user__in=employees
     ).select_related('user')
     
-    # Prepare data for Excel
+    # Index attendance per user/date once.
+    recs_by_user = defaultdict(dict)
+    for r in attendance_records:
+        recs_by_user[r.user_id][r.date] = r
+
+    dates_in_month = _month_dates(year, month)
+
+    # Prepare data for Excel — per-day classification keeps Leave & Sick out of
+    # the Absent column and out of the attendance % denominator.
     data = []
     for emp in employees:
-        emp_attendance = attendance_records.filter(user=emp)
-        days_present = emp_attendance.filter(check_in_time__isnull=False).count()
-        days_absent = num_days - days_present
-        late_count = emp_attendance.filter(is_late=True).count() if hasattr(Attendance, 'is_late') else 0
-        attendance_percentage = (days_present / num_days * 100) if num_days > 0 else 0
-        
+        rec_map = recs_by_user.get(emp.id, {})
+        is_staff = (emp.category or '').lower() == 'staff'
+        raw_off = (emp.site.office_day_off if is_staff else emp.site.worker_day_off) if emp.site else ''
+        day_off = (raw_off or '').strip().lower()
+
+        days_present = days_leave = days_sick = days_absent = late_count = 0
+        for d in dates_in_month:
+            rec = rec_map.get(d)
+            if rec and rec.check_in_time:
+                days_present += 1
+                if rec.late_minutes and rec.late_minutes > 0:
+                    late_count += 1
+                continue
+            marking = (rec.status or '').strip().lower() if rec else ''
+            if marking == 'sick':
+                days_sick += 1
+                continue
+            if marking == 'leave':
+                days_leave += 1
+                continue
+            st = employment_status_on(emp, d)
+            if st == 'Leave':
+                days_leave += 1
+            elif st in REPORT_TERMINAL_STATUSES:
+                pass  # not employed that day
+            elif not day_off or d.strftime('%A').lower() != day_off:
+                days_absent += 1
+
+        working_days = _working_days_for(emp, dates_in_month, num_days)
+        eff_working = max(0, working_days - days_leave - days_sick)
+        attendance_percentage = min((days_present / eff_working * 100) if eff_working else 0, 100.0)
+
         data.append({
             'Employee Name': emp.name,
             'Badge ID': emp.badge_number or '-',
@@ -6890,10 +7064,18 @@ def export_monthly_report(request):
             'Transportation': emp.transportation or '-',
             'Agency Name': emp.agency_name or '-',
             'Total Days': num_days,
+            'Working Days': working_days,
             'Days Present': days_present,
             'Days Absent': days_absent,
+            'Days Leave': days_leave,
+            'Days Sick': days_sick,
             'Late Arrivals': late_count,
-            'Attendance %': round(attendance_percentage, 2)
+            'Attendance %': round(attendance_percentage, 2),
+            'Status': emp.status or '-',
+            'Leave Start': str(emp.leave_start_date) if emp.leave_start_date else '-',
+            'Leave End': str(emp.leave_end_date) if emp.leave_end_date else '-',
+            'Resumption Date': str(emp.resumption_date) if emp.resumption_date else '-',
+            'Last Working Day': str(emp.last_working_date) if emp.last_working_date else '-',
         })
     
     # Create DataFrame
@@ -7085,8 +7267,10 @@ class AttendanceReportDataView(APIView):
 
         # Aggregate collections
         all_results = []
+        non_working_list = []   # Leave / Sick / recently-left — kept out of the totals
         stats = {'total': 0, 'present': 0, 'absent': 0, 'late': 0,
-                 'missing_checkout': 0, 'geofence_violations': 0, 'checking_in_now': 0}
+                 'missing_checkout': 0, 'geofence_violations': 0, 'checking_in_now': 0,
+                 'on_leave': 0, 'sick': 0, 'left': 0, 'non_working': 0}
         hourly = {h: 0 for h in range(24)}                 # check-in hour -> count
         site_buckets = defaultdict(lambda: {'present': 0, 'total': 0, 'late': 0, 'name': '-'})
         dept_buckets = defaultdict(lambda: {'present': 0, 'total': 0})
@@ -7121,9 +7305,32 @@ class AttendanceReportDataView(APIView):
             checked_in_at_iso = None
             checked_out_at_iso = None
 
-            # No punch → show the real state (Leave / Resigned / Terminated /
-            # No Renewal) rather than a blanket "Absent".
-            status = employment_status_on(emp, selected_date)
+            # Classify: working (Present/Absent) vs non-working (Leave/Sick/left).
+            # Non-working people are pulled into a separate list and never counted
+            # in Present/Absent/Total, so leave & sick no longer inflate absences.
+            bucket, status = classify_report_row(emp, att, selected_date)
+            if bucket in NON_WORKING_BUCKETS:
+                # Every non-working person is listed, including all resigned /
+                # terminated staff regardless of how long ago they left.
+                stats['non_working'] += 1
+                stats['on_leave' if bucket == 'leave' else bucket] += 1
+                non_working_list.append({
+                    'id': emp.id,
+                    'name': emp.name,
+                    'badge_number': emp.badge_number,
+                    'department': emp.department,
+                    'position': emp.position,
+                    'site': site_name,
+                    'site_id': emp.site.id if emp.site else None,
+                    'profile_picture': emp.profile_picture.url if emp.profile_picture else None,
+                    'status': status,
+                    'bucket': bucket,
+                    'last_working_date': str(emp.last_working_date) if emp.last_working_date else None,
+                    'resumption_date': str(emp.resumption_date) if emp.resumption_date else None,
+                    'leave_start_date': str(emp.leave_start_date) if emp.leave_start_date else None,
+                    'leave_end_date': str(emp.leave_end_date) if emp.leave_end_date else None,
+                })
+                continue
 
             if att and att.check_in_time:
                 status = 'Present'
@@ -7327,6 +7534,11 @@ class AttendanceReportDataView(APIView):
             if c and c.strip()
         }.values()))
 
+        # Non-working roster (Leave / Sick / recently-left) — its own section,
+        # ordered by kind then name so leave, sick and leavers group together.
+        _bucket_order = {'leave': 0, 'sick': 1, 'left': 2}
+        non_working_list.sort(key=lambda r: (_bucket_order.get(r['bucket'], 9), r['name'] or ''))
+
         # Paginate
         paginator = Paginator(all_results, per_page)
         try:
@@ -7336,6 +7548,7 @@ class AttendanceReportDataView(APIView):
 
         return Response({
             'results': list(page_obj),
+            'non_working_list': non_working_list,
             'stats': stats,
             'comparison': {
                 'yesterday_present': baseline['yesterday_present'],
@@ -7699,12 +7912,35 @@ def _distribution_payload(request, employee_type):
             pos = (e.get('salary_grade') or '').strip()
         return dept, (pos or '—')
 
+    # Same working/leave rule the attendance reports use, so the distribution
+    # matches them: leavers drop out entirely, leave (by status OR an active
+    # leave-date window) is pulled into the separate Leave column.
+    today = timezone.localdate()
+
+    def _work_bucket(e):
+        st = (e.get('status') or '').strip()
+        if st in REPORT_TERMINAL_STATUSES:
+            lwd = e.get('last_working_date')
+            if not lwd or lwd < today:
+                return 'left'
+        if st == 'Leave':
+            return 'leave'
+        ls, le = e.get('leave_start_date'), e.get('leave_end_date')
+        if ls and le and ls <= today <= le:
+            return 'leave'
+        return 'working'
+
     # ---------- RESOURCE: flat (department → position → count) ----------
     if employee_type == 'resource':
         counts = defaultdict(int)            # (dept, pos) -> int
         dept_seen_first = {}                  # dept -> first-insert index, for stable ordering
         pos_seen_first = {}                   # (dept, pos) -> first-insert index
-        for i, e in enumerate(emps_qs.values('department', 'position', 'salary_grade')):
+        for i, e in enumerate(emps_qs.values(
+            'department', 'position', 'salary_grade', 'status',
+            'last_working_date', 'leave_start_date', 'leave_end_date',
+        )):
+            if _work_bucket(e) != 'working':
+                continue  # leave & leavers are not part of the resource headcount
             d, p = _resolve(e)
             counts[(d, p)] += 1
             dept_seen_first.setdefault(d, i)
@@ -7749,13 +7985,17 @@ def _distribution_payload(request, employee_type):
     dept_seen = {}            # ordering: dept -> first-insert index
 
     for i, e in enumerate(emps_qs.values(
-        'department', 'position', 'salary_grade', 'site_id', 'status'
+        'department', 'position', 'salary_grade', 'site_id', 'status',
+        'last_working_date', 'leave_start_date', 'leave_end_date',
     )):
         d, p = _resolve(e)
         key = (d, p)
         dept_seen.setdefault(d, i)
         dept_pos_seen.setdefault(key, i)
-        if (e['status'] or '').strip() == 'Leave':
+        bucket = _work_bucket(e)
+        if bucket == 'left':
+            continue  # resigned / terminated — not current headcount
+        if bucket == 'leave':
             leave_by_trade[key] += 1
             continue
         # site_id might be None for unassigned employees — those land in 'unassigned',
@@ -9754,9 +9994,15 @@ class SiteActivityView(APIView):
                              'totals': {}, 'inactive_sites': []})
 
         # ── Active-employee counts per site ───────────────────────────────
+        # status='Active' already excludes anyone set to Leave / Resigned /
+        # Terminated. Also drop anyone inside an approved leave-date window today
+        # (a leave booked by dates while their status is still Active), so the
+        # "Assigned" figure and the attendance Rate reflect only people expected
+        # to work today.
         emp_counts = dict(
             Employee.objects
             .filter(status__iexact='Active', site_id__in=site_ids)
+            .exclude(leave_start_date__lte=today, leave_end_date__gte=today)
             .values('site_id')
             .annotate(n=Count('id'))
             .values_list('site_id', 'n')

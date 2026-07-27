@@ -507,8 +507,11 @@
                     <th>Badge ID</th>
                     <th>Department</th>
                     <th>Site</th>
+                    <th>Status</th>
                     <th class="text-center">Present</th>
                     <th class="text-center">Absent</th>
+                    <th class="text-center">Leave</th>
+                    <th class="text-center">Sick</th>
                     <th class="text-center">Late</th>
                     <th class="text-center">OT (hrs)</th>
                     <th class="pe-4">Attendance %</th>
@@ -614,7 +617,7 @@
     async function loadData(page = 1) {
         currentPage = page;
         const tbody = document.getElementById('reportTableBody');
-        tbody.innerHTML = `<tr><td colspan="9" class="text-center py-5">
+        tbody.innerHTML = `<tr><td colspan="12" class="text-center py-5">
             <div class="spinner-border text-primary spinner-border-sm"></div>
             <p class="mt-2 mb-0 page-sub">Generating monthly report…</p></td></tr>`;
 
@@ -661,7 +664,7 @@
             document.getElementById('current-month-display').textContent = `${data.summary.month_name} ${data.summary.year}`;
             loadExecSummary(false);
         } catch (e) {
-            tbody.innerHTML = `<tr><td colspan="9" class="text-center py-5 text-danger">Failed to load report — ${e.message}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="12" class="text-center py-5 text-danger">Failed to load report — ${e.message}</td></tr>`;
             console.error(e);
         }
     }
@@ -902,7 +905,7 @@
     function renderTable(rows) {
         const tbody = document.getElementById('reportTableBody');
         if (!rows || !rows.length) {
-            tbody.innerHTML = `<tr><td colspan="9" class="text-center py-5 page-sub">No records found.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="12" class="text-center py-5 page-sub">No records found.</td></tr>`;
             return;
         }
         tbody.innerHTML = rows.map(r => `
@@ -919,8 +922,11 @@
                 <td><span class="badge bg-light text-dark border font-monospace px-2">${escapeHtml(r.badge_number || '-')}</span></td>
                 <td class="small fw-semibold text-secondary">${escapeHtml(r.department || '-')}</td>
                 <td><div class="d-flex align-items-center gap-1 small fw-medium"><i class="ri-map-pin-line text-secondary"></i> ${escapeHtml(r.site || '-')}</div></td>
+                <td><span class="small ${(r.status && r.status !== 'Active' && r.status !== '-') ? 'text-warning fw-semibold' : 'text-secondary'}">${escapeHtml(r.status || '-')}</span></td>
                 <td class="text-center"><span class="badge bg-success bg-opacity-10 text-success px-3 py-2 rounded-pill fw-bold">${r.days_present}</span></td>
                 <td class="text-center"><span class="badge bg-danger bg-opacity-10 text-danger px-3 py-2 rounded-pill fw-bold">${r.days_absent}</span></td>
+                <td class="text-center"><span class="badge bg-primary bg-opacity-10 text-primary px-3 py-2 rounded-pill fw-bold">${r.days_leave ?? 0}</span></td>
+                <td class="text-center"><span class="badge bg-secondary bg-opacity-10 text-secondary px-3 py-2 rounded-pill fw-bold">${r.days_sick ?? 0}</span></td>
                 <td class="text-center"><span class="badge bg-warning bg-opacity-10 text-warning px-3 py-2 rounded-pill fw-bold">${r.late_count}</span></td>
                 <td class="text-center"><span class="badge bg-info bg-opacity-10 text-info px-3 py-2 rounded-pill fw-bold">${r.overtime_hours}</span></td>
                 <td class="pe-4">

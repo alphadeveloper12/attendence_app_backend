@@ -484,6 +484,33 @@
     </div>
 </div>
 
+<!-- On Leave / Not Working Modal -->
+<div class="modal fade" id="nonWorkingModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow-2xl" style="border-radius: 1.25rem; overflow: hidden;">
+            <div class="modal-header border-bottom bg-white p-4">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="bg-warning bg-opacity-10 p-2 rounded-circle" style="color:#b45309;"><i class="ri-suitcase-line fs-4"></i></div>
+                    <div>
+                        <h5 class="modal-title fw-bold">On Leave / Not Working</h5>
+                        <p class="mb-0 page-sub" id="nonWorkingSub">People not counted in attendance for this date</p>
+                    </div>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-0">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light"><tr>
+                        <th class="ps-4">Employee</th><th>Badge</th><th>Department</th>
+                        <th>Site</th><th>Reason</th><th class="pe-4">Dates</th>
+                    </tr></thead>
+                    <tbody id="nonWorkingBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
@@ -609,6 +636,9 @@
               click: () => filterStatus('Present') },
             { lbl: 'Absent Today', icn: 'ri-close-circle-line', val: (stats.absent || 0).toLocaleString(),
               click: () => filterStatus('Absent') },
+            { lbl: 'On Leave / Not Working', icn: 'ri-suitcase-line', val: (stats.non_working || 0).toLocaleString(),
+              extra: `<div class="page-sub" style="font-size:.7rem;margin-top:.2rem;">Leave ${stats.on_leave||0} · Sick ${stats.sick||0} · Left ${stats.left||0}</div>`,
+              click: () => showNonWorking() },
             { lbl: 'Late Arrivals', icn: 'ri-alarm-warning-line', val: (stats.late || 0).toLocaleString(),
               click: () => setQuickFilter('late') },
             { lbl: 'Missing Check-out', icn: 'ri-logout-box-line', val: (stats.missing_checkout || 0).toLocaleString(),
@@ -817,6 +847,42 @@
     }
     function emptyList(msg) { return `<div class="page-sub py-3 text-center">${msg}</div>`; }
     function goToUser(id) { window.location = `/dashboard/user/${id}/`; }
+
+    /* ───────── On Leave / Not Working (separate from attendance) ───── */
+    function showNonWorking() {
+        const rows = (lastPayload && lastPayload.non_working_list) || [];
+        const body = document.getElementById('nonWorkingBody');
+        const sub = document.getElementById('nonWorkingSub');
+        const st = (lastPayload && lastPayload.stats) || {};
+        sub.textContent = `Leave ${st.on_leave||0} · Sick ${st.sick||0} · Left ${st.left||0} — not counted in Present/Absent`;
+        if (!rows.length) {
+            body.innerHTML = `<tr><td colspan="6" class="text-center py-5 text-muted"><i class="ri-emotion-happy-line fs-2 d-block mb-2 opacity-50"></i>Nobody on leave, sick or recently left on this date.</td></tr>`;
+        } else {
+            const badge = (b, s) => {
+                const c = b === 'leave' ? '#2563eb' : (b === 'sick' ? '#b45309' : '#6b7280');
+                return `<span class="badge-soft" style="background:${c}1a;color:${c};">${esc(s)}</span>`;
+            };
+            body.innerHTML = rows.map(r => {
+                let dates;
+                if (r.bucket === 'left') {
+                    dates = r.last_working_date ? `Last day: ${esc(r.last_working_date)}` : '—';
+                } else {
+                    const span = r.leave_start_date ? `${esc(r.leave_start_date)} → ${esc(r.leave_end_date || '—')}` : '—';
+                    dates = r.resumption_date ? `${span} · resumes ${esc(r.resumption_date)}` : span;
+                }
+                return `<tr style="cursor:pointer;" onclick="window.location='/dashboard/user/${r.id}/'">
+                    <td class="ps-4 fw-bold text-dark">${esc(r.name)}</td>
+                    <td><span class="font-monospace small">${esc(r.badge_number || '-')}</span></td>
+                    <td class="small">${esc(r.department || '—')}</td>
+                    <td class="small"><i class="ri-building-line text-secondary"></i> ${esc(r.site)}</td>
+                    <td>${badge(r.bucket, r.status)}</td>
+                    <td class="pe-4 small page-sub">${dates}</td>
+                </tr>`;
+            }).join('');
+        }
+        (nonWorkingModal || (nonWorkingModal = new bootstrap.Modal(document.getElementById('nonWorkingModal')))).show();
+    }
+    let nonWorkingModal = null;
 
     /* ───────────── Table ─────────────────────────────────────────── */
     function renderTable(rows) {
