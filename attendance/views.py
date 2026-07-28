@@ -7139,6 +7139,212 @@ def export_monthly_report(request):
     
     return response
 
+def _transfer_report_qs(request):
+    """Site-transfer records (EmployeeSiteHistory) for the report, filtered by
+    date range, from/to site, and search — scoped to a site admin's own sites.
+
+    Returns (queryset, context) where context carries the parsed filters so the
+    page/export can echo them back.
+    """
+    today = timezone.localdate()
+
+    def _parse(d, default):
+        if not d:
+            return default
+        try:
+            return datetime.strptime(d, '%Y-%m-%d').date()
+        except (ValueError, TypeError):
+            return default
+
+    # Default window: the current month to date.
+    start_date = _parse(request.GET.get('start_date'), today.replace(day=1))
+    end_date = _parse(request.GET.get('end_date'), today)
+    from_site = request.GET.get('from_site')
+    to_site = request.GET.get('to_site')
+    search = (request.GET.get('search') or '').strip()
+
+    qs = (EmployeeSiteHistory.objects
+          .select_related('employee', 'old_site', 'new_site', 'changed_by')
+          .filter(effective_from__gte=start_date, effective_from__lte=end_date)
+          # A genuine site-to-site transfer has a previous site AND a new site.
+          .exclude(old_site__isnull=True)
+          .exclude(new_site__isnull=True))
+
+    # Site-admin scope: only transfers touching one of their sites (in or out).
+    if not request.user.is_superuser:
+        try:
+            profile = AdminProfile.objects.get(user=request.user)
+            allowed = list(profile.sites.values_list('id', flat=True))
+            qs = qs.filter(Q(old_site_id__in=allowed) | Q(new_site_id__in=allowed))
+        except AdminProfile.DoesNotExist:
+            qs = qs.none()
+
+    if from_site and from_site != 'all':
+        qs = qs.filter(old_site_id=from_site)
+    if to_site and to_site != 'all':
+        qs = qs.filter(new_site_id=to_site)
+    if search:
+        qs = qs.filter(
+            Q(employee__name__icontains=search) |
+            Q(employee__badge_number__icontains=search)
+        )
+
+    qs = qs.order_by('-effective_from', '-changed_at')
+    ctx = {
+        'start_date': start_date, 'end_date': end_date,
+        'from_site': from_site or 'all', 'to_site': to_site or 'all',
+        'search': search,
+    }
+    return qs, ctx
+
+
+@login_required
+def admin_transfers_report_view(request):
+    """Site-Transfer report: page render, or JSON when called via AJAX.
+
+    Shows every worker moved from one site to another in the selected date
+    range — who, from where, to where, when, and by whom.
+    """
+    is_superuser = request.user.is_superuser
+    try:
+        admin_profile = request.user.admin_profile
+    except AdminProfile.DoesNotExist:
+        admin_profile = None
+    if not is_superuser and not admin_profile:
+        return render(request, 'dashboard.html', {'error': 'Permission Denied'})
+
+    is_ajax = (request.headers.get('x-requested-with') == 'XMLHttpRequest'
+               or request.GET.get('format') == 'json')
+
+    if not is_ajax:
+        sites = list(Site.objects.order_by('name').values('id', 'name'))
+        return render(request, 'transfers_report.html', {
+            'is_superuser': is_superuser, 'sites': sites,
+        })
+
+    qs, ctx = _transfer_report_qs(request)
+
+    # Summary: total, plus per-site in/out tallies.
+    from collections import defaultdict
+    site_out = defaultdict(int)   # left this site
+    site_in = defaultdict(int)    # joined this site
+    rows = []
+    for h in qs:
+        if h.old_site:
+            site_out[h.old_site.name] += 1
+        if h.new_site:
+            site_in[h.new_site.name] += 1
+        rows.append({
+            'id': h.id,
+            'employee_id': h.employee_id,
+            'employee': h.employee.name if h.employee else '—',
+            'badge_number': h.employee.badge_number if h.employee else '—',
+            'from_site': h.old_site.name if h.old_site else '—',
+            'to_site': h.new_site.name if h.new_site else '—',
+            'effective_from': str(h.effective_from) if h.effective_from else '',
+            'working_type': h.working_type or '—',
+            'working_shift': h.working_shift or '—',
+            'changed_by': (h.changed_by.get_full_name() or h.changed_by.username) if h.changed_by else '—',
+            'note': h.note or '',
+        })
+
+    movements = defaultdict(int)   # "From → To" -> count
+    for r in rows:
+        movements[f"{r['from_site']} → {r['to_site']}"] += 1
+    top_movements = sorted(movements.items(), key=lambda kv: -kv[1])[:10]
+
+    # Paginate the detail rows for the on-screen table.
+    try:
+        per_page = min(max(int(request.GET.get('per_page', 25)), 1), 200)
+    except (TypeError, ValueError):
+        per_page = 25
+    paginator = Paginator(rows, per_page)
+    try:
+        page_obj = paginator.page(request.GET.get('page', 1))
+    except (PageNotAnInteger, EmptyPage):
+        page_obj = paginator.page(1)
+
+    return JsonResponse({
+        'results': list(page_obj),
+        'summary': {
+            'total_transfers': len(rows),
+            'sites_involved': len(set(list(site_out.keys()) + list(site_in.keys()))),
+            'top_movements': [{'route': k, 'count': v} for k, v in top_movements],
+            'site_in': sorted(([{'site': k, 'count': v} for k, v in site_in.items()]),
+                              key=lambda x: -x['count']),
+            'site_out': sorted(([{'site': k, 'count': v} for k, v in site_out.items()]),
+                               key=lambda x: -x['count']),
+        },
+        'filters': {
+            'start_date': str(ctx['start_date']), 'end_date': str(ctx['end_date']),
+            'from_site': ctx['from_site'], 'to_site': ctx['to_site'], 'search': ctx['search'],
+        },
+        'sites': list(Site.objects.order_by('name').values('id', 'name')),
+        'pagination': {
+            'current_page': page_obj.number, 'num_pages': paginator.num_pages,
+            'has_next': page_obj.has_next(), 'has_previous': page_obj.has_previous(),
+            'total_items': paginator.count,
+            'start_index': page_obj.start_index(), 'end_index': page_obj.end_index(),
+        },
+    })
+
+
+@login_required
+def export_transfers_report(request):
+    """Excel export of the Site-Transfer report (same filters as the page)."""
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment
+    from openpyxl.utils import get_column_letter
+
+    qs, ctx = _transfer_report_qs(request)
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Site Transfers"
+
+    ws.append(['Site Transfer Report'])
+    ws.append([f"Period: {ctx['start_date']} to {ctx['end_date']}"])
+    ws.append([])
+
+    headers = ['Employee', 'Badge ID', 'From Site', 'To Site', 'Effective Date',
+               'Working Type', 'Working Shift', 'Changed By', 'Note']
+    ws.append(headers)
+    header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+    header_font = Font(bold=True, color="FFFFFF")
+    for col in range(1, len(headers) + 1):
+        c = ws.cell(row=4, column=col)
+        c.fill = header_fill
+        c.font = header_font
+        c.alignment = Alignment(horizontal="center")
+
+    count = 0
+    for h in qs:
+        ws.append([
+            h.employee.name if h.employee else '—',
+            h.employee.badge_number if h.employee else '—',
+            h.old_site.name if h.old_site else '—',
+            h.new_site.name if h.new_site else '—',
+            str(h.effective_from) if h.effective_from else '',
+            h.working_type or '—',
+            h.working_shift or '—',
+            (h.changed_by.get_full_name() or h.changed_by.username) if h.changed_by else '—',
+            h.note or '',
+        ])
+        count += 1
+    if not count:
+        ws.append(['No transfers in the selected period.'])
+
+    ws.cell(row=1, column=1).font = Font(bold=True, size=14)
+    for i in range(len(headers)):
+        ws.column_dimensions[get_column_letter(i + 1)].width = 20
+
+    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = (
+        f'attachment; filename="site_transfers_{ctx["start_date"]}_to_{ctx["end_date"]}.xlsx"')
+    wb.save(response)
+    return response
+
+
 def _daily_baseline(emp_qs, selected_date):
     """Cheap baseline counts for delta tiles.
 

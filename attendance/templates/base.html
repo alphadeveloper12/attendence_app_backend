@@ -494,6 +494,9 @@
                     <span class="nav-icon"><i class="ri-calendar-2-line"></i></span> Monthly Report
                 </a>
                 {% endif %}
+                <a href="{% url 'admin-transfers-report' %}" class="nav-item {% if 'transfers-report' in request.path %}active{% endif %}">
+                    <span class="nav-icon"><i class="ri-arrow-left-right-line"></i></span> Transfer Report
+                </a>
 
                 <div class="nav-section-label">Workforce</div>
                 {% if nav_visible.distribution_list %}

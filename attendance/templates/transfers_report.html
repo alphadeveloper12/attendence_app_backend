@@ -1,0 +1,192 @@
+{% extends 'base.html' %}
+{% block title %}Site Transfer Report{% endblock %}
+
+{% block content %}
+<link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+<style>
+    .tr-wrap { font-family: 'Outfit', sans-serif; }
+    .tr-h1 { font-size: 1.6rem; font-weight: 700; letter-spacing: -.02em; }
+    .tr-sub { color: #94a3b8; font-size: .85rem; }
+    .tr-card { background:#fff; border:1px solid #eef2f7; border-radius:1rem; padding:1.1rem 1.25rem; box-shadow:0 1px 2px rgba(15,23,42,.04); }
+    .tr-filter { background:#fff; border:1px solid #eef2f7; border-radius:1rem; padding:1.25rem 1.5rem; margin-bottom:1.25rem; }
+    .tr-lbl { font-size:.68rem; text-transform:uppercase; font-weight:700; color:#94a3b8; letter-spacing:.06em; margin-bottom:.35rem; display:block; }
+    .tr-input { border:1px solid #e2e8f0; border-radius:.7rem; padding:.55rem .8rem; width:100%; font-weight:500; }
+    .tr-input:focus { outline:none; border-color:#6366f1; box-shadow:0 0 0 4px rgba(99,102,241,.12); }
+    .kpi-row { display:grid; grid-template-columns:repeat(3,1fr); gap:1rem; margin-bottom:1.25rem; }
+    @media (max-width:700px){ .kpi-row{ grid-template-columns:1fr; } }
+    .kpi .v { font-size:1.7rem; font-weight:700; color:#0f172a; }
+    .kpi .l { font-size:.7rem; text-transform:uppercase; font-weight:700; color:#94a3b8; letter-spacing:.06em; }
+    table.tr-table { width:100%; border-collapse:collapse; }
+    table.tr-table th { text-align:left; font-size:.72rem; text-transform:uppercase; color:#64748b; font-weight:700; padding:.75rem 1rem; border-bottom:2px solid #eef2f7; background:#f8fafc; }
+    table.tr-table td { padding:.75rem 1rem; border-bottom:1px solid #f1f5f9; font-size:.88rem; }
+    .site-pill { display:inline-flex; align-items:center; gap:.3rem; padding:.15rem .55rem; border-radius:999px; font-size:.78rem; font-weight:600; }
+    .from-pill { background:rgba(239,68,68,.08); color:#b91c1c; }
+    .to-pill { background:rgba(16,185,129,.10); color:#047857; }
+    .btn-tr { border:1px solid #e2e8f0; background:#fff; border-radius:.7rem; padding:.55rem 1rem; font-weight:600; cursor:pointer; }
+    .btn-tr-primary { background:#4f46e5; color:#fff; border-color:#4f46e5; }
+    .btn-tr-green { background:#10b981; color:#fff; border-color:#10b981; }
+</style>
+
+<div class="tr-wrap p-3 p-md-4">
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <div>
+            <div class="tr-h1"><i class="ri-arrow-left-right-line text-primary"></i> Site Transfer Report</div>
+            <div class="tr-sub">Every worker moved from one site to another in the selected period.</div>
+        </div>
+        <a id="downloadBtn" href="#" class="btn-tr btn-tr-green text-decoration-none">
+            <i class="ri-file-excel-2-line"></i> Download Excel
+        </a>
+    </div>
+
+    <div class="tr-filter">
+        <div class="row g-3 align-items-end">
+            <div class="col-6 col-md-2">
+                <label class="tr-lbl">From date</label>
+                <input type="date" id="startDate" class="tr-input">
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="tr-lbl">To date</label>
+                <input type="date" id="endDate" class="tr-input">
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="tr-lbl">From site</label>
+                <select id="fromSite" class="tr-input"><option value="all">All sites</option></select>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="tr-lbl">To site</label>
+                <select id="toSite" class="tr-input"><option value="all">All sites</option></select>
+            </div>
+            <div class="col-8 col-md-3">
+                <label class="tr-lbl">Search (name / badge)</label>
+                <input type="text" id="search" class="tr-input" placeholder="Type a name or badge…">
+            </div>
+            <div class="col-4 col-md-1">
+                <button id="applyBtn" class="btn-tr btn-tr-primary w-100"><i class="ri-search-line"></i></button>
+            </div>
+        </div>
+    </div>
+
+    <div class="kpi-row">
+        <div class="tr-card kpi"><div class="l">Total Transfers</div><div class="v" id="kpiTotal">0</div></div>
+        <div class="tr-card kpi"><div class="l">Sites Involved</div><div class="v" id="kpiSites">0</div></div>
+        <div class="tr-card kpi"><div class="l">Top Movement</div><div class="v" id="kpiTop" style="font-size:1rem;">—</div></div>
+    </div>
+
+    <div class="tr-card p-0" style="overflow:hidden;">
+        <div style="overflow-x:auto;">
+            <table class="tr-table">
+                <thead><tr>
+                    <th>Employee</th><th>Badge</th><th>From Site</th><th>To Site</th>
+                    <th>Effective Date</th><th>Work Type</th><th>Shift</th><th>Changed By</th><th>Note</th>
+                </tr></thead>
+                <tbody id="tbody">
+                    <tr><td colspan="9" class="text-center text-muted py-5">Loading…</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="d-flex justify-content-between align-items-center p-3 flex-wrap gap-2">
+            <div class="tr-sub" id="rowsSummary"></div>
+            <div id="pagination" class="d-flex gap-1"></div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ sites|json_script:"sitesData" }}
+<script>
+    const DATA_URL = "{% url 'admin-transfers-report' %}";
+    const EXPORT_URL = "{% url 'export-transfers-report' %}";
+    const SITES = JSON.parse(document.getElementById('sitesData').textContent);
+    let page = 1;
+
+    function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+    function initSites() {
+        const opts = SITES.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('');
+        document.getElementById('fromSite').innerHTML = '<option value="all">All sites</option>' + opts;
+        document.getElementById('toSite').innerHTML = '<option value="all">All sites</option>' + opts;
+        // Default range: first of this month → today
+        const now = new Date();
+        const first = new Date(now.getFullYear(), now.getMonth(), 1);
+        document.getElementById('startDate').value = first.toISOString().slice(0,10);
+        document.getElementById('endDate').value = now.toISOString().slice(0,10);
+    }
+
+    function params() {
+        const p = new URLSearchParams({
+            format: 'json',
+            start_date: document.getElementById('startDate').value,
+            end_date: document.getElementById('endDate').value,
+            from_site: document.getElementById('fromSite').value,
+            to_site: document.getElementById('toSite').value,
+            search: document.getElementById('search').value,
+            page: page,
+        });
+        return p;
+    }
+
+    async function load() {
+        const tbody = document.getElementById('tbody');
+        tbody.innerHTML = `<tr><td colspan="9" class="text-center text-muted py-5">Loading…</td></tr>`;
+        try {
+            const res = await fetch(`${DATA_URL}?${params()}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+            const data = await res.json();
+            render(data);
+        } catch (e) {
+            tbody.innerHTML = `<tr><td colspan="9" class="text-center text-danger py-5">Failed to load — ${esc(e.message)}</td></tr>`;
+        }
+        // keep the download button in sync with the current filters
+        const dl = new URLSearchParams(params()); dl.delete('format'); dl.delete('page');
+        document.getElementById('downloadBtn').href = `${EXPORT_URL}?${dl}`;
+    }
+
+    function render(data) {
+        const s = data.summary || {};
+        document.getElementById('kpiTotal').textContent = (s.total_transfers||0).toLocaleString();
+        document.getElementById('kpiSites').textContent = (s.sites_involved||0).toLocaleString();
+        document.getElementById('kpiTop').textContent = (s.top_movements && s.top_movements[0])
+            ? `${s.top_movements[0].route} (${s.top_movements[0].count})` : '—';
+
+        const rows = data.results || [];
+        const tbody = document.getElementById('tbody');
+        if (!rows.length) {
+            tbody.innerHTML = `<tr><td colspan="9" class="text-center text-muted py-5">No transfers in this period.</td></tr>`;
+        } else {
+            tbody.innerHTML = rows.map(r => `
+                <tr>
+                    <td class="fw-semibold">${esc(r.employee)}</td>
+                    <td><span class="font-monospace small">${esc(r.badge_number)}</span></td>
+                    <td><span class="site-pill from-pill"><i class="ri-building-line"></i>${esc(r.from_site)}</span></td>
+                    <td><span class="site-pill to-pill"><i class="ri-building-line"></i>${esc(r.to_site)}</span></td>
+                    <td class="small">${esc(r.effective_from)}</td>
+                    <td class="small">${esc(r.working_type)}</td>
+                    <td class="small">${esc(r.working_shift)}</td>
+                    <td class="small text-secondary">${esc(r.changed_by)}</td>
+                    <td class="small text-secondary">${esc(r.note)}</td>
+                </tr>`).join('');
+        }
+
+        const p = data.pagination || {};
+        document.getElementById('rowsSummary').textContent =
+            p.total_items ? `Showing ${p.start_index}–${p.end_index} of ${p.total_items}` : '';
+        const pg = document.getElementById('pagination');
+        pg.innerHTML = '';
+        if (p.num_pages > 1) {
+            const mk = (label, target, disabled) =>
+                `<button class="btn-tr" ${disabled?'disabled':''} onclick="page=${target};load()">${label}</button>`;
+            pg.innerHTML = mk('‹ Prev', p.current_page-1, !p.has_previous)
+                + `<span class="btn-tr" style="pointer-events:none;">${p.current_page} / ${p.num_pages}</span>`
+                + mk('Next ›', p.current_page+1, !p.has_next);
+        }
+    }
+
+    document.getElementById('applyBtn').addEventListener('click', () => { page=1; load(); });
+    document.getElementById('search').addEventListener('keydown', e => { if(e.key==='Enter'){ page=1; load(); } });
+    ['startDate','endDate','fromSite','toSite'].forEach(id =>
+        document.getElementById(id).addEventListener('change', () => { page=1; load(); }));
+
+    initSites();
+    load();
+</script>
+{% endblock %}
