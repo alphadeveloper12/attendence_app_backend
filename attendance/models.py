@@ -12,13 +12,19 @@ class Site(models.Model):
     geofence_lng = models.FloatField(null=True, blank=True)
     geofence_radius_meters = models.FloatField(default=100.0)
     
-    # New timing fields
+    # New timing fields (DAY shift)
     office_start_time = models.TimeField(null=True, blank=True, default="09:00:00")
     office_end_time = models.TimeField(null=True, blank=True, default="18:00:00")
     worker_start_time = models.TimeField(null=True, blank=True, default="08:00:00")
     worker_end_time = models.TimeField(null=True, blank=True, default="17:00:00")
     office_day_off = models.CharField(max_length=50, null=True, blank=True, default="Sunday")
     worker_day_off = models.CharField(max_length=50, null=True, blank=True, default="Sunday")
+
+    # NIGHT duty timing — shared by staff & workers at the site. When a site runs a
+    # night shift, night_end_time is the next-morning end (e.g. 06:00), so a
+    # check-out before this time belongs to the PREVIOUS day's shift, not a new day.
+    night_start_time = models.TimeField(null=True, blank=True)
+    night_end_time = models.TimeField(null=True, blank=True)
 
     def __str__(self):
         return self.name

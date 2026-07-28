@@ -2854,6 +2854,16 @@ class MarkAttendanceView(APIView):
 
         today = now.date()
 
+        # Night-shift day attribution. A night worker's shift starts in the evening
+        # and ends the next morning, so any punch they make before noon is the TAIL
+        # of the previous day's shift and must attach to that day's record. Without
+        # this the early-morning check-out lands on a fresh day with no check-in, and
+        # the worker is wrongly shown Absent that day (and "missing check-out" the day
+        # before). Evening check-ins (after noon) stay on the current day.
+        attendance_date = today
+        if (emp.working_shift or '').strip().lower() == 'night' and now.hour < 12:
+            attendance_date = today - timedelta(days=1)
+
         reassigned_to = None  # set to the new site's name if we move the worker
 
         # Cross-site auto-assign: the worker is marking from a site they don't
@@ -2891,16 +2901,16 @@ class MarkAttendanceView(APIView):
                         emp.id, old_site.name if old_site else None, new_site.name, cross_site_match,
                     )
 
-        # Check for existing attendance for today
+        # Check for existing attendance for the shift day (night-aware — see above)
         attendance, created = Attendance.objects.get_or_create(
             user=emp,
-            date=today,
+            date=attendance_date,
             defaults={"status": "present"},
         )
         logger.info(
             "[MARK-ATTENDANCE] ATTENDANCE RECORD | emp=%r date=%r created=%r "
             "check_in=%r check_out=%r",
-            emp.id, today, created,
+            emp.id, attendance_date, created,
             attendance.check_in_time, attendance.check_out_time,
         )
 
@@ -4385,6 +4395,8 @@ def admin_sites_view(request):
                 'worker_end': site.worker_end_time.strftime("%H:%M") if site.worker_end_time else "",
                 'office_day_off': site.office_day_off or "",
                 'worker_day_off': site.worker_day_off or "",
+                'night_start': site.night_start_time.strftime("%H:%M") if site.night_start_time else "",
+                'night_end': site.night_end_time.strftime("%H:%M") if site.night_end_time else "",
                 'has_geofence': bool(site.coordinates),
                 'geofence_filename': site.geofence_filename or "",
             })
@@ -4640,6 +4652,8 @@ def admin_add_site(request):
             worker_end = request.POST.get("worker_end")
             office_day_off = request.POST.get("office_day_off")
             worker_day_off = request.POST.get("worker_day_off")
+            night_start = request.POST.get("night_start")
+            night_end = request.POST.get("night_end")
 
             Site.objects.create(
                 name=name,
@@ -4650,7 +4664,9 @@ def admin_add_site(request):
                 worker_start_time=worker_start or "08:00:00",
                 worker_end_time=worker_end or "17:00:00",
                 office_day_off=office_day_off or "Sunday",
-                worker_day_off=worker_day_off or "Sunday"
+                worker_day_off=worker_day_off or "Sunday",
+                night_start_time=night_start or None,
+                night_end_time=night_end or None,
             )
             return redirect("admin-sites")
         else:
@@ -4725,14 +4741,21 @@ def admin_edit_site(request, site_id):
             worker_end = request.POST.get("worker_end")
             office_day_off = request.POST.get("office_day_off")
             worker_day_off = request.POST.get("worker_day_off")
-            
+            night_start = request.POST.get("night_start")
+            night_end = request.POST.get("night_end")
+
             if office_start: site.office_start_time = office_start
             if office_end: site.office_end_time = office_end
             if worker_start: site.worker_start_time = worker_start
             if worker_end: site.worker_end_time = worker_end
             if office_day_off: site.office_day_off = office_day_off
             if worker_day_off: site.worker_day_off = worker_day_off
-            
+            # Blank clears the night window (site runs day-only); a value sets it.
+            if 'night_start' in request.POST:
+                site.night_start_time = night_start or None
+            if 'night_end' in request.POST:
+                site.night_end_time = night_end or None
+
             site.save()
             return redirect("admin-sites")
         else:

@@ -260,6 +260,19 @@
                                 placeholder="e.g. Sunday" value="Sunday">
                         </div>
                     </div>
+                    <div class="row g-3 mb-4">
+                        <div class="col-6">
+                            <label class="form-label-premium">Night Shift Start</label>
+                            <input type="time" name="night_start" class="form-control form-control-premium">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label-premium">Night Shift End (next morning)</label>
+                            <input type="time" name="night_end" class="form-control form-control-premium">
+                        </div>
+                        <div class="col-12">
+                            <div class="small text-secondary"><i class="ri-moon-line me-1"></i>Leave blank if this site has no night shift.</div>
+                        </div>
+                    </div>
                     <div class="mb-0">
                         <label class="form-label-premium">Geofence (KML - Optional)</label>
                         <input type="file" name="kml_file" class="form-control form-control-premium" accept=".kml">
@@ -327,6 +340,21 @@
                             <label class="form-label-premium">Worker Day Off</label>
                             <input type="text" id="editWorkerDayOff" name="worker_day_off"
                                 class="form-control form-control-premium">
+                        </div>
+                    </div>
+                    <div class="row g-3 mb-4">
+                        <div class="col-6">
+                            <label class="form-label-premium">Night Shift Start</label>
+                            <input type="time" id="editNightStart" name="night_start"
+                                class="form-control form-control-premium">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label-premium">Night Shift End (next morning)</label>
+                            <input type="time" id="editNightEnd" name="night_end"
+                                class="form-control form-control-premium">
+                        </div>
+                        <div class="col-12">
+                            <div class="small text-secondary"><i class="ri-moon-line me-1"></i>Leave blank if this site has no night shift.</div>
                         </div>
                     </div>
                     <div class="mb-0">
@@ -524,7 +552,7 @@
                 </td>
                 <td class="text-end pe-4">
                     <div class="d-flex gap-2 justify-content-end">
-                        <button onclick="showEditModal('${s.id}', '${s.name.replace(/'/g, "\\'")}', '${s.office_start}', '${s.office_end}', '${s.worker_start}', '${s.worker_end}', '${s.office_day_off.replace(/'/g, "\\'")}', '${s.worker_day_off.replace(/'/g, "\\'")}', '${(s.geofence_filename || '').replace(/'/g, "\\'")}')" class="btn btn-sm btn-pro">
+                        <button onclick="showEditModal('${s.id}', '${s.name.replace(/'/g, "\\'")}', '${s.office_start}', '${s.office_end}', '${s.worker_start}', '${s.worker_end}', '${s.office_day_off.replace(/'/g, "\\'")}', '${s.worker_day_off.replace(/'/g, "\\'")}', '${(s.geofence_filename || '').replace(/'/g, "\\'")}', '${s.night_start || ''}', '${s.night_end || ''}')" class="btn btn-sm btn-pro">
                             <i class="ri-edit-line"></i> Edit
                         </button>
                         ${s.has_geofence ? `
@@ -570,7 +598,7 @@
     const importModal = new bootstrap.Modal(document.getElementById('importModal'));
 
     function showAddModal() { addModal.show(); }
-    function showEditModal(id, name, offStart, offEnd, worStart, worEnd, officeDayOff, workerDayOff, geofenceFilename) {
+    function showEditModal(id, name, offStart, offEnd, worStart, worEnd, officeDayOff, workerDayOff, geofenceFilename, nightStart, nightEnd) {
         document.getElementById('editSiteId').value = id;
         document.getElementById('editSiteName').value = name;
         document.getElementById('editOfficeStart').value = offStart || "";
@@ -579,6 +607,8 @@
         document.getElementById('editWorkerEnd').value = worEnd || "";
         document.getElementById('editOfficeDayOff').value = officeDayOff || "";
         document.getElementById('editWorkerDayOff').value = workerDayOff || "";
+        document.getElementById('editNightStart').value = (nightStart && nightStart !== 'undefined') ? nightStart : "";
+        document.getElementById('editNightEnd').value = (nightEnd && nightEnd !== 'undefined') ? nightEnd : "";
         // Show the existing-file hint if there's a stored filename for this site
         const wrap = document.getElementById('editExistingGeofenceFile');
         const label = document.getElementById('editExistingGeofenceFileName');
