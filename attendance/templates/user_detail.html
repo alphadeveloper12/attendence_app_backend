@@ -1395,7 +1395,16 @@
                             <strong>No attendance recorded</strong>
                             <div class="small text-secondary">Manually classify this day:</div>
                         </div>
-                        <div class="d-flex gap-2 flex-wrap">
+                        <div class="d-flex gap-2 flex-wrap align-items-end">
+                            ${isSuperuser ? `
+                            <div>
+                                <label class="small text-secondary d-block" style="font-size:.68rem;">Office In</label>
+                                <input type="time" id="mpInTime" class="form-control form-control-sm" style="width:120px;">
+                            </div>
+                            <div>
+                                <label class="small text-secondary d-block" style="font-size:.68rem;">Office Out</label>
+                                <input type="time" id="mpOutTime" class="form-control form-control-sm" style="width:120px;">
+                            </div>` : ''}
                             <button type="button" class="btn btn-sm btn-success" onclick="markDay('${currentDate}','present')">
                                 <i class="ri-checkbox-circle-line"></i> Mark Present
                             </button>
@@ -2304,13 +2313,21 @@
     async function markDay(dateStr, action) {
         const labels = { present: 'Present', absent: 'Absent', leave: 'Leave' };
         if (!labels[action]) return;
+        // When marking Present, a superuser may supply office in/out times.
+        const payload = { date: dateStr, action };
+        if (action === 'present') {
+            const ciEl = document.getElementById('mpInTime');
+            const coEl = document.getElementById('mpOutTime');
+            if (ciEl && ciEl.value) payload.check_in_time = ciEl.value;   // "HH:MM"
+            if (coEl && coEl.value) payload.check_out_time = coEl.value;
+        }
         if (!confirm(`Mark ${dateStr} as ${labels[action]}?`)) return;
         const csrf = document.querySelector('[name=csrfmiddlewaretoken]').value;
         try {
             const res = await fetch(`/api/attendance/employees/${USER_ID}/mark-day/`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
-                body: JSON.stringify({ date: dateStr, action }),
+                body: JSON.stringify(payload),
             });
             const result = await res.json();
             if (!res.ok) { alert(result.error || 'Failed'); return; }

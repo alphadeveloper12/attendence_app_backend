@@ -2254,6 +2254,26 @@ class MarkDayView(APIView):
             record.sick_leave_marked_at = None
             record.sick_leave_marked_by = None
 
+        # Optional office-in / office-out times supplied when marking Present.
+        # Times are "HH:MM" local; combined with the target date and stored aware.
+        if action == 'present':
+            def _combine(hhmm):
+                hhmm = (hhmm or '').strip()
+                if not hhmm:
+                    return None
+                try:
+                    t = _dt.strptime(hhmm, '%H:%M').time()
+                except ValueError:
+                    return None
+                return timezone.make_aware(_dt.combine(target_date, t),
+                                           timezone.get_current_timezone())
+            ci = _combine(request.data.get('check_in_time'))
+            co = _combine(request.data.get('check_out_time'))
+            if ci is not None:
+                record.check_in_time = ci
+            if co is not None:
+                record.check_out_time = co
+
         # Clear check-in/out when moving away from present/late
         if action in ('absent', 'leave'):
             record.check_in_time = None
@@ -5536,10 +5556,12 @@ def classify_report_row(emp, att, on_date):
       'leave'   | 'sick'    -> separated, still on the books
       'left'                -> separated, has left the company
 
-    A real punch wins: someone who physically checked in is Present even if
-    their master status says Leave.
+    A real punch wins: someone who physically checked in OR out is Present even
+    if their master status says Leave. A check-out with no check-in (e.g. a night
+    worker, or a missed morning scan) still means the person was at work, so it
+    must NOT read as Absent. An explicit admin "present" marking counts too.
     """
-    if att and att.check_in_time:
+    if att and (att.check_in_time or att.check_out_time):
         s = (att.status or '').strip().lower()
         if s == 'sick':
             return 'sick', 'Sick'
@@ -5547,12 +5569,14 @@ def classify_report_row(emp, att, on_date):
             return 'leave', 'Leave'
         return 'present', 'Present'
     if att:
-        # Attendance row with no punch but an explicit sick/leave marking.
+        # Attendance row with no punch — honour an explicit admin marking.
         s = (att.status or '').strip().lower()
         if s == 'sick':
             return 'sick', 'Sick'
         if s == 'leave':
             return 'leave', 'Leave'
+        if s == 'present':
+            return 'present', 'Present'
     st = employment_status_on(emp, on_date)
     if st == 'Leave':
         return 'leave', 'Leave'
@@ -6383,7 +6407,8 @@ def _build_monthly_analytics(employees, attendance_records, year, month):
         days_absent = 0
         for d in dates_in_month:
             rec = rec_by_date.get(d)
-            if rec and rec.check_in_time:
+            if rec and (rec.check_in_time or rec.check_out_time
+                        or (rec.status or '').strip().lower() == 'present'):
                 days_present += 1
                 continue
             marking = (rec.status or '').strip().lower() if rec else ''
@@ -7054,7 +7079,8 @@ def export_monthly_report(request):
         days_present = days_leave = days_sick = days_absent = late_count = 0
         for d in dates_in_month:
             rec = rec_map.get(d)
-            if rec and rec.check_in_time:
+            if rec and (rec.check_in_time or rec.check_out_time
+                        or (rec.status or '').strip().lower() == 'present'):
                 days_present += 1
                 if rec.late_minutes and rec.late_minutes > 0:
                     late_count += 1
@@ -7601,6 +7627,12 @@ class AttendanceReportDataView(APIView):
                         'badge_number': emp.badge_number,
                         'profile_picture': emp.profile_picture.url if emp.profile_picture else None,
                     })
+            elif att and att.check_out_time:
+                # Check-out only (night worker, or a missed morning scan). The
+                # classifier already marks this Present; show the out time.
+                out_local = timezone.localtime(att.check_out_time)
+                check_out = out_local.strftime('%I:%M %p')
+                checked_out_at_iso = out_local.isoformat()
 
             stats['total'] += 1
             site_buckets[site_key]['name'] = site_name
