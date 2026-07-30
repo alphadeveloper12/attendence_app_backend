@@ -1396,7 +1396,7 @@
                             <div class="small text-secondary">Manually classify this day:</div>
                         </div>
                         <div class="d-flex gap-2 flex-wrap align-items-end">
-                            ${isSuperuser ? `
+                            {% if is_superuser %}
                             <div>
                                 <label class="small text-secondary d-block" style="font-size:.68rem;">Office In</label>
                                 <input type="time" id="mpInTime" class="form-control form-control-sm" style="width:120px;">
@@ -1404,7 +1404,8 @@
                             <div>
                                 <label class="small text-secondary d-block" style="font-size:.68rem;">Office Out</label>
                                 <input type="time" id="mpOutTime" class="form-control form-control-sm" style="width:120px;">
-                            </div>` : ''}
+                            </div>
+                            {% endif %}
                             <button type="button" class="btn btn-sm btn-success" onclick="markDay('${currentDate}','present')">
                                 <i class="ri-checkbox-circle-line"></i> Mark Present
                             </button>
