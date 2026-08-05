@@ -5851,15 +5851,17 @@ def export_reports_view(request):
         _day_working_type, _day_working_shift = working_on_date.get(
             emp.id, (emp.working_type, emp.working_shift))
 
-        # Classify working vs non-working (Leave / Sick / left). Non-working
-        # people never touch the Present/Absent counts — they go to a separate
-        # sheet so leave & sick can't inflate the absent totals.
+        # Classify working vs non-working. Leave & Sick people STAY on the
+        # detailed sheet (with their status shown) so every person still on the
+        # books has a row there; only actual leavers (Resigned / Terminated /
+        # No Renewal / Absconding) go to the separate inactive sheet. None of
+        # them touch the Present/Absent summary counts.
         bucket, status = classify_report_row(emp, att, selected_date)
 
-        if bucket in NON_WORKING_BUCKETS:
-            # Show every non-working person, including all resigned / terminated
+        if bucket == 'left':
+            # Show every leaver, including all resigned / terminated
             # staff regardless of how long ago they left.
-            reason = {'leave': 'On Leave', 'sick': 'Sick', 'left': status}.get(bucket, status)
+            reason = status
             non_working_data.append([
                 emp.name,
                 emp.badge_number,
@@ -6040,11 +6042,11 @@ def export_reports_view(request):
     for col in range(2, ws_summary.max_column + 1):
         ws_summary.column_dimensions[get_column_letter(col)].width = 12
 
-    # --- Sheet 3: On Leave / Not Working ---
-    # People who were NOT part of the working headcount on this date — on leave,
-    # sick, or recently left. Kept out of Sheets 1 & 2 so the attendance figures
-    # reflect only staff who were expected to work.
-    ws_leave = wb.create_sheet("On Leave & Not Working")
+    # --- Sheet 3: Inactive Employees ---
+    # Only people who have LEFT the company (Resigned / Terminated / No Renewal /
+    # Absconding). On-Leave and Sick staff appear on the Detailed Attendance
+    # sheet instead, with their status in the Status column.
+    ws_leave = wb.create_sheet("Inactive Employees")
     leave_headers = ['Employee Name', 'Badge ID', 'Grade', 'Department', 'Position',
                      'Site', 'Reason', 'Leave Start', 'Leave End', 'Resumption Date', 'Last Working Day']
     ws_leave.append(leave_headers)
@@ -6058,7 +6060,7 @@ def export_reports_view(request):
     for row in non_working_data:
         ws_leave.append(row)
     if not non_working_data:
-        ws_leave.append(['No employees on leave, sick or recently left on this date.'])
+        ws_leave.append(['No resigned / terminated / no-renewal / absconding employees on this date.'])
     for i in range(len(leave_headers)):
         ws_leave.column_dimensions[get_column_letter(i + 1)].width = 18
 
