@@ -5545,22 +5545,45 @@ class ExportFaceEnrollmentView(APIView):
 REPORT_TERMINAL_STATUSES = {'Resigned', 'Terminated', 'No Renewal', 'Absconding'}
 
 
+def _status_changed_on(emp, status):
+    """Date the employee's status last changed to `status`, taken from
+    EmployeeStatusHistory. Cached on the instance so per-day report loops cost
+    at most one query per employee. None when there's no history row."""
+    cache = getattr(emp, '_status_changed_cache', None)
+    if cache is None:
+        cache = {}
+        emp._status_changed_cache = cache
+    if status not in cache:
+        h = emp.status_history.filter(new_status=status).order_by('-changed_at').first()
+        cache[status] = timezone.localtime(h.changed_at).date() if h else None
+    return cache[status]
+
+
 def employment_status_on(emp, on_date):
     """What an employee's state was on `on_date` when there is NO attendance row.
 
     Without this every non-punch reads as "Absent" — so people on approved leave
     or who already left the company show up as absent in reports. Honours the
     leave window, resumption date and last working date.
+
+    A status only applies FROM the date it took effect: someone active until the
+    27th whose status flips to Leave/Resigned on the 28th must not have the
+    whole month repainted with the new status.
     """
     emp_status = (emp.status or '').strip()
 
     # Already left the company before this date → report the leaving status.
     if emp_status in REPORT_TERMINAL_STATUSES:
-        if emp.last_working_date and emp.last_working_date < on_date:
-            return emp_status
-        # Still employed on this date (last working day not yet reached) → absent.
-        if not emp.last_working_date:
-            return emp_status
+        if emp.last_working_date:
+            if emp.last_working_date < on_date:
+                return emp_status
+            # Still employed on this date (last working day not yet reached).
+        else:
+            # No last working day recorded — bound by when the status actually
+            # changed so days before the change keep their real classification.
+            changed = _status_changed_on(emp, emp_status)
+            if changed is None or on_date >= changed:
+                return emp_status
 
     # Inside an approved leave window.
     if emp.leave_start_date and emp.leave_end_date:
@@ -5569,7 +5592,16 @@ def employment_status_on(emp, on_date):
 
     # Flagged as on Leave and not yet resumed by this date.
     if emp_status == 'Leave':
-        if not emp.resumption_date or on_date < emp.resumption_date:
+        # Leave can't cover days before it began.
+        if emp.leave_start_date:
+            leave_began = on_date >= emp.leave_start_date
+        elif emp.leave_approval_date:
+            # Approval date = last working day before the leave.
+            leave_began = on_date > emp.leave_approval_date
+        else:
+            changed = _status_changed_on(emp, 'Leave')
+            leave_began = changed is None or on_date >= changed
+        if leave_began and (not emp.resumption_date or on_date < emp.resumption_date):
             return 'Leave'
 
     return 'Absent'
@@ -6955,10 +6987,15 @@ def monthly_report_view(request):
         _m_start = datetime(year, month, 1).date()
         _m_end = datetime(year, month, calendar.monthrange(year, month)[1]).date()
         TERMINAL_STATUSES = ['Resigned', 'Terminated', 'No Renewal', 'Absconding']
+        # Anyone with real attendance this month must never disappear from the
+        # report — even a leaver with no last_working_date recorded.
+        _month_att_ids = Attendance.objects.filter(
+            date__gte=_m_start, date__lte=_m_end,
+        ).values_list('user_id', flat=True)
         employees = employees.exclude(
             Q(status__in=TERMINAL_STATUSES) & (
                 Q(last_working_date__isnull=True) | Q(last_working_date__lt=_m_start)
-            )
+            ) & ~Q(id__in=_month_att_ids)
         )
         employees = employees.exclude(date_of_joining__gt=_m_end)
 
@@ -7272,10 +7309,15 @@ def export_monthly_report(request):
     # this month is still included, so past months stay accurate.
     if (request.GET.get('include_inactive') or '').strip().lower() not in ('1', 'true', 'yes'):
         TERMINAL_STATUSES = ['Resigned', 'Terminated', 'No Renewal', 'Absconding']
+        # Anyone with real attendance this month must never disappear from the
+        # export — even a leaver with no last_working_date recorded.
+        _month_att_ids = Attendance.objects.filter(
+            date__gte=start_date, date__lte=end_date,
+        ).values_list('user_id', flat=True)
         employees = employees.exclude(
             Q(status__in=TERMINAL_STATUSES) & (
                 Q(last_working_date__isnull=True) | Q(last_working_date__lt=start_date)
-            )
+            ) & ~Q(id__in=_month_att_ids)
         )
         employees = employees.exclude(date_of_joining__gt=end_date)
     
