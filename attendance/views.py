@@ -1209,6 +1209,19 @@ class BulkEditEmployeesView(APIView):
         return Response(results)
 
 
+def _badge_conflict(badge, exclude_id=None):
+    """Return the employee already holding this badge number (case/space-
+    insensitive), or None. Badge ID is the unique identifier across the system —
+    the Excel import already keys on it; manual create/edit must respect it too."""
+    badge = str(badge).strip() if badge is not None else ''
+    if not badge:
+        return None
+    qs = Employee.objects.filter(badge_number__iexact=badge)
+    if exclude_id:
+        qs = qs.exclude(id=exclude_id)
+    return qs.first()
+
+
 class AdminAddEmployeeView(APIView):
     permission_classes = [IsAdminUser]
 
@@ -1219,13 +1232,14 @@ class AdminAddEmployeeView(APIView):
             email = data.get('email')
             name = data.get('name')
             badge = data.get('badge_number')
-            
-            # No auto-email generation
-            
-            # Check for duplicates based on badge or name if needed, but for manual add we might just allow it
-            # or warn. User said "no any field is unique identifier".
-            # So we just create.
-            
+
+            dup = _badge_conflict(badge)
+            if dup:
+                return Response(
+                    {'error': f"Badge ID {str(badge).strip()} is already assigned to {dup.name}. Badge IDs must be unique."},
+                    status=400,
+                )
+
             site_id = data.get('site')
             site = None
             if site_id:
@@ -1563,6 +1577,13 @@ class AdminEditEmployeeView(APIView):
                         {'error': 'Leave end date cannot be before leave start date.'},
                         status=400,
                     )
+
+            dup = _badge_conflict(data.get('badge_number'), exclude_id=emp.id)
+            if dup:
+                return Response(
+                    {'error': f"Badge ID {str(data.get('badge_number')).strip()} is already assigned to {dup.name}. Badge IDs must be unique."},
+                    status=400,
+                )
 
             emp.name = data.get('name', emp.name)
             emp.email = data.get('email') or None
@@ -2410,6 +2431,14 @@ class RegisterUserView(APIView):
             print(f"Employee with email {email} already exists")
             return Response(
                 {"error": "Employee with this email already exists."},
+                status=400,
+            )
+
+        # Badge ID must be unique — applies to both create and edit.
+        dup = _badge_conflict(badge_number, exclude_id=emp.id if emp else None)
+        if dup:
+            return Response(
+                {"error": f"Badge ID {badge_number.strip()} is already assigned to {dup.name}. Badge IDs must be unique."},
                 status=400,
             )
 
