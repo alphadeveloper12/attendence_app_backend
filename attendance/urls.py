@@ -133,6 +133,8 @@ api_urlpatterns = [
 
     # Reports
     path('dashboard/download-salary-slip/<int:employee_id>/<int:month>/<int:year>/', DownloadSalarySlipView.as_view(), name='download-salary-slip'),
+    path('dashboard/salary-report/export/',          ExportSalaryReportView.as_view(),          name='export-salary-report'),
+    path('dashboard/download-badge/<int:employee_id>/', DownloadEmployeeBadgeView.as_view(),    name='download-employee-badge'),
     path('dashboard/reports/export/',                export_reports_view,                       name='export-reports'),
     path('dashboard/monthly-report/export/',         export_monthly_report,                     name='export-monthly-report'),
     path('dashboard/monthly-report/exec-summary/',   monthly_report_exec_summary,               name='monthly-report-exec-summary'),

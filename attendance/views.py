@@ -2272,6 +2272,10 @@ class MarkDayView(APIView):
             if ci is not None:
                 record.check_in_time = ci
             if co is not None:
+                # Night shifts check out after midnight — a checkout at or
+                # before the check-in belongs to the next calendar day.
+                if record.check_in_time is not None and co <= record.check_in_time:
+                    co += timedelta(days=1)
                 record.check_out_time = co
 
         # Clear check-in/out when moving away from present/late
@@ -5145,8 +5149,8 @@ class ExportAttendanceView(APIView):
 
         # Data
         for record in queryset:
-            check_in = timezone.localtime(record.check_in_time).strftime("%I:%M %p") if record.check_in_time else "-"
-            check_out = timezone.localtime(record.check_out_time).strftime("%I:%M %p") if record.check_out_time else "-"
+            check_in = timezone.localtime(record.check_in_time).strftime("%H:%M") if record.check_in_time else "-"
+            check_out = timezone.localtime(record.check_out_time).strftime("%H:%M") if record.check_out_time else "-"
             location = f"{record.latitude}, {record.longitude}" if record.latitude else "-"
             
             ws.append([
@@ -5810,8 +5814,19 @@ def export_reports_view(request):
             ])
             continue
 
-        check_in = timezone.localtime(att.check_in_time).strftime('%I:%M %p') if att and att.check_in_time else '-'
-        check_out = timezone.localtime(att.check_out_time).strftime('%I:%M %p') if att and att.check_out_time else '-'
+        check_in = timezone.localtime(att.check_in_time).strftime('%H:%M') if att and att.check_in_time else '-'
+        check_out = timezone.localtime(att.check_out_time).strftime('%H:%M') if att and att.check_out_time else '-'
+
+        # Worked hours from the full datetimes — spans midnight correctly for
+        # night shifts. Legacy rows where checkout lost the +1 day go negative;
+        # roll those forward instead of showing a broken value.
+        if att and att.check_in_time and att.check_out_time:
+            worked_h = (att.check_out_time - att.check_in_time).total_seconds() / 3600.0
+            if worked_h < 0:
+                worked_h += 24.0
+            working_hours = round(worked_h, 2)
+        else:
+            working_hours = '-'
 
         # Apply status filter for the detailed sheet
         include_in_detailed = True
@@ -5835,6 +5850,7 @@ def export_reports_view(request):
                 status,
                 check_in,
                 check_out,
+                working_hours,
                 # Employment-status dates carried on every row so the daily
                 # attendance sheet itself shows leave / resumption / last-working info.
                 str(emp.leave_start_date) if emp.leave_start_date else '-',
@@ -5859,7 +5875,7 @@ def export_reports_view(request):
     ws_detailed = wb.active
     ws_detailed.title = "Detailed Attendance"
     
-    headers = ['Employee Name', 'Badge ID', 'Grade', 'Department', 'Position', 'Site', 'Housing Camp', 'Transportation', 'Working Type', 'Working Shift', 'Date', 'Status', 'Check In', 'Check Out', 'Leave Start', 'Leave End', 'Resumption Date', 'Last Working Day']
+    headers = ['Employee Name', 'Badge ID', 'Grade', 'Department', 'Position', 'Site', 'Housing Camp', 'Transportation', 'Working Type', 'Working Shift', 'Date', 'Status', 'Check In', 'Check Out', 'Working Hours', 'Leave Start', 'Leave End', 'Resumption Date', 'Last Working Day']
     ws_detailed.append(headers)
     
     header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
@@ -5994,105 +6010,114 @@ def export_reports_view(request):
     return response
 
 
+def _salary_report_rows(request):
+    """Shared filter + salary computation for the salary report page and its
+    Excel export. Returns (salary_data, month, year)."""
+    month = int(request.GET.get('month', timezone.localdate().month))
+    year = int(request.GET.get('year', timezone.localdate().year))
+    site_id = request.GET.get('site', 'all')
+    search_query = request.GET.get('search', '').strip()
+
+    employees = Employee.objects.all()
+        
+    # Apply Filters
+    if site_id != 'all':
+        employees = employees.filter(site_id=site_id)
+
+    if search_query:
+        employees = employees.filter(
+            Q(name__icontains=search_query) |
+            Q(badge_number__icontains=search_query) |
+            Q(email__icontains=search_query) |
+            Q(phone__icontains=search_query)
+        )
+
+    # Get number of days in month
+    num_days = calendar.monthrange(year, month)[1]
+
+    # Calculate working days (excluding Sundays)
+    working_days_count = 0
+    for day in range(1, num_days + 1):
+        if calendar.weekday(year, month, day) != 6:  # 6 is Sunday
+            working_days_count += 1
+
+    # Optimize attendance counting
+    attendance_stats = Attendance.objects.filter(
+        date__year=year,
+        date__month=month,
+        status='present',
+        user__in=employees
+    ).values('user_id').annotate(
+        count=Count('id'),
+        normal_ot=Sum('normal_ot_hours'),
+        special_ot=Sum('special_ot_hours')
+    )
+
+    attendance_map = {item['user_id']: item for item in attendance_stats}
+
+    salary_data = []
+    for emp in employees:
+        if not emp.gross_salary:
+            continue
+
+        att_data = attendance_map.get(emp.id, {'count': 0, 'normal_ot': 0, 'special_ot': 0})
+        present_days = att_data['count']
+        normal_ot_total = float(att_data.get('normal_ot') or 0.0)
+        special_ot_total = float(att_data.get('special_ot') or 0.0)
+
+        daily_rate = float(emp.gross_salary) / 30.0
+        absent_days = working_days_count - present_days
+        deduction = daily_rate * max(0, absent_days)
+
+        # OT Calculations
+        # Hourly rate based on basic salary
+        basic_salary = float(emp.basic_salary or emp.gross_salary)
+        hourly_base = basic_salary / num_days / 8.0
+        normal_ot_pay = hourly_base * normal_ot_total * 1.25
+        special_ot_pay = hourly_base * special_ot_total * 1.50
+
+        net_salary = float(emp.gross_salary) - deduction + normal_ot_pay + special_ot_pay
+
+        salary_data.append({
+            'id': emp.id,
+            'name': emp.name,
+            'badge_number': emp.badge_number or '-',
+            'department': emp.department or '-',
+            'site': emp.site.name if emp.site else '-',
+            'profile_picture': emp.profile_picture.url if emp.profile_picture else None,
+            'gross_salary': str(emp.gross_salary),
+            'basic_salary': str(emp.basic_salary or emp.gross_salary),
+            'working_days': working_days_count,
+            'present_days': present_days,
+            'absent_days': max(0, absent_days),
+            'normal_ot_hours': round(normal_ot_total, 2),
+            'special_ot_hours': round(special_ot_total, 2),
+            'normal_ot_pay': round(normal_ot_pay, 2),
+            'special_ot_pay': round(special_ot_pay, 2),
+            'deduction': round(deduction, 2),
+            'net_salary': round(net_salary, 2),
+            'status': emp.status or '-',
+            'leave_start_date': str(emp.leave_start_date) if emp.leave_start_date else None,
+            'leave_end_date': str(emp.leave_end_date) if emp.leave_end_date else None,
+            'resumption_date': str(emp.resumption_date) if emp.resumption_date else None,
+            'last_working_date': str(emp.last_working_date) if emp.last_working_date else None,
+        })
+
+    return salary_data, month, year
+
+
 class AdminSalaryReportView(APIView):
     permission_classes = [IsAdminUser]
 
     def get(self, request):
         if not request.user.is_superuser:
             return redirect("admin-dashboard")
-            
-        month = int(request.GET.get('month', timezone.localdate().month))
-        year = int(request.GET.get('year', timezone.localdate().year))
-        site_id = request.GET.get('site', 'all')
-        search_query = request.GET.get('search', '').strip()
+
         per_page = int(request.GET.get('per_page', 20))
         page_num = request.GET.get('page', 1)
-            
-        employees = Employee.objects.all()
-        
-        # Apply Filters
-        if site_id != 'all':
-            employees = employees.filter(site_id=site_id)
-            
-        if search_query:
-            employees = employees.filter(
-                Q(name__icontains=search_query) | 
-                Q(badge_number__icontains=search_query) |
-                Q(email__icontains=search_query) |
-                Q(phone__icontains=search_query)
-            )
-            
-        # Get number of days in month
-        num_days = calendar.monthrange(year, month)[1]
-        
-        # Calculate working days (excluding Sundays)
-        working_days_count = 0
-        for day in range(1, num_days + 1):
-            if calendar.weekday(year, month, day) != 6:  # 6 is Sunday
-                working_days_count += 1
-        
-        # Optimize attendance counting
-        attendance_stats = Attendance.objects.filter(
-            date__year=year,
-            date__month=month,
-            status='present',
-            user__in=employees
-        ).values('user_id').annotate(
-            count=Count('id'),
-            normal_ot=Sum('normal_ot_hours'),
-            special_ot=Sum('special_ot_hours')
-        )
-        
-        attendance_map = {item['user_id']: item for item in attendance_stats}
-        
-        salary_data = []
-        for emp in employees:
-            if not emp.gross_salary:
-                continue
-                
-            att_data = attendance_map.get(emp.id, {'count': 0, 'normal_ot': 0, 'special_ot': 0})
-            present_days = att_data['count']
-            normal_ot_total = float(att_data.get('normal_ot') or 0.0)
-            special_ot_total = float(att_data.get('special_ot') or 0.0)
-            
-            daily_rate = float(emp.gross_salary) / 30.0
-            absent_days = working_days_count - present_days
-            deduction = daily_rate * max(0, absent_days)
-            
-            # OT Calculations
-            # Hourly rate based on basic salary
-            basic_salary = float(emp.basic_salary or emp.gross_salary)
-            hourly_base = basic_salary / num_days / 8.0
-            normal_ot_pay = hourly_base * normal_ot_total * 1.25
-            special_ot_pay = hourly_base * special_ot_total * 1.50
-            
-            net_salary = float(emp.gross_salary) - deduction + normal_ot_pay + special_ot_pay
-            
-            salary_data.append({
-                'id': emp.id,
-                'name': emp.name,
-                'badge_number': emp.badge_number or '-',
-                'department': emp.department or '-',
-                'site': emp.site.name if emp.site else '-',
-                'profile_picture': emp.profile_picture.url if emp.profile_picture else None,
-                'gross_salary': str(emp.gross_salary),
-                'basic_salary': str(emp.basic_salary or emp.gross_salary),
-                'working_days': working_days_count,
-                'present_days': present_days,
-                'absent_days': max(0, absent_days),
-                'normal_ot_hours': round(normal_ot_total, 2),
-                'special_ot_hours': round(special_ot_total, 2),
-                'normal_ot_pay': round(normal_ot_pay, 2),
-                'special_ot_pay': round(special_ot_pay, 2),
-                'deduction': round(deduction, 2),
-                'net_salary': round(net_salary, 2),
-                'status': emp.status or '-',
-                'leave_start_date': str(emp.leave_start_date) if emp.leave_start_date else None,
-                'leave_end_date': str(emp.leave_end_date) if emp.leave_end_date else None,
-                'resumption_date': str(emp.resumption_date) if emp.resumption_date else None,
-                'last_working_date': str(emp.last_working_date) if emp.last_working_date else None,
-            })
-            
+
+        salary_data, month, year = _salary_report_rows(request)
+
         # AJAX Response
         if request.headers.get('x-requested-with') == 'XMLHttpRequest':
             paginator = Paginator(salary_data, per_page)
@@ -6290,6 +6315,178 @@ class DownloadSalarySlipView(APIView):
         buffer = io.BytesIO(pdf_output)
         
         filename = f"Salary_Slip_{employee.name.replace(' ', '_')}_{calendar.month_name[month]}_{year}.pdf"
+        return FileResponse(buffer, as_attachment=True, filename=filename)
+
+
+class ExportSalaryReportView(APIView):
+    """Excel export of the full salary sheet (same filters as the page)."""
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        if not request.user.is_superuser:
+            return Response({'error': 'Unauthorized'}, status=403)
+
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment
+        from openpyxl.utils import get_column_letter
+
+        salary_data, month, year = _salary_report_rows(request)
+        month_name = calendar.month_name[month]
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Salary Report"
+
+        ws.append(['Salary Report'])
+        ws.append([f"Period: {month_name} {year}  |  Employees: {len(salary_data)}"])
+        ws.append([])
+
+        headers = ['Employee', 'Badge ID', 'Department', 'Site', 'Status',
+                   'Basic Salary', 'Gross Salary', 'Working Days', 'Present',
+                   'Absent', 'Normal OT (hrs)', 'Special OT (hrs)',
+                   'Normal OT Pay', 'Special OT Pay', 'Deduction', 'Net Salary']
+        ws.append(headers)
+        header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+        header_font = Font(bold=True, color="FFFFFF")
+        for col in range(1, len(headers) + 1):
+            c = ws.cell(row=4, column=col)
+            c.fill = header_fill
+            c.font = header_font
+            c.alignment = Alignment(horizontal="center")
+
+        for r in salary_data:
+            ws.append([
+                r['name'],
+                r['badge_number'],
+                r['department'],
+                r['site'],
+                r['status'],
+                float(r['basic_salary']),
+                float(r['gross_salary']),
+                r['working_days'],
+                r['present_days'],
+                r['absent_days'],
+                r['normal_ot_hours'],
+                r['special_ot_hours'],
+                r['normal_ot_pay'],
+                r['special_ot_pay'],
+                r['deduction'],
+                r['net_salary'],
+            ])
+        if not salary_data:
+            ws.append(['No salary records for the selected criteria.'])
+        else:
+            totals_row = ws.max_row + 1
+            ws.append([
+                'TOTALS', '', '', '', '', '', '', '', '', '', '', '',
+                round(sum(r['normal_ot_pay'] for r in salary_data), 2),
+                round(sum(r['special_ot_pay'] for r in salary_data), 2),
+                round(sum(r['deduction'] for r in salary_data), 2),
+                round(sum(r['net_salary'] for r in salary_data), 2),
+            ])
+            for col in range(1, len(headers) + 1):
+                ws.cell(row=totals_row, column=col).font = Font(bold=True)
+
+        ws.cell(row=1, column=1).font = Font(bold=True, size=14)
+        for i in range(len(headers)):
+            ws.column_dimensions[get_column_letter(i + 1)].width = 16
+        ws.column_dimensions['A'].width = 30
+
+        response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        response['Content-Disposition'] = f'attachment; filename="salary_report_{month_name}_{year}.xlsx"'
+        wb.save(response)
+        return response
+
+
+class DownloadEmployeeBadgeView(APIView):
+    """Printable CR80-size employee ID badge as PDF."""
+    permission_classes = [IsAdminUser]
+
+    def get(self, request, employee_id):
+        if not request.user.is_superuser:
+            return Response({'error': 'Unauthorized'}, status=403)
+
+        employee = get_object_or_404(Employee, id=employee_id)
+
+        # CR80 card, portrait, in mm
+        CARD_W, CARD_H = 53.98, 85.6
+        pdf = FPDF(orientation='P', unit='mm', format=(CARD_W, CARD_H))
+        pdf.set_auto_page_break(False)
+        pdf.set_margins(2, 2)
+        pdf.add_page()
+
+        # Header band
+        pdf.set_fill_color(99, 102, 241)  # Indigo #6366f1
+        pdf.rect(0, 0, CARD_W, 15, 'F')
+        pdf.set_text_color(255, 255, 255)
+        pdf.set_font("helvetica", "B", 10)
+        pdf.set_xy(0, 3)
+        pdf.cell(CARD_W, 5, "PARKWAY", align="C", ln=True)
+        pdf.set_font("helvetica", "", 5.5)
+        pdf.set_x(0)
+        pdf.cell(CARD_W, 3, "EMPLOYEE IDENTIFICATION", align="C")
+
+        # Photo (center-cropped to square); initial placeholder if missing
+        photo_size = 26
+        photo_x = (CARD_W - photo_size) / 2
+        photo_y = 19
+        drew_photo = False
+        if employee.profile_picture:
+            try:
+                from PIL import Image
+                img = Image.open(employee.profile_picture.path)
+                side = min(img.size)
+                left = (img.width - side) // 2
+                top = (img.height - side) // 2
+                img = img.crop((left, top, left + side, top + side)).convert('RGB')
+                pdf.image(img, x=photo_x, y=photo_y, w=photo_size, h=photo_size)
+                drew_photo = True
+            except Exception:
+                drew_photo = False
+        if not drew_photo:
+            pdf.set_fill_color(241, 245, 249)
+            pdf.rect(photo_x, photo_y, photo_size, photo_size, 'F')
+            pdf.set_text_color(100, 116, 139)
+            pdf.set_font("helvetica", "B", 22)
+            pdf.set_xy(photo_x, photo_y + 8)
+            pdf.cell(photo_size, 10, (employee.name or '?')[:1].upper(), align="C")
+        pdf.set_draw_color(99, 102, 241)
+        pdf.set_line_width(0.4)
+        pdf.rect(photo_x, photo_y, photo_size, photo_size)
+
+        # Name
+        pdf.set_text_color(30, 41, 59)
+        pdf.set_font("helvetica", "B", 8)
+        pdf.set_xy(2, 48)
+        pdf.multi_cell(CARD_W - 4, 3.5, employee.name or '-', align="C")
+
+        # Position / department + site
+        pdf.set_text_color(100, 116, 139)
+        pdf.set_font("helvetica", "", 5.5)
+        pdf.set_x(2)
+        role = employee.position or employee.department or ''
+        if role:
+            pdf.cell(CARD_W - 4, 3, role, align="C", ln=True)
+        if employee.site:
+            pdf.set_x(2)
+            pdf.cell(CARD_W - 4, 3, employee.site.name, align="C", ln=True)
+
+        # Badge number footer band
+        pdf.set_fill_color(0, 0, 0)
+        pdf.rect(0, CARD_H - 12, CARD_W, 12, 'F')
+        pdf.set_text_color(255, 255, 255)
+        pdf.set_font("helvetica", "B", 10)
+        pdf.set_xy(0, CARD_H - 10.5)
+        pdf.cell(CARD_W, 5, f"ID: {employee.badge_number or '-'}", align="C", ln=True)
+        pdf.set_font("helvetica", "", 4.5)
+        pdf.set_x(0)
+        pdf.cell(CARD_W, 3, employee.employer or "PARKWAY ATTENDANCE", align="C")
+
+        pdf_output = pdf.output()
+        buffer = io.BytesIO(pdf_output)
+
+        safe_name = (employee.name or 'employee').replace(' ', '_')
+        filename = f"ID_Badge_{safe_name}_{employee.badge_number or employee.id}.pdf"
         return FileResponse(buffer, as_attachment=True, filename=filename)
 # Monthly Report Views
 from datetime import datetime, timedelta
@@ -7077,11 +7274,14 @@ def export_monthly_report(request):
         day_off = (raw_off or '').strip().lower()
 
         days_present = days_leave = days_sick = days_absent = late_count = 0
+        normal_ot_total = special_ot_total = 0.0
         for d in dates_in_month:
             rec = rec_map.get(d)
             if rec and (rec.check_in_time or rec.check_out_time
                         or (rec.status or '').strip().lower() == 'present'):
                 days_present += 1
+                normal_ot_total += float(rec.normal_ot_hours or 0)
+                special_ot_total += float(rec.special_ot_hours or 0)
                 if rec.late_minutes and rec.late_minutes > 0:
                     late_count += 1
                 continue
@@ -7118,6 +7318,8 @@ def export_monthly_report(request):
             'Days Absent': days_absent,
             'Days Leave': days_leave,
             'Days Sick': days_sick,
+            'Normal OT (hrs)': round(normal_ot_total, 2),
+            'Special OT (hrs)': round(special_ot_total, 2),
             'Late Arrivals': late_count,
             'Attendance %': round(attendance_percentage, 2),
             'Status': emp.status or '-',
@@ -10702,7 +10904,7 @@ class MissingCheckInExportView(APIView):
                 a.user.name,
                 a.user.site.name if a.user.site else '-',
                 str(a.date),
-                timezone.localtime(a.check_out_time).strftime('%I:%M %p') if a.check_out_time else '-',
+                timezone.localtime(a.check_out_time).strftime('%H:%M') if a.check_out_time else '-',
             ])
 
         out = io.BytesIO()

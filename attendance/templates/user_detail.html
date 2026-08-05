@@ -1454,6 +1454,17 @@
                             </div>
                         </div>
 
+                        {% if is_superuser %}
+                        ${(!s.check_in && currentDate) ? `
+                            <div class="d-flex gap-2 align-items-center mb-4">
+                                <input type="time" id="slotTime-${name.replace(' ', '-')}" class="form-control form-control-sm" style="width:130px;">
+                                <button type="button" class="btn btn-sm btn-dark" onclick="setSlotTime('${currentDate}', '${name}')">
+                                    <i class="ri-time-line"></i> Set ${name.includes('In') ? 'Check-In' : 'Check-Out'}
+                                </button>
+                            </div>
+                        ` : ''}
+                        {% endif %}
+
                         ${(s.latitude && s.longitude) ? `
                             <div class="map-box" id="map-${name.replace(' ', '-')}"></div>
                             <div class="mt-2 small text-secondary d-flex align-items-center gap-1">
@@ -2333,6 +2344,32 @@
             const result = await res.json();
             if (!res.ok) { alert(result.error || 'Failed'); return; }
             // refresh whichever view is active
+            if (typeof loadAllData === 'function') loadAllData();
+        } catch (e) { alert('Network error'); }
+    }
+
+    // Set a single missing check-in/check-out time on a day that already has
+    // (or gets) a present record. Uses the same mark-day endpoint, which
+    // preserves the existing recorded time on the other slot.
+    async function setSlotTime(dateStr, slotName) {
+        const input = document.getElementById(`slotTime-${slotName.replace(' ', '-')}`);
+        if (!input || !input.value) { alert('Pick a time first.'); return; }
+        const label = slotName.includes('In') ? 'check-in' : 'check-out';
+        if (!confirm(`Set ${label} for ${dateStr} to ${input.value}?`)) return;
+
+        const payload = { date: dateStr, action: 'present' };
+        if (slotName.includes('In')) payload.check_in_time = input.value;
+        else payload.check_out_time = input.value;
+
+        const csrf = document.querySelector('[name=csrfmiddlewaretoken]').value;
+        try {
+            const res = await fetch(`/api/attendance/employees/${USER_ID}/mark-day/`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+                body: JSON.stringify(payload),
+            });
+            const result = await res.json();
+            if (!res.ok) { alert(result.error || 'Failed'); return; }
             if (typeof loadAllData === 'function') loadAllData();
         } catch (e) { alert('Network error'); }
     }
