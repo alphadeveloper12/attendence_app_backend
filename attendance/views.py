@@ -2224,7 +2224,7 @@ class MarkDayView(APIView):
     """
     permission_classes = [IsAdminUser | IsSiteAdmin]
 
-    ALLOWED_ACTIONS = ('present', 'absent', 'leave')
+    ALLOWED_ACTIONS = ('present', 'absent', 'leave', 'holiday')
 
     def post(self, request, employee_id):
         from datetime import datetime as _dt
@@ -2300,7 +2300,7 @@ class MarkDayView(APIView):
                 record.check_out_time = co
 
         # Clear check-in/out when moving away from present/late
-        if action in ('absent', 'leave'):
+        if action in ('absent', 'leave', 'holiday'):
             record.check_in_time = None
             record.check_out_time = None
             record.late_minutes = 0
@@ -5640,6 +5640,10 @@ def classify_report_row(emp, att, on_date):
             return 'sick', 'Sick'
         if s == 'leave':
             return 'leave', 'Leave'
+        if s == 'holiday':
+            # Bucketed with leave (out of Present/Absent counts) but displayed
+            # as Holiday wherever the display status is shown.
+            return 'leave', 'Holiday'
         if s == 'present':
             return 'present', 'Present'
     st = employment_status_on(emp, on_date)
@@ -6665,6 +6669,7 @@ def _build_monthly_analytics(employees, attendance_records, year, month):
         days_leave = 0
         days_sick = 0
         days_absent = 0
+        days_holiday = 0
         for d in dates_in_month:
             rec = rec_by_date.get(d)
             if rec and (rec.check_in_time or rec.check_out_time
@@ -6680,6 +6685,9 @@ def _build_monthly_analytics(employees, attendance_records, year, month):
                 days_leave += 1
                 trend_leave[d] += 1
                 continue
+            if marking == 'holiday':
+                days_holiday += 1  # marked holiday — not a working day, never absent
+                continue
             st = employment_status_on(e, d)
             if st == 'Leave':
                 days_leave += 1
@@ -6690,9 +6698,9 @@ def _build_monthly_analytics(employees, attendance_records, year, month):
                 days_absent += 1  # a genuine no-show on a working day
 
         working_days = _working_days_for(e, dates_in_month, num_days)
-        # Leave & sick are legitimate — exclude them from the denominator so the
-        # percentage reflects days the employee was actually expected to work.
-        eff_working = max(0, working_days - days_leave - days_sick)
+        # Leave, sick & holiday are legitimate — exclude them from the denominator
+        # so the percentage reflects days the employee was actually expected to work.
+        eff_working = max(0, working_days - days_leave - days_sick - days_holiday)
         raw_pct = (days_present / num_days * 100) if num_days else 0
         eff_pct = min((days_present / eff_working * 100) if eff_working else 0, 100.0)
 
@@ -6721,6 +6729,7 @@ def _build_monthly_analytics(employees, attendance_records, year, month):
             'days_absent': days_absent,
             'days_leave': days_leave,
             'days_sick': days_sick,
+            'days_holiday': days_holiday,
             'working_days': working_days,
             'late_count': late_count,
             'overtime_hours': round(ot_hours, 2),
@@ -7347,6 +7356,7 @@ def export_monthly_report(request):
         day_off = (raw_off or '').strip().lower()
 
         days_present = days_leave = days_sick = days_absent = late_count = 0
+        days_holiday = 0
         normal_ot_total = special_ot_total = 0.0
         for d in dates_in_month:
             rec = rec_map.get(d)
@@ -7365,6 +7375,9 @@ def export_monthly_report(request):
             if marking == 'leave':
                 days_leave += 1
                 continue
+            if marking == 'holiday':
+                days_holiday += 1  # marked holiday — not a working day, never absent
+                continue
             st = employment_status_on(emp, d)
             if st == 'Leave':
                 days_leave += 1
@@ -7374,7 +7387,7 @@ def export_monthly_report(request):
                 days_absent += 1
 
         working_days = _working_days_for(emp, dates_in_month, num_days)
-        eff_working = max(0, working_days - days_leave - days_sick)
+        eff_working = max(0, working_days - days_leave - days_sick - days_holiday)
         attendance_percentage = min((days_present / eff_working * 100) if eff_working else 0, 100.0)
 
         data.append({
@@ -7391,6 +7404,7 @@ def export_monthly_report(request):
             'Days Absent': days_absent,
             'Days Leave': days_leave,
             'Days Sick': days_sick,
+            'Days Holiday': days_holiday,
             'Normal OT (hrs)': round(normal_ot_total, 2),
             'Special OT (hrs)': round(special_ot_total, 2),
             'Late Arrivals': late_count,
@@ -9092,22 +9106,49 @@ class AdminPositionDetailView(APIView):
     permission_classes = [IsAdminUser]
 
     def put(self, request, pos_id):
+        from django.db import IntegrityError
+
         try:
             p = JobCategory.objects.get(id=pos_id)
         except JobCategory.DoesNotExist:
             return Response({'error': 'Position not found'}, status=404)
         data = request.data
         old_name = p.name
+        old_type = p.employee_type
+
+        # Resolve the FINAL name + type first — the unique constraint is on
+        # (name, employee_type), so a clash must be checked against what the
+        # row will become, not what it currently is.
+        new_name = old_name
         if 'name' in data:
             new_name = _norm_dept_name(data.get('name'))
             if not new_name:
                 return Response({'error': 'Name cannot be blank.'}, status=400)
-            clash = JobCategory.objects.filter(name__iexact=new_name, employee_type=p.employee_type).exclude(id=p.id).first()
-            if clash:
-                return Response({'error': f'Another position already uses "{clash.name}".'}, status=400)
-            p.name = new_name
+
+        new_type = old_type
+        if 'employee_type' in data:
+            t = (data.get('employee_type') or '').strip().lower()
+            if t not in ('staff', 'worker', 'resource'):
+                return Response({'error': f'Invalid type "{data.get("employee_type")}".'}, status=400)
+            new_type = t
+
+        # Includes soft-deleted rows — the DB constraint doesn't care about is_active.
+        clash = JobCategory.objects.filter(
+            name__iexact=new_name, employee_type=new_type,
+        ).exclude(id=p.id).first()
+        if clash:
+            return Response(
+                {'error': f'Position "{clash.name}" already exists as {clash.get_employee_type_display()}.'
+                          + ('' if clash.is_active else ' (It is soft-deleted — restore or rename it first.)')},
+                status=400,
+            )
+
+        p.name = new_name
+        p.employee_type = new_type
+        if new_name != old_name:
             # Keep Employee.position in sync (case-insensitive).
             Employee.objects.filter(position__iexact=old_name).update(position=new_name)
+
         if 'department_id' in data:
             dept_id = data.get('department_id')
             if dept_id:
@@ -9120,17 +9161,27 @@ class AdminPositionDetailView(APIView):
             else:
                 p.department_fk = None
                 p.department = None
-        if 'employee_type' in data:
-            t = (data.get('employee_type') or '').strip().lower()
-            if t in ('staff', 'worker', 'resource'):
-                p.employee_type = t
-        p.save()
+
+        try:
+            p.save()
+        except IntegrityError:
+            return Response({'error': f'Another position named "{new_name}" already exists for that type.'}, status=400)
+
+        # Changing a position between Staff and Worker must reclassify the
+        # employees holding it — their schedules and report grouping follow
+        # Employee.category, not the position row. Manpower Resource has no
+        # employee category, so those leave employees untouched.
+        synced = 0
+        if new_type != old_type and new_type in ('staff', 'worker'):
+            synced = Employee.objects.filter(position__iexact=new_name).update(category=new_type)
+
         return Response({
             'success': True,
             'id': p.id, 'name': p.name,
             'employee_type': p.employee_type,
             'department_id': p.department_fk_id,
             'department_name': p.department_fk.name if p.department_fk else (p.department or ''),
+            'employees_reclassified': synced,
         })
 
     def delete(self, request, pos_id):

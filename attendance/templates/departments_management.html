@@ -347,6 +347,9 @@
             const data = await res.json();
             if (!res.ok) { alert(data.error || 'Failed'); return; }
             posModal.hide();
+            if (data.employees_reclassified) {
+                alert(`${data.employees_reclassified} employee(s) holding this position were reclassified to ${emp_type}.`);
+            }
             await loadAll();
         } catch (e) { alert('Network error'); }
         finally { btn.disabled = false; }

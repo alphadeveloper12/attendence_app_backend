@@ -1415,6 +1415,9 @@
                             <button type="button" class="btn btn-sm btn-warning text-dark" onclick="markDay('${currentDate}','leave')">
                                 <i class="ri-flight-takeoff-line"></i> Mark Leave
                             </button>
+                            <button type="button" class="btn btn-sm btn-secondary" onclick="markDay('${currentDate}','holiday')">
+                                <i class="ri-calendar-event-line"></i> Mark Holiday
+                            </button>
                             <button type="button" class="btn btn-sm btn-info text-white" onclick="quickMarkSick('${currentDate}')">
                                 <i class="ri-capsule-line"></i> Mark Sick…
                             </button>
@@ -1515,9 +1518,10 @@
             const status = d.record ? d.record.status : null;
             const isSick    = status === 'sick';
             const isLeave   = status === 'leave';
+            const isHoliday = status === 'holiday';
             const isPresent = status === 'present' || status === 'late';
             const isAbsent  = status === 'absent';
-            const hasNoActivity = !d.slots.length && !isSick && !isLeave;
+            const hasNoActivity = !d.slots.length && !isSick && !isLeave && !isHoliday;
 
             // Action menu — shown on hover/click; the row clicking goToDate stays as primary nav.
             const actionsMenu = `
@@ -1531,6 +1535,7 @@
                         <li><a class="dropdown-item" href="#" onclick="event.preventDefault(); markDay('${d.date}','present'); return false;"><i class="ri-checkbox-circle-line text-success me-1"></i> Mark Present</a></li>
                         <li><a class="dropdown-item" href="#" onclick="event.preventDefault(); markDay('${d.date}','absent');  return false;"><i class="ri-close-circle-line text-danger me-1"></i> Mark Absent</a></li>
                         <li><a class="dropdown-item" href="#" onclick="event.preventDefault(); markDay('${d.date}','leave');   return false;"><i class="ri-flight-takeoff-line text-warning me-1"></i> Mark Leave</a></li>
+                        <li><a class="dropdown-item" href="#" onclick="event.preventDefault(); markDay('${d.date}','holiday'); return false;"><i class="ri-calendar-event-line text-secondary me-1"></i> Mark Holiday</a></li>
                         <li><hr class="dropdown-divider"></li>
                         <li><a class="dropdown-item" href="#" onclick="event.preventDefault(); quickMarkSick('${d.date}'); return false;"><i class="ri-capsule-line text-info me-1"></i> Mark Sick…</a></li>
                     </ul>
@@ -1540,6 +1545,7 @@
             // Border + visual cue per status
             const borderCls = isSick    ? 'border-info'
                             : isLeave   ? 'border-warning'
+                            : isHoliday ? 'border-secondary'
                             : isAbsent  ? 'border-danger'
                             : isPresent ? 'border-success'
                             : '';
@@ -1558,6 +1564,7 @@
                             ${d.record && d.record.medical_certificate_url ? `<a href="${d.record.medical_certificate_url}" target="_blank" onclick="event.stopPropagation()" class="small text-info"><i class="ri-file-download-line"></i> Certificate</a>` : ''}
                         ` : ''}
                         ${isLeave && !isSick ? `<div class="calendar-badge bg-warning text-dark">🏖️ LEAVE</div>` : ''}
+                        ${isHoliday ? `<div class="calendar-badge bg-secondary text-white">🎉 HOLIDAY</div>` : ''}
                         ${isAbsent && !isSick && !isLeave ? `<div class="calendar-badge bg-danger text-white">ABSENT</div>` : ''}
                         ${d.slots.length > 0 ? d.slots.map(s => `
                             <div class="calendar-badge ${s.status === 'present' ? 'bg-success text-white' : 'bg-warning text-dark'}">
@@ -1674,7 +1681,7 @@
     }
 
     function formatDate(dateStr) {
-        return new Date(dateStr).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+        return new Date(dateStr).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
     }
 
     function startTime() {
@@ -2323,7 +2330,7 @@
 
     // Mark a single calendar day as present / absent / leave (no file)
     async function markDay(dateStr, action) {
-        const labels = { present: 'Present', absent: 'Absent', leave: 'Leave' };
+        const labels = { present: 'Present', absent: 'Absent', leave: 'Leave', holiday: 'Holiday' };
         if (!labels[action]) return;
         // When marking Present, a superuser may supply office in/out times.
         const payload = { date: dateStr, action };
