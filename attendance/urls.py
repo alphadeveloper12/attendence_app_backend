@@ -41,6 +41,7 @@ web_urlpatterns = [
     path('dashboard/ask-data/',               admin_ask_data_view,              name='admin-ask-data'),
     path('dashboard/geofence-tuning/',        admin_geofence_tuning_view,       name='admin-geofence-tuning'),
     path('dashboard/settings/',               admin_settings_view,              name='admin-settings'),
+    path('dashboard/audit-trail/',            admin_audit_trail_view,           name='admin-audit-trail'),
 
     # Sites management (template views)
     path('dashboard/sites/',                      admin_sites_view,        name='admin-sites'),
@@ -134,6 +135,8 @@ api_urlpatterns = [
     # Reports
     path('dashboard/download-salary-slip/<int:employee_id>/<int:month>/<int:year>/', DownloadSalarySlipView.as_view(), name='download-salary-slip'),
     path('dashboard/salary-report/export/',          ExportSalaryReportView.as_view(),          name='export-salary-report'),
+    path('audit-logs/',                              AuditLogListView.as_view(),                name='audit-logs'),
+    path('audit-logs/export/',                       AuditLogExportView.as_view(),              name='audit-logs-export'),
     path('dashboard/download-badge/<int:employee_id>/', DownloadEmployeeBadgeView.as_view(),    name='download-employee-badge'),
     path('dashboard/reports/export/',                export_reports_view,                       name='export-reports'),
     path('dashboard/monthly-report/export/',         export_monthly_report,                     name='export-monthly-report'),

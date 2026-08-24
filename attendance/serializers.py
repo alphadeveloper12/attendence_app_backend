@@ -56,6 +56,15 @@ class EmployeeListLightSerializer(EmployeeSerializer):
     class Meta(EmployeeSerializer.Meta):
         fields = [f for f in EmployeeSerializer.Meta.fields if f != 'face_embedding']
 
+    def get_profile_picture_url(self, obj):
+        # List screens get the small thumbnail (~5 KB) instead of the original
+        # camera photo; falls back to the original until thumbs are backfilled.
+        request = self.context.get('request')
+        pic = obj.profile_thumb or obj.profile_picture
+        if pic:
+            return request.build_absolute_uri(pic.url) if request else pic.url
+        return None
+
 
 class EnrollSerializer(serializers.Serializer):
     id = serializers.IntegerField(required=False)

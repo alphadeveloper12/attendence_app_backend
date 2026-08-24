@@ -1944,17 +1944,23 @@
                 return;
             }
 
-            // Cache the alerts so the modal can look up the full record by id
+            // Cache ALL alerts so the modal can look up the full record by id,
+            // but only render the first batch — thousands of cards (each with an
+            // avatar image) freeze the page; the Excel download has the full list.
+            const MAX_ALERT_CARDS = 60;
             window._alertsById = {};
-            container.innerHTML = data.map((a, idx) => {
-                window._alertsById[a.id] = a;
+            data.forEach(a => { window._alertsById[a.id] = a; });
+            const truncNote = data.length > MAX_ALERT_CARDS
+                ? `<div class="col-12 text-center text-secondary small py-2">Showing first ${MAX_ALERT_CARDS} of ${data.length} alerts — use the Download button for the full list.</div>`
+                : '';
+            container.innerHTML = data.slice(0, MAX_ALERT_CARDS).map((a, idx) => {
                 const isOnLeave = a.kind === 'on_leave';
                 const accent = isOnLeave ? 'warning' : 'danger';
                 const icon = isOnLeave ? 'ri-flight-takeoff-line' : 'ri-error-warning-line';
                 const statusLabel = a.status || (isOnLeave ? 'On Leave' : 'Out of Bounds');
                 const initial = (a.user_name || '?').trim().charAt(0).toUpperCase();
                 const avatar = a.user_pic
-                    ? `<img src="${a.user_pic}" alt="${a.user_name}" class="alert-avatar">`
+                    ? `<img src="${a.user_pic}" alt="${a.user_name}" class="alert-avatar" loading="lazy">`
                     : `<div class="alert-avatar">${initial}</div>`;
                 return `
                 <div class="col-12 col-md-6 col-xl-4">
@@ -1979,7 +1985,7 @@
                         </div>
                     </div>
                 </div>`;
-            }).join('');
+            }).join('') + truncNote;
         } catch (e) { console.error(e); }
     }
 
@@ -2145,7 +2151,7 @@
                     <td>
                         <div style="display:flex; align-items:center; gap:0.75rem; min-width:0;">
                             <div class="avatar-circle">
-                                ${emp.profile_picture_url ? `<img src="${_esc(emp.profile_picture_url)}" alt="${_esc(emp.name)}">` : _esc((emp.name||'?').charAt(0))}
+                                ${emp.profile_picture_url ? `<img src="${_esc(emp.profile_picture_url)}" alt="${_esc(emp.name)}" loading="lazy">` : _esc((emp.name||'?').charAt(0))}
                             </div>
                             <div class="cell-stack" style="min-width:0;">
                                 <span class="name-wrap" title="${_esc(emp.name)}">${_esc(emp.name)}</span>

@@ -559,6 +559,9 @@
                 </a>
                 {% endif %}
                 {% if user.is_superuser %}
+                <a href="{% url 'admin-audit-trail' %}" class="nav-item {% if '/audit-trail/' in request.path %}active{% endif %}">
+                    <span class="nav-icon"><i class="ri-history-line"></i></span> Audit Trail
+                </a>
                 <a href="{% url 'admin-settings' %}" class="nav-item {% if '/settings/' in request.path %}active{% endif %}">
                     <span class="nav-icon"><i class="ri-settings-3-line"></i></span> Settings
                 </a>

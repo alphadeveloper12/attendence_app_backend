@@ -60,6 +60,9 @@ class Employee(models.Model):
     position = models.CharField(max_length=50, null=True, blank=True)
     face_embedding = models.JSONField(null=True, blank=True)  # Store face embeddings
     profile_picture = models.ImageField(upload_to='profiles/', null=True, blank=True)
+    # Small avatar served to list screens (dashboard table, alerts grid) so they
+    # don't download full-size camera photos. Built by ensure_thumb().
+    profile_thumb = models.ImageField(upload_to='profiles/thumbs/', null=True, blank=True)
     
     # New fields added
     job_description = models.TextField(null=True, blank=True)  # Job Description
@@ -186,6 +189,32 @@ class Employee(models.Model):
 
     def __str__(self):
         return self.name
+
+    def ensure_thumb(self, force=False, size=160):
+        """Build the small avatar from profile_picture. Returns True if a new
+        thumb was generated (caller must save the instance). force=True
+        regenerates after the photo changed."""
+        if not self.profile_picture:
+            return False
+        if self.profile_thumb and not force:
+            return False
+        try:
+            import io
+            import os
+            from PIL import Image, ImageOps
+            from django.core.files.base import ContentFile
+
+            self.profile_picture.open()
+            img = Image.open(self.profile_picture)
+            img = ImageOps.exif_transpose(img).convert('RGB')
+            img.thumbnail((size, size))
+            buf = io.BytesIO()
+            img.save(buf, 'JPEG', quality=82)
+            base = os.path.splitext(os.path.basename(self.profile_picture.name))[0]
+            self.profile_thumb.save(f'{base}_thumb.jpg', ContentFile(buf.getvalue()), save=False)
+            return True
+        except Exception:  # noqa: BLE001 — a broken image must never block a save
+            return False
 
 
 class EmployeeStatusHistory(models.Model):
@@ -376,6 +405,14 @@ class Attendance(models.Model):
                 condition=Q(check_in_time__isnull=True, check_out_time__isnull=False),
             ),
             models.Index(fields=['date'], name='att_date_idx'),
+            # Geofence alerts scan for out-of-bounds rows on one date; violations
+            # are a tiny fraction of the table, so a partial index keeps the
+            # dashboard alerts query off the full table.
+            models.Index(
+                fields=['-date'],
+                name='att_geofence_alert_idx',
+                condition=Q(is_within_geofence=False),
+            ),
         ]
 
 
@@ -648,3 +685,35 @@ class EmployeeGeneralNote(models.Model):
 
     def __str__(self):
         return f"Note for {self.employee_id}: {self.subject or ''}"
+
+class AuditLog(models.Model):
+    """One row per admin action — who did what, to which record, and when.
+
+    Written exclusively through attendance.audit.log_action(), which swallows
+    every exception so audit logging can NEVER break the operation it records.
+    Deletions store a full snapshot of the removed record in `changes`.
+    """
+    ACTIONS = [
+        ('created', 'Created'), ('updated', 'Updated'), ('deleted', 'Deleted'),
+        ('imported', 'Imported'), ('exported', 'Exported'), ('marked', 'Marked Attendance'),
+        ('bulk_updated', 'Bulk Updated'), ('login', 'Login'), ('login_failed', 'Login Failed'),
+    ]
+    created_at   = models.DateTimeField(auto_now_add=True, db_index=True)
+    actor        = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True,
+                                     related_name='audit_entries')
+    actor_label  = models.CharField(max_length=150, blank=True, default='')  # survives user deletion
+    action       = models.CharField(max_length=20, choices=ACTIONS, db_index=True)
+    target_model = models.CharField(max_length=60, blank=True, default='', db_index=True)
+    target_id    = models.IntegerField(null=True, blank=True)
+    target_label = models.CharField(max_length=255, blank=True, default='')  # e.g. "Akhil Das (12346)"
+    changes      = models.JSONField(null=True, blank=True)  # {field: {'from': x, 'to': y}} or {'snapshot': {...}}
+    source       = models.CharField(max_length=120, blank=True, default='')  # endpoint / page
+    ip           = models.CharField(max_length=45, blank=True, default='')
+    note         = models.CharField(max_length=255, blank=True, default='')
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [models.Index(fields=['-created_at', 'action'], name='audit_recent_action_idx')]
+
+    def __str__(self):
+        return f"{self.created_at:%Y-%m-%d %H:%M} {self.actor_label or '-'} {self.action} {self.target_label}"

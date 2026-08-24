@@ -48,6 +48,7 @@ from .utils import (
 from .geofence import check_geofence
 from .models import Employee, Attendance, Site, FaceTemplate, AdminProfile, AppBuild, EmployeeStatusHistory, EmployeeSiteHistory, EmployeeAttachment, EmployeeSalaryHistory, JobCategory, Department, AppSettings, PublicHoliday, DistributionSnapshot, EmployeeGeneralNote
 from .serializers import *
+from .audit import log_action, snapshot, diff as audit_diff
 from .permissions import IsSiteAdmin
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.http import FileResponse, Http404
@@ -539,6 +540,11 @@ class ImportEmployeesView(APIView):
                 except Exception as e:
                     errors.append(f"Row {index}: {str(e)}")
             
+            log_action(request, 'imported', 'Employee',
+                       target_label=f'Excel import: {created_count} created, {updated_count} updated',
+                       changes={'created': created_count, 'updated': updated_count,
+                                'errors': len(errors)},
+                       source='employee-import')
             return Response({
                 'success': True,
                 'imported_count': success_count,
@@ -1206,6 +1212,11 @@ class BulkEditEmployeesView(APIView):
                 logger.exception("FAISS rebuild after bulk edit failed")
 
         results['success'] = True
+        log_action(request, 'bulk_updated', 'Employee',
+                   target_label=f"Bulk edit: {results.get('updated_count', 0)} employees updated",
+                   changes={'updated': results.get('updated_count', 0),
+                            'errors': len(results.get('errors', []))},
+                   source='bulk-edit')
         return Response(results)
 
 
@@ -1305,8 +1316,13 @@ class AdminAddEmployeeView(APIView):
                         status=400,
                     )
 
+            category = (data.get('category') or '').strip().lower()
+            if category not in ('staff', 'worker'):
+                category = 'worker'
+
             new_emp = Employee.objects.create(
                 name=name,
+                category=category,
                 email=email or None,
                 phone=data.get('phone'),
                 department=data.get('department'),
@@ -1348,7 +1364,6 @@ class AdminAddEmployeeView(APIView):
                 other_allowance=parse_decimal(data.get('other_allowance')),
                 salary_reduction=parse_decimal(data.get('salary_reduction')),
                 salary_remarks=data.get('salary_remarks') or None,
-                category=data.get('category', 'worker'),
                 camp=data.get('camp'),
                 transportation=data.get('transportation'),
                 agency_name=(data.get('agency_name') or '').strip() or None,
@@ -1406,6 +1421,8 @@ class AdminAddEmployeeView(APIView):
                     changed_by=request.user if request.user.is_authenticated else None,
                 )
 
+            log_action(request, 'created', 'Employee', new_emp,
+                       changes={'snapshot': snapshot(new_emp)}, source='add-employee')
             return Response({'success': True, 'message': 'Employee added successfully'})
             
         except Exception as e:
@@ -1455,6 +1472,7 @@ class AdminEditEmployeeView(APIView):
                 'site': emp.site.id if emp.site else '',
                 'site_name': emp.site.name if emp.site else '',
                 'camp': emp.camp,
+                'category': (emp.category or 'worker').lower(),
                 'transportation': emp.transportation,
                 'agency_name': emp.agency_name or '',
                 # Document URLs (frontend uses these for "View" buttons)
@@ -1503,6 +1521,7 @@ class AdminEditEmployeeView(APIView):
         try:
             emp = Employee.objects.get(id=employee_id)
             data = request.data
+            _audit_before = snapshot(emp)
 
             # Define helpers first — must be before any usage
             def parse_date(d): return d if d else None
@@ -1592,6 +1611,11 @@ class AdminEditEmployeeView(APIView):
             emp.position = data.get('position')
             emp.badge_number = data.get('badge_number')
             emp.salary_grade = data.get('salary_grade')
+            # Category (Staff/Worker) drives schedules + the manpower
+            # distribution split — it was silently dropped before.
+            new_category = (data.get('category') or '').strip().lower()
+            if new_category in ('staff', 'worker'):
+                emp.category = new_category
             emp.status = new_status
             emp.resumption_date = new_resumption
             # last_working_date only applies to terminal statuses; clear it when the
@@ -1746,6 +1770,8 @@ class AdminEditEmployeeView(APIView):
             if 'passport_control_note' in data:    emp.passport_control_note = _txt('passport_control_note')
 
             emp.save()
+            log_action(request, 'updated', 'Employee', emp,
+                       changes=audit_diff(_audit_before, snapshot(emp)), source='edit-employee')
 
             # Record history if status changed
             if old_status != new_status:
@@ -2309,6 +2335,12 @@ class MarkDayView(APIView):
         record.status = action
         record.save()
 
+        log_action(request, 'marked', 'Attendance', emp,
+                   changes={'date': str(record.date), 'marked_as': action,
+                            'check_in': str(record.check_in_time or ''),
+                            'check_out': str(record.check_out_time or '')},
+                   source='mark-day')
+
         return Response({
             'success': True,
             'id': record.id,
@@ -2323,7 +2355,11 @@ class AdminDeleteEmployeeView(APIView):
     def delete(self, request, employee_id):
         try:
             emp = Employee.objects.get(id=employee_id)
+            _label = f"{emp.name} ({emp.badge_number or 'no badge'})"
+            _snap = snapshot(emp)
             emp.delete()
+            log_action(request, 'deleted', 'Employee', target_label=_label,
+                       changes={'snapshot': _snap}, source='delete-employee')
             return Response({'success': True, 'message': 'Employee deleted successfully'})
         except Employee.DoesNotExist:
             return Response({'error': 'Employee not found'}, status=404)
@@ -2340,7 +2376,12 @@ class AdminBulkDeleteEmployeeView(APIView):
             if not ids:
                 return Response({'error': 'No IDs provided'}, status=400)
             
+            _victims = [(f"{e.name} ({e.badge_number or 'no badge'})", snapshot(e))
+                        for e in Employee.objects.filter(id__in=ids)]
             Employee.objects.filter(id__in=ids).delete()
+            for _label, _snap in _victims:
+                log_action(request, 'deleted', 'Employee', target_label=_label,
+                           changes={'snapshot': _snap}, source='bulk-delete')
             return Response({'success': True, 'message': f'{len(ids)} employees deleted successfully'})
         except Exception as e:
             return Response({'error': str(e)}, status=500)
@@ -2372,6 +2413,7 @@ class RegisterUserView(APIView):
         position = data.get("position") or ""
         job_description = data.get("job_description") or ""
         salary_grade = data.get("salary_grade") or ""
+        category = (data.get("category") or "").strip().lower()
         badge_number = data.get("badge_number") or ""
         mol_id = data.get("mol_id") or ""
         labor_card_number = data.get("labor_card_number") or ""
@@ -2453,6 +2495,7 @@ class RegisterUserView(APIView):
             )
 
         site_obj = Site.objects.filter(id=site_id).first() if site_id else None
+        _audit_before = snapshot(emp) if emp else None
 
         if emp:
             # Update existing employee
@@ -2463,6 +2506,8 @@ class RegisterUserView(APIView):
             emp.position = position
             emp.job_description = job_description
             emp.salary_grade = salary_grade
+            if category in ('staff', 'worker'):
+                emp.category = category
             emp.badge_number = badge_number
             emp.mol_id = mol_id
             emp.labor_card_number = labor_card_number
@@ -2494,6 +2539,7 @@ class RegisterUserView(APIView):
                 position=position,
                 job_description=job_description,
                 salary_grade=salary_grade,
+                category=category if category in ('staff', 'worker') else 'worker',
                 badge_number=badge_number,
                 mol_id=mol_id,
                 labor_card_number=labor_card_number,
@@ -2515,6 +2561,11 @@ class RegisterUserView(APIView):
                 transportation=transportation,
                 agency_name=agency_name,
             )
+
+        log_action(request, 'updated' if employee_id else 'created', 'Employee', emp,
+                   changes=(audit_diff(_audit_before, snapshot(emp)) if _audit_before
+                            else {'snapshot': snapshot(emp)}),
+                   source='face-enrollment')
 
         # Process images if provided
         if files:
@@ -2584,7 +2635,8 @@ class RegisterUserView(APIView):
                 first_file,
                 save=False,
             )
-            emp.save(update_fields=["face_embedding", "profile_picture"])
+            emp.ensure_thumb(force=True)
+            emp.save(update_fields=["face_embedding", "profile_picture", "profile_thumb"])
 
             # Rebuild FAISS index
             qs = FaceTemplate.objects.all().select_related('employee').only("id", "employee_id", "embedding", "employee__site_id")
@@ -3073,10 +3125,54 @@ class AdminLoginView(APIView):
         return Response({"error": "Invalid email or password"}, status=400)
 
 
+def _avatar_url(emp):
+    """Small thumbnail URL for list/alert avatars, falling back to the full
+    photo until thumbs are backfilled (manage.py build_profile_thumbs)."""
+    pic = emp.profile_thumb or emp.profile_picture
+    return pic.url if pic else None
+
+
+def _dash_cache_key(prefix, request):
+    """Cache key for a dashboard analytics endpoint: per-user + query params.
+    Several admins keeping dashboards open (with 60s auto-refresh) otherwise
+    recompute the same heavy aggregates over and over."""
+    import hashlib
+    params = '&'.join(f'{k}={v}' for k, v in sorted(request.GET.items()))
+    return f'{prefix}:{request.user.id}:{hashlib.md5(params.encode()).hexdigest()}'
+
+
+def cache_analytics(prefix, ttl):
+    """Cache an APIView GET's successful Response payload per user+params.
+    Heavy report/analytics endpoints recompute identical aggregates on every
+    page visit; a short TTL makes repeat loads instant without meaningfully
+    stale data."""
+    def deco(fn):
+        def wrapper(self, request, *args, **kwargs):
+            from django.core.cache import cache
+            key = _dash_cache_key(prefix, request)
+            hit = cache.get(key)
+            if hit is not None:
+                return Response(hit)
+            resp = fn(self, request, *args, **kwargs)
+            if getattr(resp, 'status_code', None) == 200 and hasattr(resp, 'data'):
+                try:
+                    cache.set(key, resp.data, ttl)
+                except Exception:  # noqa: BLE001 — cache failure must not break the page
+                    pass
+            return resp
+        return wrapper
+    return deco
+
+
 class AttendanceStatsView(APIView):
     permission_classes = [IsAdminUser | IsSiteAdmin]
-    
+
     def get(self, request):
+        from django.core.cache import cache
+        _ck = _dash_cache_key('dash_stats', request)
+        _hit = cache.get(_ck)
+        if _hit is not None:
+            return Response(_hit, status=200)
         try:
             employees = Employee.objects.all()
             attendance = Attendance.objects.filter(date=timezone.localdate())
@@ -3208,26 +3304,25 @@ class AttendanceStatsView(APIView):
                          .count()
             )
 
-            return Response(
-                {
-                    "total_employees": employees.count(),
-                    "today_attendance_count": attendance.count(),
-                    "late_count": attendance.filter(status='late').count(),
-                    "absent_today_count": absent_today_count,
-                    "total_sites": all_sites.count(),
-                    "sites": [{"id": s.id, "name": s.name} for s in all_sites],
-                    "categories": unique_categories,
-                    "statuses": unique_statuses,
-                    "status_counts": status_counts,
-                    "employers": list(EMPLOYER_CHOICES),
-                    "sponsors": list(SPONSOR_CHOICES),
-                    "chart": {
-                        "labels": chart_labels,
-                        "data": chart_data
-                    }
-                },
-                status=200,
-            )
+            payload = {
+                "total_employees": employees.count(),
+                "today_attendance_count": attendance.count(),
+                "late_count": attendance.filter(status='late').count(),
+                "absent_today_count": absent_today_count,
+                "total_sites": all_sites.count(),
+                "sites": [{"id": s.id, "name": s.name} for s in all_sites],
+                "categories": unique_categories,
+                "statuses": unique_statuses,
+                "status_counts": status_counts,
+                "employers": list(EMPLOYER_CHOICES),
+                "sponsors": list(SPONSOR_CHOICES),
+                "chart": {
+                    "labels": chart_labels,
+                    "data": chart_data
+                }
+            }
+            cache.set(_ck, payload, 30)
+            return Response(payload, status=200)
         except Exception as e:  # noqa: BLE001
             return Response({"error": str(e)}, status=500)
 
@@ -3236,6 +3331,11 @@ class AttendanceAlertsView(APIView):
     permission_classes = [IsAdminUser | IsSiteAdmin]
 
     def get(self, request):
+        from django.core.cache import cache
+        _ck = _dash_cache_key('dash_alerts', request)
+        _hit = cache.get(_ck)
+        if _hit is not None:
+            return Response(_hit)
         # Accept ?date=YYYY-MM-DD (defaults to today). Future dates are clamped
         # back to today since attendance can't be in the future.
         date_str = (request.GET.get('date') or '').strip()
@@ -3304,7 +3404,7 @@ class AttendanceAlertsView(APIView):
                 "id": a.id,
                 "user_name": a.user.name,
                 "user_id": a.user.id,
-                "user_pic": a.user.profile_picture.url if a.user.profile_picture else None,
+                "user_pic": _avatar_url(a.user),
                 "site": a.user.site.name if a.user.site else "-",
                 "site_id": a.user.site.id if a.user.site else None,
                 "badge_number": a.user.badge_number or "-",
@@ -3326,7 +3426,7 @@ class AttendanceAlertsView(APIView):
                 "id": a.id,
                 "user_name": a.user.name,
                 "user_id": a.user.id,
-                "user_pic": a.user.profile_picture.url if a.user.profile_picture else None,
+                "user_pic": _avatar_url(a.user),
                 "site": a.user.site.name if a.user.site else "-",
                 "site_id": a.user.site.id if a.user.site else None,
                 "badge_number": a.user.badge_number or "-",
@@ -3339,10 +3439,12 @@ class AttendanceAlertsView(APIView):
                 "kind": "on_leave",
             })
         # Wrap in an object so the date used can be echoed back to the UI.
-        return Response({
+        payload = {
             'date': str(target_date),
             'alerts': data,
-        })
+        }
+        cache.set(_ck, payload, 30)
+        return Response(payload)
 
 
 class AttendanceAlertsExportView(APIView):
@@ -3635,10 +3737,13 @@ def admin_login_view(request):
         
         if user is not None and user.is_staff:
             login(request, user)
+            log_action(request, 'login', 'Auth', target_label=user.username, source='admin-login')
             if request.headers.get('x-requested-with') == 'XMLHttpRequest':
                 return JsonResponse({'success': True, 'redirect_url': reverse('admin-dashboard')})
             return redirect("admin-dashboard")
-        
+
+        log_action(request, 'login_failed', 'Auth', target_label=(username or '')[:100],
+                   source='admin-login', note='Invalid credentials or not an admin user')
         if request.headers.get('x-requested-with') == 'XMLHttpRequest':
             return JsonResponse({'success': False, 'error': 'Invalid credentials or not an admin user'})
             
@@ -4721,6 +4826,7 @@ def admin_add_site(request):
                 night_start_time=night_start or None,
                 night_end_time=night_end or None,
             )
+            log_action(request, 'created', 'Site', target_label=name, source='add-site')
             return redirect("admin-sites")
         else:
             # Re-fetch sites with pagination for error display
@@ -4810,6 +4916,7 @@ def admin_edit_site(request, site_id):
                 site.night_end_time = night_end or None
 
             site.save()
+            log_action(request, 'updated', 'Site', site, target_label=site.name, source='edit-site')
             return redirect("admin-sites")
         else:
             # Re-fetch sites with pagination for error display
@@ -4834,7 +4941,9 @@ def admin_delete_site(request, site_id):
         return redirect("admin-login")
     
     site = get_object_or_404(Site, id=site_id)
+    _name = site.name
     site.delete()
+    log_action(request, 'deleted', 'Site', target_label=_name, source='delete-site')
 
     return redirect("admin-sites")
 
@@ -4943,7 +5052,11 @@ class AdminBulkDeleteSiteView(APIView):
                 return Response({'error': 'No IDs provided'}, status=status.HTTP_400_BAD_REQUEST)
 
             # Delete sites
+            _names = list(Site.objects.filter(id__in=ids).values_list('name', flat=True))
             deleted_count, _ = Site.objects.filter(id__in=ids).delete()
+            log_action(request, 'deleted', 'Site',
+                       target_label=f"Bulk: {', '.join(_names)[:200]}",
+                       changes={'sites': _names}, source='bulk-delete-sites')
 
             return Response({
                 'message': f'Successfully deleted {deleted_count} sites.'
@@ -6079,7 +6192,21 @@ def export_reports_view(request):
 
 def _salary_report_rows(request):
     """Shared filter + salary computation for the salary report page and its
-    Excel export. Returns (salary_data, month, year)."""
+    Excel export. Returns (salary_data, month, year). Cached for 60s per
+    filter combination — recomputing 6000+ employees on every pagination
+    click made the page crawl."""
+    from django.core.cache import cache
+    # Key only on the params that affect the computation — page/per_page must
+    # NOT fragment the cache, so pagination clicks hit the same entry.
+    _ck = 'salary_rows:{}:{}:{}:{}:{}'.format(
+        request.GET.get('month') or '', request.GET.get('year') or '',
+        request.GET.get('site') or 'all',
+        (request.GET.get('search') or '').strip().lower(),
+        request.user.id,
+    )
+    cached = cache.get(_ck)
+    if cached is not None:
+        return cached
     month = int(request.GET.get('month', timezone.localdate().month))
     year = int(request.GET.get('year', timezone.localdate().year))
     site_id = request.GET.get('site', 'all')
@@ -6170,7 +6297,9 @@ def _salary_report_rows(request):
             'last_working_date': str(emp.last_working_date) if emp.last_working_date else None,
         })
 
-    return salary_data, month, year
+    result = (salary_data, month, year)
+    cache.set(_ck, result, 60)
+    return result
 
 
 class AdminSalaryReportView(APIView):
@@ -6459,6 +6588,9 @@ class ExportSalaryReportView(APIView):
             ws.column_dimensions[get_column_letter(i + 1)].width = 16
         ws.column_dimensions['A'].width = 30
 
+        log_action(request, 'exported', 'SalaryReport',
+                   target_label=f'Salary report {month_name} {year} ({len(salary_data)} employees)',
+                   source='salary-export')
         response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
         response['Content-Disposition'] = f'attachment; filename="salary_report_{month_name}_{year}.xlsx"'
         wb.save(response)
@@ -6953,6 +7085,15 @@ def monthly_report_view(request):
 
     is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest'
 
+    # Whole-month aggregates over every employee are expensive; identical
+    # requests within a few minutes serve the cached copy.
+    if is_ajax:
+        from django.core.cache import cache as _mr_cache
+        _mr_key = _dash_cache_key('monthly_rep', request)
+        _mr_hit = _mr_cache.get(_mr_key)
+        if _mr_hit is not None:
+            return JsonResponse(_mr_hit)
+
     if not is_ajax:
         now = datetime.now()
         months = [(i, calendar.month_name[i]) for i in range(1, 13)]
@@ -7061,7 +7202,7 @@ def monthly_report_view(request):
     except (PageNotAnInteger, EmptyPage):
         page_obj = paginator.page(1)
 
-    return JsonResponse({
+    _mr_payload = {
         'results': list(page_obj),
         'summary': {
             'total_days': num_days,
@@ -7106,7 +7247,9 @@ def monthly_report_view(request):
         'permissions': {
             'is_superuser': is_superuser,
         },
-    })
+    }
+    _mr_cache.set(_mr_key, _mr_payload, 180)
+    return JsonResponse(_mr_payload)
 
 
 @login_required
@@ -7726,6 +7869,7 @@ def _seven_day_baseline_checkin(emp_qs, selected_date):
 class AttendanceReportDataView(APIView):
     permission_classes = [IsAdminUser | IsSiteAdmin]
 
+    @cache_analytics('rep_data', 30)
     def get(self, request):
         is_superuser = request.user.is_superuser
         is_staff = request.user.is_staff
@@ -8698,18 +8842,30 @@ class ManpowerDistributionView(APIView):
             data['snapshot_date'] = str(snap.date)
             return Response(data)
 
-        # Live (current) view — unchanged behaviour, plus a passing snapshot
-        # capture so today's history is recorded even without the cron job.
+        # Live (current) view — cached briefly; identical requests from admins
+        # browsing the tabs otherwise recompute the whole matrix every time.
+        from django.core.cache import cache
+        _ck = _dash_cache_key(f'dist:{t}', request)
+        cached = cache.get(_ck)
+        if cached is not None:
+            return Response(cached)
+
         data = _distribution_payload(request, t)
+        # Passing snapshot capture so today's history is recorded even without
+        # the cron job — at most once per hour instead of on every page view
+        # (the all-access payload build used to double each request's work).
         try:
-            DistributionSnapshot.objects.update_or_create(
-                date=today, dist_type=t,
-                defaults={'payload': _distribution_payload(_AllAccessRequest(), t)},
-            )
+            if cache.get(f'dist_snap_done:{t}') is None:
+                DistributionSnapshot.objects.update_or_create(
+                    date=today, dist_type=t,
+                    defaults={'payload': _distribution_payload(_AllAccessRequest(), t)},
+                )
+                cache.set(f'dist_snap_done:{t}', 1, 3600)
         except Exception:  # noqa: BLE001
             logger.exception("distribution snapshot upsert failed")
         data['historical'] = False
         data['snapshot_date'] = str(today)
+        cache.set(_ck, data, 60)
         return Response(data)
 
 
@@ -9175,6 +9331,11 @@ class AdminPositionDetailView(APIView):
         if new_type != old_type and new_type in ('staff', 'worker'):
             synced = Employee.objects.filter(position__iexact=new_name).update(category=new_type)
 
+        log_action(request, 'updated', 'Position', target_label=p.name,
+                   changes={'name': {'from': old_name, 'to': p.name},
+                            'type': {'from': old_type, 'to': p.employee_type},
+                            'employees_reclassified': synced},
+                   source='edit-position')
         return Response({
             'success': True,
             'id': p.id, 'name': p.name,
@@ -9191,6 +9352,7 @@ class AdminPositionDetailView(APIView):
             return Response({'error': 'Position not found'}, status=404)
         p.is_active = False
         p.save(update_fields=['is_active'])
+        log_action(request, 'deleted', 'Position', target_label=p.name, source='delete-position')
         return Response({'success': True})
 
 
@@ -9295,6 +9457,7 @@ class AttritionRiskView(APIView):
     """
     permission_classes = [IsAdminUser | IsSiteAdmin]
 
+    @cache_analytics('attrition', 600)
     def get(self, request):
         from collections import Counter as _Counter
         from datetime import timedelta
@@ -9435,6 +9598,7 @@ class DocumentExpiryView(APIView):
     """
     permission_classes = [IsAdminUser | IsSiteAdmin]
 
+    @cache_analytics('doc_expiry', 600)
     def get(self, request):
         today = timezone.localdate()
         scope = Employee.objects.select_related('site').filter(status__iexact='Active')
@@ -10550,6 +10714,12 @@ class SiteActivityView(APIView):
         from datetime import timedelta
         from collections import defaultdict
         from django.db.models import Max, Count
+        from django.core.cache import cache
+
+        _ck = _dash_cache_key('dash_siteact', request)
+        _hit = cache.get(_ck)
+        if _hit is not None:
+            return Response(_hit)
 
         try:
             days = max(1, min(int(request.GET.get('days') or 14), 90))
@@ -10700,14 +10870,16 @@ class SiteActivityView(APIView):
             if r['activity_status'] in ('inactive', 'never_used')
         ]
 
-        return Response({
+        payload = {
             'as_of':           str(today),
             'idle_hours':      idle_hours,
             'inactive_days':   inactive_days,
             'totals':          totals,
             'sites':           rows,
             'inactive_sites':  inactive_sites,
-        })
+        }
+        cache.set(_ck, payload, 60)
+        return Response(payload)
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -10921,6 +11093,8 @@ class PublicHolidayView(APIView):
             name=name, date=parsed,
             recurring_annually=bool(request.data.get('recurring_annually')),
         )
+        log_action(request, 'created', 'PublicHoliday',
+                   target_label=f'{h.name} ({h.date})', source='add-holiday')
         return Response({'success': True, 'id': h.id,
                          'name': h.name, 'date': str(h.date),
                          'recurring_annually': h.recurring_annually}, status=201)
@@ -10928,7 +11102,11 @@ class PublicHolidayView(APIView):
     def delete(self, request, holiday_id=None):
         if not request.user.is_superuser:
             return Response({'error': 'Permission denied'}, status=403)
+        _h = PublicHoliday.objects.filter(id=holiday_id).first()
         PublicHoliday.objects.filter(id=holiday_id).delete()
+        if _h:
+            log_action(request, 'deleted', 'PublicHoliday',
+                       target_label=f'{_h.name} ({_h.date})', source='delete-holiday')
         return Response({'success': True})
 
 
@@ -10967,7 +11145,9 @@ def _missing_checkin_qs(request):
         except ValueError:
             pass
     else:
-        qs = qs.filter(date__gte=timezone.localdate() - timedelta(days=30))
+        # Default window: last 7 days. 30 days accumulated thousands of rows and
+        # slowed the dashboard panel; pass ?date= for a specific older day.
+        qs = qs.filter(date__gte=timezone.localdate() - timedelta(days=7))
 
     return qs.order_by('-date', 'user__name')
 
@@ -11085,6 +11265,10 @@ class SetCheckInView(APIView):
         except Exception:  # noqa: BLE001
             logger.exception('recompute after set-checkin failed for attendance=%s', a.id)
         a.save()
+        log_action(request, 'marked', 'Attendance', a.user,
+                   changes={'date': str(a.date),
+                            'set_check_in': timezone.localtime(a.check_in_time).strftime('%H:%M')},
+                   source='set-checkin')
         return Response({
             'success': True,
             'employee': a.user.name,
@@ -11164,3 +11348,151 @@ class EmployeeGeneralNotesView(APIView):
             return Response({'error': 'Note not found'}, status=404)
         n.delete()
         return Response({'success': True})
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  AUDIT TRAIL — who changed what and when (superuser only)
+# ══════════════════════════════════════════════════════════════════════════
+def _audit_log_qs(request):
+    """Filtered AuditLog queryset shared by the list + export endpoints."""
+    from .models import AuditLog
+    qs = AuditLog.objects.select_related('actor').all()
+
+    action = (request.GET.get('action') or '').strip()
+    if action and action != 'all':
+        qs = qs.filter(action=action)
+
+    actor = (request.GET.get('actor') or '').strip()
+    if actor and actor != 'all':
+        qs = qs.filter(Q(actor__username__iexact=actor) | Q(actor_label__iexact=actor))
+
+    model = (request.GET.get('model') or '').strip()
+    if model and model != 'all':
+        qs = qs.filter(target_model=model)
+
+    search = (request.GET.get('search') or '').strip()
+    if search:
+        qs = qs.filter(Q(target_label__icontains=search) | Q(note__icontains=search)
+                       | Q(actor_label__icontains=search))
+
+    from datetime import datetime as _dt
+    for param, lookup in (('date_from', 'created_at__date__gte'),
+                          ('date_to', 'created_at__date__lte')):
+        v = (request.GET.get(param) or '').strip()
+        if v:
+            try:
+                qs = qs.filter(**{lookup: _dt.strptime(v, '%Y-%m-%d').date()})
+            except ValueError:
+                pass
+    return qs
+
+
+@login_required(login_url='admin-login')
+def admin_audit_trail_view(request):
+    if not request.user.is_superuser:
+        return redirect('admin-dashboard')
+    return render(request, 'audit_trail.html', {})
+
+
+class AuditLogListView(APIView):
+    """GET /api/attendance/audit-logs/ — filtered, paginated JSON."""
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        if not request.user.is_superuser:
+            return Response({'error': 'Superuser only'}, status=403)
+        from .models import AuditLog
+
+        qs = _audit_log_qs(request)
+        try:
+            per_page = min(max(int(request.GET.get('per_page', 50)), 1), 200)
+        except (TypeError, ValueError):
+            per_page = 50
+        paginator = Paginator(qs, per_page)
+        try:
+            page = paginator.page(request.GET.get('page', 1))
+        except (PageNotAnInteger, EmptyPage):
+            page = paginator.page(1)
+
+        rows = [{
+            'id': a.id,
+            'when': timezone.localtime(a.created_at).strftime('%Y-%m-%d %H:%M:%S'),
+            'actor': a.actor_label or (a.actor.username if a.actor else '(system)'),
+            'action': a.get_action_display(),
+            'action_key': a.action,
+            'model': a.target_model,
+            'target': a.target_label,
+            'changes': a.changes,
+            'source': a.source,
+            'ip': a.ip,
+            'note': a.note,
+        } for a in page]
+
+        actors = list(AuditLog.objects.exclude(actor_label='')
+                      .values_list('actor_label', flat=True).distinct().order_by('actor_label'))
+        models_seen = list(AuditLog.objects.exclude(target_model='')
+                           .values_list('target_model', flat=True).distinct().order_by('target_model'))
+        return Response({
+            'results': rows,
+            'actions': [{'key': k, 'label': v} for k, v in AuditLog.ACTIONS],
+            'actors': actors,
+            'models': models_seen,
+            'pagination': {
+                'current_page': page.number,
+                'num_pages': paginator.num_pages,
+                'total_items': paginator.count,
+                'has_next': page.has_next(),
+                'has_previous': page.has_previous(),
+            },
+        })
+
+
+class AuditLogExportView(APIView):
+    """GET /api/attendance/audit-logs/export/ — Excel with the same filters."""
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        if not request.user.is_superuser:
+            return Response({'error': 'Superuser only'}, status=403)
+        import openpyxl
+        from openpyxl.styles import Alignment, Font, PatternFill
+        from openpyxl.utils import get_column_letter
+
+        qs = _audit_log_qs(request)[:20000]
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = 'Audit Trail'
+        headers = ['When', 'Admin', 'Action', 'Record Type', 'Record', 'Changes', 'Source', 'IP', 'Note']
+        ws.append(headers)
+        fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
+        for c in range(1, len(headers) + 1):
+            cell = ws.cell(row=1, column=c)
+            cell.fill = fill
+            cell.font = Font(bold=True, color='FFFFFF')
+            cell.alignment = Alignment(horizontal='center')
+            ws.column_dimensions[get_column_letter(c)].width = 22
+        ws.column_dimensions['F'].width = 60
+
+        for a in qs:
+            if isinstance(a.changes, dict) and 'snapshot' not in a.changes:
+                changes_txt = '; '.join(
+                    f"{k}: {v.get('from')} → {v.get('to')}" if isinstance(v, dict) and 'from' in v
+                    else f'{k}: {v}'
+                    for k, v in a.changes.items())
+            elif isinstance(a.changes, dict):
+                changes_txt = 'Full record snapshot stored (see system)'
+            else:
+                changes_txt = ''
+            ws.append([
+                timezone.localtime(a.created_at).strftime('%Y-%m-%d %H:%M:%S'),
+                a.actor_label or '(system)',
+                a.get_action_display(), a.target_model, a.target_label,
+                changes_txt[:500], a.source, a.ip, a.note,
+            ])
+
+        log_action(request, 'exported', 'AuditLog',
+                   target_label='Audit trail export', source='audit-export')
+        response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        response['Content-Disposition'] = f'attachment; filename="audit_trail_{timezone.localdate()}.xlsx"'
+        wb.save(response)
+        return response

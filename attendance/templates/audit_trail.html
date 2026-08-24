@@ -1,0 +1,186 @@
+{% extends 'base.html' %}
+
+{% block title %}Audit Trail - Admin Dashboard{% endblock %}
+
+{% block content %}
+<link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+
+<style>
+    .audit-card { background: white; border-radius: 1rem; border: 1px solid #e2e8f0; padding: 1.5rem; margin-bottom: 1.5rem; }
+    .audit-table th { background: #f8fafc; padding: 0.9rem 0.75rem; font-weight: 700; font-size: 0.72rem;
+                      text-transform: uppercase; color: #64748b; border-bottom: 2px solid #f1f5f9; }
+    .audit-table td { padding: 0.8rem 0.75rem; vertical-align: top; border-bottom: 1px solid #f1f5f9; font-size: 0.85rem; }
+    .action-pill { font-size: 0.7rem; font-weight: 700; padding: 0.25rem 0.6rem; border-radius: 1rem; white-space: nowrap; }
+    .act-created      { background: #dcfce7; color: #15803d; }
+    .act-updated      { background: #dbeafe; color: #1d4ed8; }
+    .act-deleted      { background: #fee2e2; color: #b91c1c; }
+    .act-imported, .act-bulk_updated { background: #fef3c7; color: #b45309; }
+    .act-exported     { background: #f3e8ff; color: #7c3aed; }
+    .act-marked       { background: #cffafe; color: #0e7490; }
+    .act-login        { background: #f1f5f9; color: #334155; }
+    .act-login_failed { background: #fee2e2; color: #b91c1c; }
+    .chg-list { font-size: 0.75rem; color: #475569; }
+    .chg-list b { color: #1e293b; }
+    .chg-toggle { cursor: pointer; color: #4f46e5; font-size: 0.75rem; }
+</style>
+
+<div class="page-header d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 class="h3 fw-bold text-dark mb-1">Audit Trail</h1>
+        <div class="text-secondary small">Every admin action — who changed what, and when.</div>
+    </div>
+    <button onclick="exportAudit()" class="btn btn-pro" style="background: black !important; color: white !important;">
+        <i class="ri-file-excel-2-line me-2"></i>Export Excel
+    </button>
+</div>
+
+<div class="audit-card">
+    <div class="row g-3 align-items-end">
+        <div class="col-md-2">
+            <label class="small fw-bold text-secondary text-uppercase mb-1">From</label>
+            <input type="date" id="fDateFrom" class="form-control" onchange="loadLogs(1)">
+        </div>
+        <div class="col-md-2">
+            <label class="small fw-bold text-secondary text-uppercase mb-1">To</label>
+            <input type="date" id="fDateTo" class="form-control" onchange="loadLogs(1)">
+        </div>
+        <div class="col-md-2">
+            <label class="small fw-bold text-secondary text-uppercase mb-1">Action</label>
+            <select id="fAction" class="form-select" onchange="loadLogs(1)"><option value="all">All Actions</option></select>
+        </div>
+        <div class="col-md-2">
+            <label class="small fw-bold text-secondary text-uppercase mb-1">Admin</label>
+            <select id="fActor" class="form-select" onchange="loadLogs(1)"><option value="all">All Admins</option></select>
+        </div>
+        <div class="col-md-2">
+            <label class="small fw-bold text-secondary text-uppercase mb-1">Record Type</label>
+            <select id="fModel" class="form-select" onchange="loadLogs(1)"><option value="all">All Types</option></select>
+        </div>
+        <div class="col-md-2">
+            <label class="small fw-bold text-secondary text-uppercase mb-1">Search</label>
+            <input type="text" id="fSearch" class="form-control" placeholder="Name, badge…" oninput="debounceLogs()">
+        </div>
+    </div>
+</div>
+
+<div class="audit-card p-0" style="overflow:hidden;">
+    <div class="table-responsive">
+        <table class="table audit-table align-middle mb-0">
+            <thead><tr>
+                <th style="width:150px;">When</th><th>Admin</th><th>Action</th>
+                <th>Record</th><th style="width:38%;">Changes</th><th>Source</th>
+            </tr></thead>
+            <tbody id="auditBody"></tbody>
+        </table>
+    </div>
+    <div id="auditPagination" class="p-3 border-top"></div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let filtersInit = false, searchTimer = null;
+
+    document.addEventListener('DOMContentLoaded', () => {
+        // Default: last 30 days
+        const now = new Date(), from = new Date(now.getTime() - 30 * 864e5);
+        document.getElementById('fDateTo').value = now.toISOString().split('T')[0];
+        document.getElementById('fDateFrom').value = from.toISOString().split('T')[0];
+        loadLogs(1);
+    });
+
+    function debounceLogs() { clearTimeout(searchTimer); searchTimer = setTimeout(() => loadLogs(1), 350); }
+
+    function params(page) {
+        return new URLSearchParams({
+            page,
+            action: document.getElementById('fAction').value,
+            actor: document.getElementById('fActor').value,
+            model: document.getElementById('fModel').value,
+            search: document.getElementById('fSearch').value,
+            date_from: document.getElementById('fDateFrom').value,
+            date_to: document.getElementById('fDateTo').value,
+        });
+    }
+
+    async function loadLogs(page) {
+        const body = document.getElementById('auditBody');
+        body.innerHTML = '<tr><td colspan="6" class="text-center py-5"><div class="spinner-border spinner-border-sm text-primary"></div></td></tr>';
+        try {
+            const res = await fetch(`/api/attendance/audit-logs/?${params(page)}`);
+            const data = await res.json();
+
+            if (!filtersInit) {
+                const acts = document.getElementById('fAction');
+                data.actions.forEach(a => acts.insertAdjacentHTML('beforeend', `<option value="${a.key}">${a.label}</option>`));
+                const actors = document.getElementById('fActor');
+                data.actors.forEach(a => actors.insertAdjacentHTML('beforeend', `<option>${a}</option>`));
+                const models = document.getElementById('fModel');
+                data.models.forEach(m => models.insertAdjacentHTML('beforeend', `<option>${m}</option>`));
+                filtersInit = true;
+            }
+
+            if (!data.results.length) {
+                body.innerHTML = '<tr><td colspan="6" class="text-center py-5 text-muted">No audit entries match these filters.</td></tr>';
+                document.getElementById('auditPagination').innerHTML = '';
+                return;
+            }
+
+            body.innerHTML = data.results.map(r => `
+                <tr>
+                    <td class="text-secondary font-monospace" style="font-size:0.75rem;">${r.when}</td>
+                    <td class="fw-semibold">${esc(r.actor)}</td>
+                    <td><span class="action-pill act-${r.action_key}">${r.action}</span></td>
+                    <td>
+                        <div class="fw-semibold">${esc(r.target)}</div>
+                        <div class="small text-secondary">${esc(r.model)}</div>
+                    </td>
+                    <td>${renderChanges(r)}</td>
+                    <td class="small text-secondary">${esc(r.source)}<br>${esc(r.ip)}</td>
+                </tr>`).join('');
+
+            const p = data.pagination;
+            document.getElementById('auditPagination').innerHTML = `
+                <div class="d-flex justify-content-between align-items-center">
+                    <span class="small text-secondary">${p.total_items.toLocaleString()} entries</span>
+                    <div class="d-flex gap-2 align-items-center">
+                        <button class="btn btn-light border btn-sm" onclick="loadLogs(${p.current_page - 1})" ${!p.has_previous ? 'disabled' : ''}>&laquo;</button>
+                        <span class="small fw-bold">Page ${p.current_page} / ${p.num_pages}</span>
+                        <button class="btn btn-light border btn-sm" onclick="loadLogs(${p.current_page + 1})" ${!p.has_next ? 'disabled' : ''}>&raquo;</button>
+                    </div>
+                </div>`;
+        } catch (e) {
+            body.innerHTML = '<tr><td colspan="6" class="text-center py-5 text-danger">Failed to load audit log.</td></tr>';
+        }
+    }
+
+    function renderChanges(r) {
+        const c = r.changes;
+        if (!c) return r.note ? `<span class="chg-list">${esc(r.note)}</span>` : '<span class="text-muted small">—</span>';
+        if (c.snapshot) {
+            const id = 'snap' + r.id;
+            const fields = Object.entries(c.snapshot).filter(([, v]) => v !== null && v !== '');
+            return `<span class="chg-toggle" onclick="document.getElementById('${id}').classList.toggle('d-none')">
+                        <i class="ri-eye-line"></i> Record snapshot (${fields.length} fields)</span>
+                    <div id="${id}" class="chg-list d-none mt-1">
+                        ${fields.map(([k, v]) => `<div><b>${esc(k)}</b>: ${esc(String(v))}</div>`).join('')}
+                    </div>`;
+        }
+        const parts = Object.entries(c).map(([k, v]) => {
+            if (v && typeof v === 'object' && 'from' in v)
+                return `<div><b>${esc(k)}</b>: ${esc(String(v.from ?? '—'))} → <b>${esc(String(v.to ?? '—'))}</b></div>`;
+            return `<div><b>${esc(k)}</b>: ${esc(String(v))}</div>`;
+        });
+        return `<div class="chg-list">${parts.join('')}</div>`;
+    }
+
+    function exportAudit() {
+        window.location.href = `/api/attendance/audit-logs/export/?${params(1)}`;
+    }
+
+    function esc(s) {
+        return String(s ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+    }
+</script>
+{% endblock %}
